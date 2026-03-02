@@ -1,0 +1,104 @@
+/* Popup Styles */
+.popup-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(2px);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.popup-content {
+    background-color: white;
+    border-radius: var(--prof-radius-lg);
+    width: 100%;
+    max-width: 400px;
+    padding: 24px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.popup-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.popup-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
+.popup-icon.success {
+    background-color: rgba(22, 163, 74, 0.1);
+    color: #16a34a;
+}
+
+.popup-icon.danger {
+    background-color: rgba(236, 31, 40, 0.1);
+    color: var(--prof-secondary);
+}
+
+.popup-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+.popup-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--prof-text-main);
+}
+
+.popup-body {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.popup-body p {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--prof-text-muted);
+    line-height: 1.5;
+}
+
+.popup-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.popup-actions button {
+    flex: 1;
+}
+
+.danger-btn {
+    background-color: var(--prof-secondary);
+}
+
+.danger-btn:hover {
+    background-color: #c71720;
+}

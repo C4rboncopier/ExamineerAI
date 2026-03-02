@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const currentUserIdRef = useRef<string | null>(null);
+  const currentUserIdRef = useRef<string | null | undefined>(undefined);
 
   const handleSession = useCallback(async (session: Session | null) => {
     const newUserId = session?.user?.id ?? null;

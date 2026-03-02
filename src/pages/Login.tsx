@@ -61,10 +61,7 @@ export function Login() {
             </div>
 
             <div className="form-group">
-              <div className="password-header">
-                <label htmlFor="password">Password</label>
-                <button type="button" className="forgot-password">Forgot password?</button>
-              </div>
+              <label htmlFor="password">Password</label>
               <input
                 type="password"
                 id="password"
@@ -81,6 +78,8 @@ export function Login() {
             <button type="submit" className="login-button" disabled={isSubmitting}>
               {isSubmitting ? 'Signing in...' : 'Sign In to Examineer'}
             </button>
+
+            <button type="button" className="forgot-password">Forgot password?</button>
           </form>
         </div>
       </div>
