@@ -33,3 +33,17 @@ export interface ModuleOutcome {
   order_index: number;
   created_at: string;
 }
+
+export interface Question {
+  id: string;
+  professor_id: string;
+  subject_id: string;
+  course_outcome_id: string;
+  module_outcome_id: string;
+  question_text: string;
+  choices: string[];
+  correct_choice: number;
+  image_url: string | null;
+  created_at: string;
+  updated_at: string;
+}

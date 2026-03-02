@@ -58,6 +58,22 @@ export async function createSubject(
   return { data: data as string, error: null };
 }
 
+export async function fetchSubjectById(
+  subjectId: string
+): Promise<{ data: SubjectWithCounts | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from('subjects')
+    .select('*, course_outcomes(count)')
+    .eq('id', subjectId)
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  return { data: data as SubjectWithCounts, error: null };
+}
+
 export async function fetchSubjects(): Promise<{ data: SubjectWithCounts[]; error: string | null }> {
   const { data, error } = await supabase
     .from('subjects')

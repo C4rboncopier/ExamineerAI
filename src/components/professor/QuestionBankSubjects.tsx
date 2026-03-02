@@ -1,21 +1,24 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchSubjects, deleteSubject } from '../../lib/subjects';
 import type { SubjectWithCounts } from '../../lib/subjects';
-import { Popup } from '../common/Popup';
+import { fetchSubjects } from '../../lib/subjects';
 
 const ITEMS_PER_PAGE = 12;
 
-export function SubjectsList() {
+export function QuestionBankSubjects() {
     const navigate = useNavigate();
     const [subjects, setSubjects] = useState<SubjectWithCounts[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
 
-    const [deletePopupOpen, setDeletePopupOpen] = useState(false);
-    const [subjectToDelete, setSubjectToDelete] = useState<{ id: string, title: string } | null>(null);
+    useEffect(() => {
+        setIsLoading(true);
+        fetchSubjects().then(({ data }) => {
+            setSubjects(data);
+            setIsLoading(false);
+        });
+    }, []);
 
     const filteredSubjects = useMemo(() => {
         if (!searchQuery.trim()) return subjects;
@@ -36,68 +39,27 @@ export function SubjectsList() {
         setCurrentPage(1);
     }, [searchQuery]);
 
-    const loadSubjects = useCallback(async () => {
-        setIsLoading(true);
-        setError(null);
-        const result = await fetchSubjects();
-        if (result.error) {
-            setError(result.error);
-        } else {
-            setSubjects(result.data);
-        }
-        setIsLoading(false);
-    }, []);
-
-    useEffect(() => {
-        loadSubjects();
-    }, [loadSubjects]);
-
-    const confirmDelete = (subjectId: string, courseTitle: string) => {
-        setSubjectToDelete({ id: subjectId, title: courseTitle });
-        setDeletePopupOpen(true);
-    };
-
-    const handleDelete = async () => {
-        if (!subjectToDelete) return;
-
-        const result = await deleteSubject(subjectToDelete.id);
-        if (result.error) {
-            setError(result.error);
-        } else {
-            setSubjects(prev => prev.filter(s => s.id !== subjectToDelete.id));
-        }
-        setDeletePopupOpen(false);
-        setSubjectToDelete(null);
-    };
-
     return (
-        <div className="subjects-container">
+        <div className="qb-container">
             <div className="subjects-header">
                 <div>
-                    <h2 className="subjects-title">Subjects</h2>
-                    <p className="subjects-subtitle">Manage your course subjects and their syllabi.</p>
+                    <h2 className="subjects-title">Question Bank</h2>
+                    <p className="subjects-subtitle">Select a subject to manage its question bank.</p>
                 </div>
-                <button className="btn-primary" onClick={() => navigate('/professor/subjects/create')}>
-                    + Create Subject
+                <button className="btn-primary" onClick={() => navigate('/professor/question-bank/create')}>
+                    + Add Question
                 </button>
             </div>
 
-            {error && <p className="cs-error">{error}</p>}
-
             {isLoading ? (
-                <div className="subjects-loading">
-                    <p>Loading subjects...</p>
-                </div>
+                <div className="subjects-loading"><p>Loading subjects...</p></div>
             ) : subjects.length === 0 ? (
                 <div className="subjects-empty">
                     <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" className="empty-icon">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"></path>
                     </svg>
                     <h3>No subjects available</h3>
-                    <p>Create your first subject to get started.</p>
-                    <button className="btn-primary" onClick={() => navigate('/professor/subjects/create')} style={{ marginTop: '16px' }}>
-                        + Create Subject
-                    </button>
+                    <p>Create subjects first in the Subjects section.</p>
                 </div>
             ) : (
                 <>
@@ -129,30 +91,20 @@ export function SubjectsList() {
                         <>
                             <div className="subjects-grid">
                                 {paginatedSubjects.map(subject => (
-                                    <div key={subject.id} className="subject-card">
+                                    <div
+                                        key={subject.id}
+                                        className="subject-card qb-subject-card"
+                                        onClick={() => navigate(`/professor/question-bank/${subject.id}`)}
+                                        title={`Manage questions for ${subject.course_code}`}
+                                    >
                                         <div className="subject-card-body">
                                             <div className="subject-card-info">
                                                 <span className="subject-code">{subject.course_code}</span>
                                                 <h3 className="subject-name">{subject.course_title}</h3>
-                                                <span className="subject-meta">
-                                                    {subject.course_outcomes[0]?.count ?? 0} Course Outcome{(subject.course_outcomes[0]?.count ?? 0) !== 1 ? 's' : ''}
-                                                </span>
+                                                <span className="subject-meta">Click to view/add questions</span>
                                             </div>
-                                            <div className="subject-card-actions">
-                                                <button
-                                                    className="btn-icon"
-                                                    onClick={() => navigate(`/professor/subjects/${subject.id}/edit`)}
-                                                    title="Edit Subject"
-                                                >
-                                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"></path></svg>
-                                                </button>
-                                                <button
-                                                    className="btn-icon danger"
-                                                    onClick={() => confirmDelete(subject.id, subject.course_title)}
-                                                    title="Delete Subject"
-                                                >
-                                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                                </button>
+                                            <div className="qb-card-arrow">
+                                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"></path></svg>
                                             </div>
                                         </div>
                                     </div>
@@ -198,17 +150,6 @@ export function SubjectsList() {
                     )}
                 </>
             )}
-
-            <Popup
-                isOpen={deletePopupOpen}
-                title="Delete Subject"
-                message={`Are you sure you want to delete "${subjectToDelete?.title}"? This will also delete all its course and module outcomes.`}
-                type="danger"
-                onConfirm={handleDelete}
-                onCancel={() => setDeletePopupOpen(false)}
-                confirmText="Delete"
-                cancelText="Cancel"
-            />
         </div>
     );
 }

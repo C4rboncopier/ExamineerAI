@@ -1,12 +1,11 @@
 import { useState } from 'react';
+import { Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Sidebar } from '../components/professor/Sidebar';
-import { SubjectsList } from '../components/professor/SubjectsList';
 import './ProfessorDashboard.css';
 
 export function ProfessorDashboard() {
   const { profile, signOut } = useAuth();
-  const [activeTab, setActiveTab] = useState('subjects');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   return (
@@ -17,11 +16,6 @@ export function ProfessorDashboard() {
       )}
 
       <Sidebar
-        activeTab={activeTab}
-        setActiveTab={(tab) => {
-          setActiveTab(tab);
-          setIsSidebarOpen(false); // Close on mobile when selecting tab
-        }}
         isOpen={isSidebarOpen}
         setIsOpen={setIsSidebarOpen}
       />
@@ -40,7 +34,7 @@ export function ProfessorDashboard() {
         </header>
 
         <div className="prof-content-scroll">
-          {activeTab === 'subjects' && <SubjectsList />}
+          <Outlet />
         </div>
       </main>
     </div>

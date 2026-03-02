@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { createSubject, updateSubject, fetchSubjectWithOutcomes } from '../../lib/subjects';
 import { Popup } from '../common/Popup';
 
@@ -12,17 +13,15 @@ interface CourseOutcome {
     modules: ModuleOutcome[];
 }
 
-interface CreateSubjectProps {
-    onBack: () => void;
-    editSubjectId?: string;
-}
-
 const initialOutcomes = (): CourseOutcome[] => [
     { id: crypto.randomUUID(), modules: [{ id: crypto.randomUUID(), description: '' }] }
 ];
 
-export function CreateSubject({ onBack, editSubjectId }: CreateSubjectProps) {
-    const isEditMode = !!editSubjectId;
+export function CreateSubject() {
+    const { subjectId } = useParams<{ subjectId?: string }>();
+    const navigate = useNavigate();
+    const isEditMode = !!subjectId;
+
     const [courseTitle, setCourseTitle] = useState('');
     const [courseCode, setCourseCode] = useState('');
     const [outcomes, setOutcomes] = useState<CourseOutcome[]>(initialOutcomes);
@@ -32,10 +31,10 @@ export function CreateSubject({ onBack, editSubjectId }: CreateSubjectProps) {
     const [submitSuccess, setSubmitSuccess] = useState(false);
 
     useEffect(() => {
-        if (!editSubjectId) return;
+        if (!subjectId) return;
 
         setIsLoadingSubject(true);
-        fetchSubjectWithOutcomes(editSubjectId).then(({ data, error }) => {
+        fetchSubjectWithOutcomes(subjectId).then(({ data, error }) => {
             if (error || !data) {
                 setSubmitError(error || 'Failed to load subject');
                 setIsLoadingSubject(false);
@@ -58,7 +57,9 @@ export function CreateSubject({ onBack, editSubjectId }: CreateSubjectProps) {
 
             setIsLoadingSubject(false);
         });
-    }, [editSubjectId]);
+    }, [subjectId]);
+
+    const goBack = () => navigate('/professor/subjects');
 
     const addCourseOutcome = () => {
         setOutcomes([...outcomes, { id: crypto.randomUUID(), modules: [{ id: crypto.randomUUID(), description: '' }] }]);
@@ -111,8 +112,8 @@ export function CreateSubject({ onBack, editSubjectId }: CreateSubjectProps) {
             modules: co.modules.map(mo => ({ description: mo.description })),
         }));
 
-        const { error } = isEditMode
-            ? await updateSubject(editSubjectId, courseTitle, courseCode, payload)
+        const { error } = isEditMode && subjectId
+            ? await updateSubject(subjectId, courseTitle, courseCode, payload)
             : await createSubject(courseTitle, courseCode, payload);
 
         if (error) {
@@ -124,8 +125,6 @@ export function CreateSubject({ onBack, editSubjectId }: CreateSubjectProps) {
         setIsSubmitting(false);
         setSubmitSuccess(true);
     };
-
-
 
     if (isLoadingSubject) {
         return (
@@ -140,7 +139,7 @@ export function CreateSubject({ onBack, editSubjectId }: CreateSubjectProps) {
     return (
         <div className="create-subject-container">
             <div className="cs-header">
-                <button type="button" className="btn-back" onClick={onBack}>
+                <button type="button" className="btn-back" onClick={goBack}>
                     <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"></path></svg>
                     Back to Subjects
                 </button>
@@ -235,7 +234,7 @@ export function CreateSubject({ onBack, editSubjectId }: CreateSubjectProps) {
                 {submitError && <p className="cs-error">{submitError}</p>}
 
                 <div className="cs-actions">
-                    <button type="button" className="btn-secondary" onClick={onBack}>
+                    <button type="button" className="btn-secondary" onClick={goBack}>
                         Cancel
                     </button>
                     <button type="submit" className="btn-primary" disabled={isSubmitting}>
@@ -249,7 +248,7 @@ export function CreateSubject({ onBack, editSubjectId }: CreateSubjectProps) {
                 title={isEditMode ? 'Subject Updated' : 'Subject Created'}
                 message={isEditMode ? 'The subject was successfully updated.' : 'The new subject was successfully created.'}
                 type="success"
-                onConfirm={onBack}
+                onConfirm={goBack}
                 confirmText="Back to Subjects List"
             />
         </div>
