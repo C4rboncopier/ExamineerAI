@@ -12,6 +12,9 @@ import { QuestionBankSubjects } from './components/professor/QuestionBankSubject
 import { QuestionBankList } from './components/professor/QuestionBankList';
 import { CreateQuestion } from './components/professor/CreateQuestion';
 import { GenerateExamPlaceholder } from './components/professor/GenerateExamPlaceholder';
+import { Settings } from './components/professor/Settings';
+import { TemplatesList } from './components/professor/TemplatesList';
+import { CreateTemplate } from './components/professor/CreateTemplate';
 
 function App() {
   return (
@@ -39,7 +42,11 @@ function App() {
               <Route path="question-bank/:subjectId" element={<QuestionBankList />} />
               <Route path="question-bank/:subjectId/create" element={<CreateQuestion />} />
               <Route path="question-bank/:subjectId/:questionId/edit" element={<CreateQuestion />} />
+              <Route path="templates" element={<TemplatesList />} />
+              <Route path="templates/create" element={<CreateTemplate />} />
+              <Route path="templates/:templateId/edit" element={<CreateTemplate />} />
               <Route path="generate-exam" element={<GenerateExamPlaceholder />} />
+              <Route path="settings" element={<Settings />} />
             </Route>
           </Route>
 

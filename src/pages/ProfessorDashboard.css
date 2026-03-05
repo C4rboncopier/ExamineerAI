@@ -1495,3 +1495,310 @@ select:focus {
     content: "\2713";
     font-weight: bold;
 }
+
+/* =========================================
+   SETTINGS STYLES
+   ========================================= */
+
+.settings-container {
+    width: 100%;
+}
+
+.settings-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+/* Small button variant */
+.btn-primary.btn-sm,
+.btn-secondary.btn-sm {
+    padding: 8px 18px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+/* Button with leading icon */
+.settings-btn-icon-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+/* Section heading row (icon + title/desc + optional action) */
+.settings-section-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--prof-border);
+}
+
+.settings-section-icon {
+    width: 40px;
+    height: 40px;
+    background-color: rgba(15, 37, 84, 0.07);
+    border-radius: var(--prof-radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--prof-primary);
+}
+
+.settings-section-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.settings-section-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--prof-primary);
+    margin: 0 0 4px 0;
+}
+
+.settings-section-desc {
+    font-size: 0.875rem;
+    color: var(--prof-text-muted);
+    margin: 0;
+}
+
+/* ── Academic Year – View Mode ── */
+.settings-ay-view {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    background: linear-gradient(135deg, rgba(15, 37, 84, 0.04) 0%, rgba(15, 37, 84, 0.02) 100%);
+    border: 1px solid rgba(15, 37, 84, 0.12);
+    border-radius: var(--prof-radius-md);
+    gap: 16px;
+}
+
+.ay-display-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ay-display-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--prof-text-muted);
+}
+
+.ay-display-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--prof-primary);
+    letter-spacing: -0.01em;
+}
+
+/* Vertical divider between AY and term in view mode */
+.ay-display-divider {
+    width: 1px;
+    height: 44px;
+    background-color: rgba(15, 37, 84, 0.15);
+    flex-shrink: 0;
+}
+
+/* Separator dot in preview */
+.ay-preview-sep {
+    font-size: 1rem;
+    color: var(--prof-text-muted);
+    font-weight: 400;
+}
+
+/* ── Academic Year – Edit Mode ── */
+.settings-ay-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.settings-ay-inputs {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.settings-ay-inputs .cs-input-field {
+    flex: 1;
+}
+
+.settings-ay-dash {
+    font-size: 1.6rem;
+    font-weight: 500;
+    color: var(--prof-text-muted);
+    padding-bottom: 10px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+/* Vertical separator between year inputs and term select */
+.settings-ay-divider-v {
+    width: 1px;
+    height: 44px;
+    background-color: var(--prof-border);
+    flex-shrink: 0;
+    align-self: flex-end;
+    margin-bottom: 10px;
+}
+
+/* Term select is slightly narrower than year fields */
+.settings-ay-term-field {
+    min-width: 140px;
+}
+
+.settings-ay-preview {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background-color: rgba(15, 37, 84, 0.04);
+    border: 1px dashed rgba(15, 37, 84, 0.2);
+    border-radius: var(--prof-radius-md);
+}
+
+.ay-preview-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--prof-text-muted);
+}
+
+.ay-preview-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--prof-primary);
+}
+
+/* ── Action buttons row ── */
+.settings-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+/* ── Programs List ── */
+.settings-programs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.settings-program-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 16px;
+    border: 1px solid var(--prof-border);
+    border-radius: var(--prof-radius-md);
+    background-color: #f8fafc;
+    transition: var(--prof-transition);
+    gap: 12px;
+}
+
+.settings-program-item:hover {
+    border-color: #cbd5e1;
+    background-color: #f1f5f9;
+}
+
+.settings-program-item.editing {
+    border-color: rgba(15, 37, 84, 0.25);
+    background-color: rgba(15, 37, 84, 0.03);
+    opacity: 0.55;
+}
+
+.program-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+.program-code {
+    background-color: rgba(15, 37, 84, 0.09);
+    color: var(--prof-primary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 4px;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.program-name {
+    font-size: 0.93rem;
+    color: var(--prof-text-main);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.program-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* ── Program Form ── */
+.settings-program-form {
+    margin-bottom: 16px;
+    padding: 20px;
+    background-color: #f8fafc;
+    border: 1px solid var(--prof-border);
+    border-radius: var(--prof-radius-md);
+}
+
+/* ── Empty / Loading states ── */
+.settings-empty {
+    padding: 32px;
+    text-align: center;
+    color: var(--prof-text-muted);
+    font-size: 0.93rem;
+    background-color: #f8fafc;
+    border: 1px dashed var(--prof-border);
+    border-radius: var(--prof-radius-md);
+    margin: 0;
+}
+
+.settings-loading-row {
+    padding: 20px;
+    text-align: center;
+    color: var(--prof-text-muted);
+    font-size: 0.9rem;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .settings-ay-view {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .settings-ay-inputs {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .settings-ay-dash {
+        display: none;
+    }
+
+    .settings-section-heading {
+        flex-wrap: wrap;
+    }
+
+    .cs-input-group.row {
+        flex-direction: column;
+    }
+}
