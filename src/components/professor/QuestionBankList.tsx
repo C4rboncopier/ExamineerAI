@@ -14,11 +14,9 @@ const ITEMS_PER_PAGE = 20;
 
 function renderLatex(text: string): string {
     if (!text) return '';
-    return text.replace(/\$\$([\s\S]*?)\$\$|\$([^$]*?)\$/g, (match, block, inline) => {
-        const expr = block ?? inline;
-        const displayMode = block !== undefined;
+    return text.replace(/\$\$([^$]+?)\$\$/g, (match, expr) => {
         try {
-            return katex.renderToString(expr, { displayMode, throwOnError: false });
+            return katex.renderToString(expr.trim(), { displayMode: false, throwOnError: false });
         } catch {
             return match;
         }
@@ -122,6 +120,10 @@ export function QuestionBankList() {
         setCurrentPage(1);
         setExpandedId(null);
     }, [searchQuery, selectedCo, selectedMo]);
+
+    useEffect(() => {
+        document.querySelector('.prof-content-scroll')?.scrollTo({ top: 0, behavior: 'instant' });
+    }, [currentPage]);
 
     const handleCoChange = (coId: string) => {
         setSelectedCo(coId);

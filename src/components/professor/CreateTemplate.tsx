@@ -41,7 +41,7 @@ export function CreateTemplate() {
                 } else {
                     setTitle(data.title);
                     setCode(data.code);
-                    setSelectedSubjectIds(data.exam_template_subjects.map(s => s.subject_id));
+                    setSelectedSubjectIds(data.subject_ids);
                 }
                 setIsLoadingTemplate(false);
             });

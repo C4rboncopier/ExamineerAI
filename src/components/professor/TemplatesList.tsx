@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchTemplates, deleteTemplate } from '../../lib/templates';
 import type { Template } from '../../lib/templates';
+import { fetchSubjects } from '../../lib/subjects';
+import type { SubjectWithCounts } from '../../lib/subjects';
 import { Popup } from '../common/Popup';
 import { Toast } from '../common/Toast';
 
@@ -14,6 +16,7 @@ interface ToastState {
 export function TemplatesList() {
     const navigate = useNavigate();
     const [templates, setTemplates] = useState<Template[]>([]);
+    const [subjectMap, setSubjectMap] = useState<Record<string, SubjectWithCounts>>({});
     const [isLoading, setIsLoading] = useState(true);
 
     // Delete state
@@ -28,6 +31,11 @@ export function TemplatesList() {
     const closeToast = useCallback(() => setToast(prev => ({ ...prev, open: false })), []);
 
     useEffect(() => {
+        fetchSubjects().then(({ data }) => {
+            const map: Record<string, SubjectWithCounts> = {};
+            data.forEach(s => { map[s.id] = s; });
+            setSubjectMap(map);
+        });
         fetchTemplates().then(({ data, error }) => {
             if (error) showToast('Failed to load templates.', 'error');
             else setTemplates(data);
@@ -87,9 +95,10 @@ export function TemplatesList() {
             ) : (
                 <div className="templates-simple-list">
                     {templates.map(template => {
-                        const subjectTags = template.exam_template_subjects
-                            .filter(s => s.subjects)
-                            .sort((a, b) => (a.subjects!.course_code > b.subjects!.course_code ? 1 : -1));
+                        const subjectTags = template.subject_ids
+                            .map(id => subjectMap[id])
+                            .filter(Boolean)
+                            .sort((a, b) => a.course_code.localeCompare(b.course_code));
 
                         return (
                             <div
@@ -104,8 +113,8 @@ export function TemplatesList() {
                                         <span className="subject-meta" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                                             {subjectTags.length > 0 ? (
                                                 subjectTags.map(s => (
-                                                    <span key={s.subject_id} style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', color: '#475569' }}>
-                                                        {s.subjects!.course_code}
+                                                    <span key={s.id} style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', color: '#475569' }}>
+                                                        {s.course_code}
                                                     </span>
                                                 ))
                                             ) : (

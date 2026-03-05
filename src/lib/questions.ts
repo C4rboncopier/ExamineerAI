@@ -197,6 +197,30 @@ export async function fetchQuestionsBySubject(
   return { data: data as QuestionWithOutcomes[], error: null };
 }
 
+// ─── FETCH BY IDs (for exam view) ────────────────────────────
+
+export interface QuestionSummary {
+  id: string;
+  question_text: string;
+  choices: string[];
+  correct_choice: number;
+  image_url: string | null;
+  course_outcomes: { title: string; order_index: number } | null;
+  module_outcomes: { description: string; order_index: number } | null;
+}
+
+export async function fetchQuestionsByIds(
+  ids: string[]
+): Promise<{ data: QuestionSummary[]; error: string | null }> {
+  if (ids.length === 0) return { data: [], error: null };
+  const { data, error } = await supabase
+    .from('questions')
+    .select('id, question_text, choices, correct_choice, image_url, course_outcomes(title, order_index), module_outcomes(description, order_index)')
+    .in('id', ids);
+  if (error) return { data: [], error: error.message };
+  return { data: data as QuestionSummary[], error: null };
+}
+
 // ─── UPDATE ──────────────────────────────────────────────────
 
 export async function updateQuestion(

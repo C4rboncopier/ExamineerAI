@@ -11,12 +11,9 @@ import { Toast } from '../common/Toast';
 
 function renderLatex(text: string): string {
     if (!text) return '';
-    // Split on $$...$$ (block) and $...$ (inline)
-    return text.replace(/\$\$([\s\S]*?)\$\$|\$([^$]*?)\$/g, (match, block, inline) => {
-        const expr = block ?? inline;
-        const displayMode = block !== undefined;
+    return text.replace(/\$\$([^$]+?)\$\$/g, (match, expr) => {
         try {
-            return katex.renderToString(expr, { displayMode, throwOnError: false });
+            return katex.renderToString(expr.trim(), { displayMode: false, throwOnError: false });
         } catch {
             return match;
         }
@@ -249,7 +246,7 @@ export function CreateQuestion() {
 
             <div className="cs-header">
                 <h2>{isEditMode ? 'Edit Question' : 'Create New Question'}</h2>
-                <p>Fill in the details below. Use <code>$...$</code> for inline math and <code>$$...$$</code> for block math.</p>
+                <p>Fill in the details below. Use <code>$$...$$</code> for math equations.</p>
             </div>
 
             {submitError && <p className="cs-error">{submitError}</p>}
@@ -356,7 +353,7 @@ export function CreateQuestion() {
                     <div className="cs-input-field">
                         <label>Question Text</label>
                         <textarea
-                            placeholder="Type your question here... Use $x^2$ for inline math"
+                            placeholder="Type your question here... Use $$x^2$$ for math"
                             rows={4}
                             value={questionText}
                             onChange={(e) => setQuestionText(e.target.value)}

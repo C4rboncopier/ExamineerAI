@@ -28,21 +28,10 @@ export interface Exam {
     exam_subjects: ExamSubject[];
 }
 
-export interface ExamSetQuestionDetail {
-    question_id: string;
-    order_index: number;
-    questions: {
-        id: string;
-        question_text: string;
-        course_outcomes: { title: string } | null;
-        module_outcomes: { description: string } | null;
-    } | null;
-}
-
 export interface ExamSetDetail {
     id: string;
     set_number: number;
-    exam_set_questions: ExamSetQuestionDetail[];
+    question_ids: string[];
 }
 
 export interface ExamWithSets extends Exam {
@@ -167,26 +156,14 @@ async function generateAndSaveSets(
         return { error: 'No questions could be selected. Check allocation settings and question bank.' };
     }
 
-    // 4. For each set: shuffle the pool → save
+    // 4. For each set: shuffle the pool → save question_ids as JSONB
     for (let setNum = 1; setNum <= numSets; setNum++) {
-        const { data: setData, error: setError } = await supabase
+        const shuffled = shuffle([...pool]);
+        const { error: setError } = await supabase
             .from('exam_sets')
-            .insert({ exam_id: examId, set_number: setNum })
-            .select('id')
-            .single();
+            .insert({ exam_id: examId, set_number: setNum, question_ids: shuffled.map(q => q.id) });
 
         if (setError) return { error: `Failed to create set ${setNum}: ${setError.message}` };
-
-        const shuffled = shuffle([...pool]);
-        const { error: sqError } = await supabase
-            .from('exam_set_questions')
-            .insert(shuffled.map((q, idx) => ({
-                set_id: setData.id,
-                question_id: q.id,
-                order_index: idx,
-            })));
-
-        if (sqError) return { error: `Failed to save set ${setNum} questions: ${sqError.message}` };
     }
 
     return { error: null };
@@ -210,13 +187,7 @@ export async function fetchExamById(id: string): Promise<{ data: ExamWithSets | 
         .select(`
             id, title, code, num_sets, question_allocation, created_at,
             exam_subjects(subject_id, subjects(course_code, course_title)),
-            exam_sets(
-                id, set_number,
-                exam_set_questions(
-                    question_id, order_index,
-                    questions(id, question_text, course_outcomes(title), module_outcomes(description))
-                )
-            )
+            exam_sets(id, set_number, question_ids)
         `)
         .eq('id', id)
         .single();

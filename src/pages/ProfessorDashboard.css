@@ -18,7 +18,7 @@
 .prof-layout {
     display: flex;
     height: 100vh;
-    width: 100vw;
+    width: 100%;
     background-color: var(--prof-bg);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     color: var(--prof-text-main);
@@ -2296,6 +2296,17 @@ select:focus {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+}
+
+/* View Exam Mobile Resposiveness */
+@media (max-width: 768px) {
+    .ve-hide-mobile {
+        display: none !important;
+    }
+
+    .ve-action-bar {
+        justify-content: flex-end !important;
+    }
 }
 
 .exam-q-tag {

@@ -10,6 +10,11 @@ import {
     createProgram,
     updateProgram,
     deleteProgram,
+    fetchSchoolInfo,
+    saveSchoolName,
+    uploadSchoolLogo,
+    saveSchoolLogoUrl,
+    removeSchoolLogo,
 } from '../../lib/settings';
 import type { Program } from '../../lib/settings';
 
@@ -41,6 +46,16 @@ export function Settings() {
     const [tempSemester, setTempSemester] = useState('1st Term');
     const [isSavingAY, setIsSavingAY] = useState(false);
     const [isLoadingAY, setIsLoadingAY] = useState(true);
+
+    // School Info state
+    const [schoolName, setSchoolName] = useState<string>('');
+    const [schoolLogoUrl, setSchoolLogoUrl] = useState<string | null>(null);
+    const [isEditingSchool, setIsEditingSchool] = useState(false);
+    const [tempSchoolName, setTempSchoolName] = useState('');
+    const [logoFile, setLogoFile] = useState<File | null>(null);
+    const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+    const [removeLogoOnSave, setRemoveLogoOnSave] = useState(false);
+    const [isSavingSchool, setIsSavingSchool] = useState(false);
 
     // Programs state
     const [programs, setPrograms] = useState<Program[]>([]);
@@ -75,7 +90,75 @@ export function Settings() {
             if (!error) setPrograms(data);
             setIsLoadingPrograms(false);
         });
+        fetchSchoolInfo().then(({ name, logoUrl }) => {
+            if (name) setSchoolName(name);
+            setSchoolLogoUrl(logoUrl);
+        });
     }, []);
+
+    // ── School Info ─────────────────────────────────────────
+
+    const handleEditSchool = () => {
+        setTempSchoolName(schoolName);
+        setLogoPreviewUrl(schoolLogoUrl);
+        setLogoFile(null);
+        setRemoveLogoOnSave(false);
+        setIsEditingSchool(true);
+    };
+
+    const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (logoPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(logoPreviewUrl);
+        setLogoFile(file);
+        setLogoPreviewUrl(URL.createObjectURL(file));
+        setRemoveLogoOnSave(false);
+    };
+
+    const handleRemoveLogo = () => {
+        if (logoPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(logoPreviewUrl);
+        setLogoFile(null);
+        setLogoPreviewUrl(null);
+        setRemoveLogoOnSave(true);
+    };
+
+    const handleCancelSchool = () => {
+        if (logoPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(logoPreviewUrl);
+        setLogoFile(null);
+        setLogoPreviewUrl(null);
+        setRemoveLogoOnSave(false);
+        setIsEditingSchool(false);
+    };
+
+    const handleSaveSchool = async () => {
+        setIsSavingSchool(true);
+        const nameResult = await saveSchoolName(tempSchoolName.trim());
+        if (nameResult.error) {
+            showToast(nameResult.error, 'error');
+            setIsSavingSchool(false);
+            return;
+        }
+
+        if (removeLogoOnSave) {
+            const { error } = await removeSchoolLogo();
+            if (error) { showToast(error, 'error'); setIsSavingSchool(false); return; }
+            setSchoolLogoUrl(null);
+        } else if (logoFile) {
+            const { url, error } = await uploadSchoolLogo(logoFile);
+            if (error || !url) { showToast(error ?? 'Upload failed', 'error'); setIsSavingSchool(false); return; }
+            const { error: saveErr } = await saveSchoolLogoUrl(url);
+            if (saveErr) { showToast(saveErr, 'error'); setIsSavingSchool(false); return; }
+            if (logoPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(logoPreviewUrl);
+            setSchoolLogoUrl(url);
+        }
+
+        setSchoolName(tempSchoolName.trim());
+        setLogoFile(null);
+        setLogoPreviewUrl(null);
+        setIsEditingSchool(false);
+        showToast('School information saved.');
+        setIsSavingSchool(false);
+    };
 
     // ── Academic Year ──────────────────────────────────────
 
@@ -203,6 +286,101 @@ export function Settings() {
             </div>
 
             <div className="settings-sections">
+
+                {/* ── School Information Card ── */}
+                <div className="cs-card">
+                    <div className="settings-section-heading">
+                        <div className="settings-section-icon">
+                            <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 className="settings-section-title">School Information</h3>
+                            <p className="settings-section-desc">Set the school name and logo used on printed exam papers.</p>
+                        </div>
+                    </div>
+
+                    {isEditingSchool ? (
+                        <div className="settings-ay-edit">
+                            <div className="cs-input-field" style={{ marginBottom: '16px' }}>
+                                <label>School Name</label>
+                                <input
+                                    type="text"
+                                    value={tempSchoolName}
+                                    onChange={e => setTempSchoolName(e.target.value)}
+                                    placeholder="e.g. University of the Philippines"
+                                />
+                            </div>
+
+                            <div className="cs-input-field">
+                                <label>School Logo</label>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginTop: '6px' }}>
+                                    {/* Preview box */}
+                                    <div style={{
+                                        width: '80px', height: '80px', borderRadius: '10px',
+                                        border: '1.5px dashed var(--prof-border)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        background: 'var(--prof-bg)', flexShrink: 0, overflow: 'hidden',
+                                    }}>
+                                        {logoPreviewUrl
+                                            ? <img src={logoPreviewUrl} alt="Logo preview" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '6px' }} />
+                                            : <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" width="28" height="28" style={{ color: 'var(--prof-text-muted)' }}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                                            </svg>
+                                        }
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <label htmlFor="logo-upload" className="btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', padding: '7px 14px' }}>
+                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                                            </svg>
+                                            {logoPreviewUrl ? 'Change Logo' : 'Upload Logo'}
+                                        </label>
+                                        <input
+                                            id="logo-upload"
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+                                            style={{ display: 'none' }}
+                                            onChange={handleLogoChange}
+                                        />
+                                        {logoPreviewUrl && (
+                                            <button type="button" onClick={handleRemoveLogo} style={{ background: 'none', border: 'none', padding: 0, fontSize: '0.82rem', color: 'var(--prof-secondary)', cursor: 'pointer', textAlign: 'left' }}>
+                                                Remove logo
+                                            </button>
+                                        )}
+                                        <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--prof-text-muted)' }}>
+                                            PNG, JPG, SVG · max 2 MB
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="settings-actions" style={{ marginTop: '20px' }}>
+                                <button className="btn-secondary" onClick={handleCancelSchool} disabled={isSavingSchool}>Cancel</button>
+                                <button className="btn-primary" onClick={handleSaveSchool} disabled={isSavingSchool}>
+                                    {isSavingSchool ? 'Saving...' : 'Save Changes'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="settings-ay-view">
+                            {schoolLogoUrl && (
+                                <img src={schoolLogoUrl} alt="School logo" style={{ width: '48px', height: '48px', objectFit: 'contain', borderRadius: '6px', border: '1px solid var(--prof-border)', padding: '4px', background: '#fff', flexShrink: 0 }} />
+                            )}
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                <span style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--prof-text-muted)' }}>School Name</span>
+                                <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--prof-primary)' }}>{schoolName || '—'}</span>
+                            </div>
+                            <button className="btn-secondary settings-btn-icon-inline" onClick={handleEditSchool}>
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                                </svg>
+                                Change
+                            </button>
+                        </div>
+                    )}
+                </div>
 
                 {/* ── Academic Year Card ── */}
                 <div className="cs-card">

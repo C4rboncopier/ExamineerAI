@@ -111,7 +111,7 @@ export function CreateExam() {
         if (!tpl) return;
         setTitle(tpl.title);
         setCode(tpl.code);
-        setSelectedSubjectIds(tpl.exam_template_subjects.map(s => s.subject_id));
+        setSelectedSubjectIds(tpl.subject_ids);
     };
 
     // ── Subject selection ─────────────────────────────────────

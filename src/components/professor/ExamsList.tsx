@@ -11,7 +11,7 @@ interface ToastState {
     type: 'success' | 'error' | 'info';
 }
 
-const SET_LABELS = ['A', 'B', 'C', 'D', 'E'];
+
 
 export function ExamsList() {
     const navigate = useNavigate();
@@ -100,10 +100,10 @@ export function ExamsList() {
                                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                                         <span className="subject-code" style={{ marginBottom: 0 }}>{exam.code}</span>
                                         <span className="exam-sets-badge">
-                                            {exam.num_sets} Set{exam.num_sets !== 1 ? 's' : ''} ({SET_LABELS.slice(0, exam.num_sets).join(', ')})
+                                            {exam.num_sets} Set{exam.num_sets !== 1 ? 's' : ''}
                                         </span>
                                         {subjectTags.map(s => (
-                                            <span key={s.subject_id} style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', color: '#475569' }}>
+                                            <span key={s.subject_id} className="ve-hide-mobile" style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', color: '#475569' }}>
                                                 {s.subjects!.course_code}
                                             </span>
                                         ))}
