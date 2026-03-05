@@ -8,6 +8,7 @@ export interface OutcomePayload {
 
 export interface SubjectWithCounts extends Subject {
   course_outcomes: { count: number }[];
+  questions?: { count: number }[];
 }
 
 export interface SubjectWithOutcomes extends Subject {
@@ -63,7 +64,7 @@ export async function fetchSubjectById(
 ): Promise<{ data: SubjectWithCounts | null; error: string | null }> {
   const { data, error } = await supabase
     .from('subjects')
-    .select('*, course_outcomes(count)')
+    .select('*, course_outcomes(count), questions(count)')
     .eq('id', subjectId)
     .single();
 
@@ -77,7 +78,7 @@ export async function fetchSubjectById(
 export async function fetchSubjects(): Promise<{ data: SubjectWithCounts[]; error: string | null }> {
   const { data, error } = await supabase
     .from('subjects')
-    .select('*, course_outcomes(count)')
+    .select('*, course_outcomes(count), questions(count)')
     .order('created_at', { ascending: false });
 
   if (error) {

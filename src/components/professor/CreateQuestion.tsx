@@ -224,6 +224,7 @@ export function CreateQuestion() {
         } else {
             setToastMessage('Question added successfully!');
             resetForm();
+            document.querySelector('.prof-content-scroll')?.scrollTo(0, 0);
         }
     };
 

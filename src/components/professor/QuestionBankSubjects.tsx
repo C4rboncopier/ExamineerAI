@@ -101,7 +101,9 @@ export function QuestionBankSubjects() {
                                             <div className="subject-card-info">
                                                 <span className="subject-code">{subject.course_code}</span>
                                                 <h3 className="subject-name">{subject.course_title}</h3>
-                                                <span className="subject-meta">Click to view/add questions</span>
+                                                <span className="subject-meta">
+                                                    {subject.questions?.[0]?.count ?? 0} Question{(subject.questions?.[0]?.count ?? 0) !== 1 ? 's' : ''} available
+                                                </span>
                                             </div>
                                             <div className="qb-card-arrow">
                                                 <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"></path></svg>
