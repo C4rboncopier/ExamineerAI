@@ -14,9 +14,12 @@ import { CreateQuestion } from './components/professor/CreateQuestion';
 import { ExamsList } from './components/professor/ExamsList';
 import { CreateExam } from './components/professor/CreateExam';
 import { ViewExam } from './components/professor/ViewExam';
-import { Settings } from './components/professor/Settings';
 import { TemplatesList } from './components/professor/TemplatesList';
 import { CreateTemplate } from './components/professor/CreateTemplate';
+
+import { ProfessorsList } from './components/admin/ProfessorsList';
+import { StudentsList } from './components/admin/StudentsList';
+import { Settings as AdminSettings } from './components/admin/Settings';
 
 function App() {
   return (
@@ -30,7 +33,12 @@ function App() {
           </Route>
 
           <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
-            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin" element={<AdminDashboard />}>
+              <Route index element={<Navigate to="professors" replace />} />
+              <Route path="professors" element={<ProfessorsList />} />
+              <Route path="students" element={<StudentsList />} />
+              <Route path="settings" element={<AdminSettings />} />
+            </Route>
           </Route>
 
           <Route element={<ProtectedRoute allowedRoles={['professor']} />}>
@@ -51,7 +59,7 @@ function App() {
               <Route path="exams/create" element={<CreateExam />} />
               <Route path="exams/:examId" element={<ViewExam />} />
               <Route path="exams/:examId/edit" element={<CreateExam />} />
-              <Route path="settings" element={<Settings />} />
+
             </Route>
           </Route>
 

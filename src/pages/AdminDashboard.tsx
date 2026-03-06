@@ -1,20 +1,41 @@
+import { useState } from 'react';
+import { Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import '../dashboard.css';
+import { Sidebar } from '../components/admin/Sidebar';
+import './ProfessorDashboard.css';
 
 export function AdminDashboard() {
   const { profile, signOut } = useAuth();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   return (
-    <div className="dashboard">
-      <header className="dashboard-header">
-        <h1>Admin Dashboard</h1>
-        <div className="dashboard-user-info">
-          <span>{profile?.email}</span>
-          <button onClick={signOut} className="sign-out-button">Sign Out</button>
+    <div className="prof-layout">
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div className="prof-sidebar-overlay" onClick={() => setIsSidebarOpen(false)} />
+      )}
+
+      <Sidebar
+        isOpen={isSidebarOpen}
+        setIsOpen={setIsSidebarOpen}
+      />
+
+      <main className="prof-main">
+        <header className="prof-topbar">
+          <div className="topbar-left">
+            <button className="mobile-menu-btn" onClick={() => setIsSidebarOpen(true)}>
+              <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+            </button>
+          </div>
+          <div className="user-profile">
+            <span className="user-email">{profile?.email || 'admin@examineerai.com'}</span>
+            <button onClick={signOut} className="btn-logout">Sign Out</button>
+          </div>
+        </header>
+
+        <div className="prof-content-scroll">
+          <Outlet />
         </div>
-      </header>
-      <main className="dashboard-content">
-        <p>Welcome, {profile?.full_name || 'Admin'}. You have full system access.</p>
       </main>
     </div>
   );

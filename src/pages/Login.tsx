@@ -6,7 +6,7 @@ import '../App.css';
 
 export function Login() {
   const { user, isLoading, signIn } = useAuth();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -20,7 +20,7 @@ export function Login() {
     setError(null);
     setIsSubmitting(true);
 
-    const result = await signIn(email, password);
+    const result = await signIn(username, password);
 
     if (result.error) {
       setError(result.error);
@@ -47,15 +47,15 @@ export function Login() {
 
           <form className="login-form" onSubmit={handleSubmit}>
             <div className="form-group">
-              <label htmlFor="email">Email address</label>
+              <label htmlFor="username">Username</label>
               <input
-                type="email"
-                id="email"
-                placeholder="name@example.com"
+                type="text"
+                id="username"
+                placeholder="Enter your username"
                 required
                 autoFocus
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 disabled={isSubmitting}
               />
             </div>
