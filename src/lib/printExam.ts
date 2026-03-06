@@ -217,11 +217,11 @@ body {
 .question-block {
     break-inside: avoid;
     page-break-inside: avoid;
-    margin-bottom: 13pt;
+    margin-bottom: 7pt;
 }
 .question-text {
-    line-height: 1.5;
-    margin-bottom: 5pt;
+    line-height: 1.4;
+    margin-bottom: 3pt;
 }
 .question-image {
     max-width: 80%;

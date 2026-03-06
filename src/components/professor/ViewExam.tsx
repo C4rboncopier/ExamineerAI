@@ -8,6 +8,9 @@ import type { QuestionSummary } from '../../lib/questions';
 import { printExam } from '../../lib/printExam';
 import type { PaperSize, SizeUnit } from '../../lib/printExam';
 import { fetchSchoolInfo, fetchAcademicYear, fetchSemester } from '../../lib/settings';
+import { deployExam, markExamDone } from '../../lib/exams';
+import { DeployExamModal } from '../common/DeployExamModal';
+import { MarkDoneExamModal } from '../common/MarkDoneExamModal';
 
 function renderMathHtml(text: string): string {
     const mathPattern = /\$\$([^$]+?)\$\$/g;
@@ -58,6 +61,10 @@ export function ViewExam() {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState(0);
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+    const [isDeployConfirmOpen, setIsDeployConfirmOpen] = useState(false);
+    const [isDeploying, setIsDeploying] = useState(false);
+    const [isDoneConfirmOpen, setIsDoneConfirmOpen] = useState(false);
+    const [isMarkingDone, setIsMarkingDone] = useState(false);
     const [paperSize, setPaperSize] = useState<PaperSize>('A4');
     const [customWidth, setCustomWidth] = useState('');
     const [customHeight, setCustomHeight] = useState('');
@@ -177,6 +184,32 @@ export function ViewExam() {
         });
     };
 
+    const handleDeploy = async () => {
+        if (!exam) return;
+        setIsDeploying(true);
+        const { error } = await deployExam(exam.id);
+        setIsDeploying(false);
+        if (error) {
+            alert(`Failed to deploy exam: ${error}`);
+            return;
+        }
+        setExam(prev => prev ? { ...prev, status: 'deployed' as const } : prev);
+        setIsDeployConfirmOpen(false);
+    };
+
+    const handleMarkDone = async () => {
+        if (!exam) return;
+        setIsMarkingDone(true);
+        const { error } = await markExamDone(exam.id);
+        setIsMarkingDone(false);
+        if (error) {
+            alert(`Failed to mark as done: ${error}`);
+            return;
+        }
+        setExam(prev => prev ? { ...prev, status: 'done' as const } : prev);
+        setIsDoneConfirmOpen(false);
+    };
+
     return (
         <div className="qb-container create-question-wrapper">
             <button type="button" className="btn-back" onClick={() => navigate('/professor/exams')}>
@@ -187,17 +220,45 @@ export function ViewExam() {
             </button>
 
             {/* Header */}
-            <div className="cs-header">
-                <h2>{exam.title}</h2>
-                <p style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span className="subject-code" style={{ marginBottom: 0 }}>{exam.code}</span>
-                    <span className="exam-sets-badge">{exam.num_sets} Set{exam.num_sets !== 1 ? 's' : ''}</span>
-                    {subjectTags.map(s => (
-                        <span key={s.subject_id} className="ve-hide-mobile" style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', color: '#475569', border: '1px solid #e2e8f0' }}>
-                            {s.subjects!.course_code} — {s.subjects!.course_title}
+            <div className="cs-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+                <div>
+                    <h2>{exam.title}</h2>
+                    <p style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span className="subject-code" style={{ marginBottom: 0 }}>{exam.code}</span>
+                        <span className="exam-sets-badge">{exam.num_sets} Set{exam.num_sets !== 1 ? 's' : ''}</span>
+                        {subjectTags.map(s => (
+                            <span key={s.subject_id} className="ve-hide-mobile" style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', color: '#475569', border: '1px solid #e2e8f0' }}>
+                                {s.subjects!.course_code} — {s.subjects!.course_title}
+                            </span>
+                        ))}
+                    </p>
+                </div>
+
+                {/* Status badge / action buttons */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {exam.status === 'done' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600, background: '#eff6ff', color: '#2563eb', border: '1px solid #93c5fd', boxShadow: '0 2px 4px rgba(37,99,235,0.08)' }}>
+                            <svg fill="currentColor" viewBox="0 0 20 20" width="16" height="16"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
+                            Exam Done
                         </span>
-                    ))}
-                </p>
+                    ) : exam.status === 'deployed' ? (
+                        <>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600, background: '#dcfce7', color: '#16a34a', border: '1px solid #86efac', boxShadow: '0 2px 4px rgba(22,163,74,0.1)' }}>
+                                <svg fill="currentColor" viewBox="0 0 20 20" width="16" height="16"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
+                                Deployed
+                            </span>
+                            <button className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#2563eb', borderColor: '#93c5fd', padding: '8px 18px', fontSize: '0.9rem', fontWeight: 600, borderRadius: '8px' }} onClick={() => setIsDoneConfirmOpen(true)}>
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                Mark as Done
+                            </button>
+                        </>
+                    ) : (
+                        <button className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#16a34a', borderColor: '#16a34a', padding: '8px 18px', fontSize: '0.9rem', fontWeight: 600, borderRadius: '8px', boxShadow: '0 2px 8px rgba(22,163,74,0.2)' }} onClick={() => setIsDeployConfirmOpen(true)}>
+                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18"><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.125A59.769 59.769 0 0121.485 12 59.768 59.768 0 013.27 20.875L5.999 12zm0 0h7.5"></path></svg>
+                            Deploy Exam
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Allocation info */}
@@ -235,26 +296,27 @@ export function ViewExam() {
                     {currentQuestions.length > 0 && (
                         <div className="ve-action-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', fontSize: '0.85rem', color: 'var(--prof-text-muted)' }}>
                             <span className="ve-hide-mobile">{currentQuestions.length} question{currentQuestions.length !== 1 ? 's' : ''}</span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 {totalPages > 1 && (
-                                    <span className="ve-hide-mobile">Page {currentPage + 1} of {totalPages}</span>
+                                    <span className="ve-hide-mobile" style={{ marginRight: '8px', fontWeight: 500 }}>Page {currentPage + 1} of {totalPages}</span>
                                 )}
                                 <button
                                     className="btn-secondary"
-                                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 12px', fontSize: '0.8rem' }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '0.85rem', fontWeight: 600, borderRadius: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', ...(exam.status !== 'draft' ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
+                                    disabled={exam.status !== 'draft'}
                                     onClick={handleRearrange}
                                 >
-                                    <svg fill="none" strokeWidth="1.8" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                                     </svg>
                                     Re-arrange
                                 </button>
                                 <button
-                                    className="btn-secondary"
-                                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 12px', fontSize: '0.8rem' }}
+                                    className="btn-primary"
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '0.85rem', fontWeight: 600, borderRadius: '8px', boxShadow: '0 2px 4px rgba(15, 37, 84, 0.1)' }}
                                     onClick={() => setIsPrintModalOpen(true)}
                                 >
-                                    <svg fill="none" strokeWidth="1.8" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
+                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
                                     </svg>
                                     Print Exam
@@ -390,10 +452,27 @@ export function ViewExam() {
                 <button className="btn-secondary" onClick={() => navigate('/professor/exams')}>
                     Back
                 </button>
-                <button className="btn-primary" onClick={() => navigate(`/professor/exams/${exam.id}/edit`)}>
+
+                <button className="btn-primary" disabled={exam.status !== 'draft'} style={exam.status !== 'draft' ? { opacity: 0.4, cursor: 'not-allowed' } : {}} onClick={() => exam.status === 'draft' && navigate(`/professor/exams/${exam.id}/edit`)}>
                     Edit Exam
                 </button>
             </div>
+
+            <DeployExamModal
+                isOpen={isDeployConfirmOpen}
+                examTitle={exam.title}
+                isDeploying={isDeploying}
+                onClose={() => setIsDeployConfirmOpen(false)}
+                onConfirm={handleDeploy}
+            />
+
+            <MarkDoneExamModal
+                isOpen={isDoneConfirmOpen}
+                examTitle={exam.title}
+                isMarkingDone={isMarkingDone}
+                onClose={() => setIsDoneConfirmOpen(false)}
+                onConfirm={handleMarkDone}
+            />
 
             {/* Print paper size modal */}
             {isPrintModalOpen && (

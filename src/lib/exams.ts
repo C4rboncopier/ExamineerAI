@@ -25,6 +25,7 @@ export interface Exam {
     num_sets: number;
     question_allocation: AllocationConfig;
     created_at: string;
+    status: 'draft' | 'deployed' | 'done';
     exam_subjects: ExamSubject[];
 }
 
@@ -174,7 +175,7 @@ async function generateAndSaveSets(
 export async function fetchExams(): Promise<{ data: Exam[]; error: string | null }> {
     const { data, error } = await supabase
         .from('exams')
-        .select('id, title, code, num_sets, question_allocation, created_at, exam_subjects(subject_id, subjects(course_code, course_title))')
+        .select('id, title, code, num_sets, question_allocation, created_at, status, exam_subjects(subject_id, subjects(course_code, course_title))')
         .order('created_at', { ascending: false });
 
     if (error) return { data: [], error: error.message };
@@ -185,7 +186,7 @@ export async function fetchExamById(id: string): Promise<{ data: ExamWithSets | 
     const { data, error } = await supabase
         .from('exams')
         .select(`
-            id, title, code, num_sets, question_allocation, created_at,
+            id, title, code, num_sets, question_allocation, created_at, status,
             exam_subjects(subject_id, subjects(course_code, course_title)),
             exam_sets(id, set_number, question_ids)
         `)
@@ -267,6 +268,16 @@ export async function updateExam(
     // Delete old sets (cascades exam_set_questions) and regenerate
     await supabase.from('exam_sets').delete().eq('exam_id', id);
     return generateAndSaveSets(id, subjectIds, allocationConfig, numSets);
+}
+
+export async function deployExam(id: string): Promise<{ error: string | null }> {
+    const { error } = await supabase.from('exams').update({ status: 'deployed' }).eq('id', id);
+    return { error: error?.message ?? null };
+}
+
+export async function markExamDone(id: string): Promise<{ error: string | null }> {
+    const { error } = await supabase.from('exams').update({ status: 'done' }).eq('id', id);
+    return { error: error?.message ?? null };
 }
 
 export async function deleteExam(id: string): Promise<{ error: string | null }> {
