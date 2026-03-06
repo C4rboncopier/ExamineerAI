@@ -23,6 +23,9 @@ export interface Exam {
     title: string;
     code: string;
     num_sets: number;
+    max_attempts: number;
+    academic_year: string;
+    term: string;
     question_allocation: AllocationConfig;
     created_at: string;
     status: 'draft' | 'deployed' | 'done';
@@ -177,7 +180,7 @@ async function generateAndSaveSets(
 export async function fetchExams(): Promise<{ data: Exam[]; error: string | null }> {
     const { data, error } = await supabase
         .from('exams')
-        .select('id, title, code, num_sets, question_allocation, created_at, status, exam_subjects(subject_id, subjects(course_code, course_title))')
+        .select('id, title, code, num_sets, max_attempts, academic_year, term, question_allocation, created_at, status, exam_subjects(subject_id, subjects(course_code, course_title))')
         .order('created_at', { ascending: false });
 
     if (error) return { data: [], error: error.message };
@@ -188,7 +191,7 @@ export async function fetchExamById(id: string): Promise<{ data: ExamWithSets | 
     const { data, error } = await supabase
         .from('exams')
         .select(`
-            id, title, code, num_sets, question_allocation, created_at, status,
+            id, title, code, num_sets, max_attempts, academic_year, term, question_allocation, created_at, status,
             exam_subjects(subject_id, subjects(course_code, course_title)),
             exam_sets(id, set_number, question_ids)
         `)
@@ -204,18 +207,21 @@ export async function createExam(
     code: string,
     subjectIds: string[],
     numSets: number,
-    allocationConfig: AllocationConfig
+    allocationConfig: AllocationConfig,
+    maxAttempts: number,
+    academicYear: string,
+    term: string
 ): Promise<{ data: Exam | null; error: string | null }> {
     const { data: { user } } = await supabase.auth.getUser();
 
     const { data: exam, error: insertError } = await supabase
         .from('exams')
-        .insert({ title, code, created_by: user?.id, num_sets: numSets, question_allocation: allocationConfig })
+        .insert({ title, code, created_by: user?.id, num_sets: numSets, question_allocation: allocationConfig, max_attempts: maxAttempts, academic_year: academicYear, term })
         .select('id')
         .single();
 
     if (insertError) {
-        if (insertError.code === '23505') return { data: null, error: `The exam code "${code}" already exists.` };
+        if (insertError.code === '23505') return { data: null, error: `An exam with code "${code}" already exists for ${academicYear} ${term}.` };
         return { data: null, error: insertError.message };
     }
 
@@ -246,15 +252,18 @@ export async function updateExam(
     code: string,
     subjectIds: string[],
     numSets: number,
-    allocationConfig: AllocationConfig
+    allocationConfig: AllocationConfig,
+    maxAttempts: number,
+    academicYear: string,
+    term: string
 ): Promise<{ error: string | null }> {
     const { error: updateError } = await supabase
         .from('exams')
-        .update({ title, code, num_sets: numSets, question_allocation: allocationConfig, updated_at: new Date().toISOString() })
+        .update({ title, code, num_sets: numSets, question_allocation: allocationConfig, max_attempts: maxAttempts, academic_year: academicYear, term, updated_at: new Date().toISOString() })
         .eq('id', id);
 
     if (updateError) {
-        if (updateError.code === '23505') return { error: `The exam code "${code}" already exists.` };
+        if (updateError.code === '23505') return { error: `An exam with code "${code}" already exists for ${academicYear} ${term}.` };
         return { error: updateError.message };
     }
 

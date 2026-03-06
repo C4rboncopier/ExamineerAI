@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchExams, deleteExam, deployExam, markExamDone } from '../../lib/exams';
 import type { Exam } from '../../lib/exams';
@@ -21,6 +21,7 @@ export function ExamsList() {
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'deployed' | 'done'>('all');
+    const [termFilter, setTermFilter] = useState<'all' | string>('all');
 
     const [deletePopupOpen, setDeletePopupOpen] = useState(false);
     const [examToDelete, setExamToDelete] = useState<Exam | null>(null);
@@ -107,14 +108,46 @@ export function ExamsList() {
         setIsDeploying(false);
     };
 
+    const availableTerms = useMemo(() => {
+        const terms = new Set<string>();
+        exams.forEach(e => {
+            const ay = e.academic_year || 'Unknown A.Y.';
+            const t = e.term || 'Unknown Term';
+            terms.add(`${ay} | ${t}`);
+        });
+        return Array.from(terms).sort((a, b) => b.localeCompare(a));
+    }, [exams]);
+
     const filteredExams = exams.filter(exam => {
         const matchesSearch = searchQuery === '' ||
             exam.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
             exam.code.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesStatus = statusFilter === 'all' || exam.status === statusFilter;
-        return matchesSearch && matchesStatus;
+
+        const ay = exam.academic_year || 'Unknown A.Y.';
+        const t = exam.term || 'Unknown Term';
+        const examTermKey = `${ay} | ${t}`;
+        const matchesTerm = termFilter === 'all' || examTermKey === termFilter;
+
+        return matchesSearch && matchesStatus && matchesTerm;
     });
 
+    const groupedExams = useMemo(() => {
+        const groups = filteredExams.reduce((acc, exam) => {
+            const ay = exam.academic_year || 'Unknown A.Y.';
+            const t = exam.term || 'Unknown Term';
+            const key = `${ay} | ${t}`;
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(exam);
+            return acc;
+        }, {} as Record<string, Exam[]>);
+
+        const sortedKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+        return sortedKeys.map(key => ({
+            termString: key,
+            exams: groups[key]
+        }));
+    }, [filteredExams]);
 
     return (
         <div className="subjects-container">
@@ -130,7 +163,7 @@ export function ExamsList() {
 
             {/* Search + filter bar */}
             {!isLoading && exams.length > 0 && (
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '20px', flexWrap: 'nowrap' }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '24px', flexWrap: 'nowrap' }}>
                     <div style={{ position: 'relative', flex: '1', minWidth: '0' }}>
                         <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--prof-text-muted)', pointerEvents: 'none' }}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -155,34 +188,42 @@ export function ExamsList() {
                             }}
                         />
                     </div>
+
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                        <select
+                            value={termFilter}
+                            onChange={e => setTermFilter(e.target.value)}
+                            style={{
+                                appearance: 'none', padding: '9px 36px 9px 16px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff',
+                                color: 'var(--prof-text-main)', fontSize: '0.875rem', fontWeight: 500, outline: 'none', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.02)', minWidth: '180px'
+                            }}
+                        >
+                            <option value="all">All Terms</option>
+                            {availableTerms.map(term => (
+                                <option key={term} value={term}>{term}</option>
+                            ))}
+                        </select>
+                        <div style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--prof-text-muted)' }}>
+                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                        </div>
+                    </div>
+
                     <div style={{ position: 'relative', flexShrink: 0 }}>
                         <select
                             value={statusFilter}
                             onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}
                             style={{
-                                appearance: 'none',
-                                padding: '9px 36px 9px 16px',
-                                borderRadius: '8px',
-                                border: '1.5px solid var(--prof-border)',
-                                background: '#fff',
-                                color: 'var(--prof-text-main)',
-                                fontSize: '0.875rem',
-                                fontWeight: 500,
-                                outline: 'none',
-                                cursor: 'pointer',
-                                boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-                                minWidth: '140px'
+                                appearance: 'none', padding: '9px 36px 9px 16px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff',
+                                color: 'var(--prof-text-main)', fontSize: '0.875rem', fontWeight: 500, outline: 'none', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.02)', minWidth: '140px'
                             }}
                         >
                             <option value="all">All Status</option>
                             <option value="draft">Draft</option>
-                            <option value="deployed">Deployed</option>
-                            <option value="done">Completed</option>
+                            <option value="deployed">Opened</option>
+                            <option value="done">Closed</option>
                         </select>
                         <div style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--prof-text-muted)' }}>
-                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                            </svg>
+                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
                         </div>
                     </div>
                 </div>
@@ -208,83 +249,81 @@ export function ExamsList() {
                     <p style={{ color: 'var(--prof-text-muted)' }}>No exams match your search or filter.</p>
                 </div>
             ) : (
-                <div className="templates-simple-list">
-                    {filteredExams.map(exam => {
-                        const subjectTags = exam.exam_subjects
-                            .filter(s => s.subjects)
-                            .sort((a, b) => (a.subjects!.course_code > b.subjects!.course_code ? 1 : -1));
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                    {groupedExams.map(group => (
+                        <div key={group.termString}>
+                            <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--prof-text-muted)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                {group.termString}
+                            </h3>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+                                {group.exams.map(exam => {
+                                    const statusColor = exam.status === 'deployed' ? '#16a34a' : exam.status === 'done' ? '#64748b' : '#f59e0b';
+                                    const statusLabel = exam.status === 'deployed' ? 'Open' : exam.status === 'done' ? 'Closed' : 'Draft';
+                                    const isIncomplete = exam.status === 'draft' && (exam.exam_subjects.length === 0 || exam.num_sets === 0);
 
-                        return (
-                            <div
-                                key={exam.id}
-                                className="subject-card"
-                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', marginBottom: '12px' }}
-                            >
-                                <div className="template-info">
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                                        <h3 className="subject-name" style={{ margin: 0 }}>{exam.title}</h3>
-                                        {exam.status === 'draft' && (exam.exam_subjects.length === 0 || exam.num_sets === 0) && (
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', whiteSpace: 'nowrap' }}>
-                                                <svg fill="currentColor" viewBox="0 0 20 20" width="11" height="11"><path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>
-                                                Incomplete
-                                            </span>
-                                        )}
-                                        {exam.status === 'done' ? (
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, background: '#eff6ff', color: '#2563eb', border: '1px solid #93c5fd', whiteSpace: 'nowrap' }}>
-                                                <svg fill="currentColor" viewBox="0 0 20 20" width="11" height="11"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
-                                                Done
-                                            </span>
-                                        ) : exam.status === 'deployed' && (
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, background: '#dcfce7', color: '#16a34a', border: '1px solid #86efac', whiteSpace: 'nowrap' }}>
-                                                <svg fill="currentColor" viewBox="0 0 20 20" width="11" height="11"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
-                                                Deployed
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                        <span className="subject-code" style={{ marginBottom: 0 }}>{exam.code}</span>
-                                        <span className="exam-sets-badge">
-                                            {exam.num_sets} Set{exam.num_sets !== 1 ? 's' : ''}
-                                        </span>
-                                        {subjectTags.map(s => (
-                                            <span key={s.subject_id} className="ve-hide-mobile" style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', color: '#475569' }}>
-                                                {s.subjects!.course_code}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="subject-card-actions" style={{ marginTop: 0, gap: '6px' }}>
-                                    {exam.status === 'draft' && (exam.exam_subjects.length === 0 || exam.num_sets === 0) && (
-                                        <button className="btn-secondary" onClick={() => navigate(`/professor/exams/${exam.id}/edit`)} style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600, gap: '6px', color: '#7c3aed', borderColor: '#c4b5fd', marginRight: '4px', borderRadius: '8px' }}>
-                                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                                            Add Sets
-                                        </button>
-                                    )}
-                                    {exam.status === 'draft' && exam.exam_subjects.length > 0 && exam.num_sets > 0 && (
-                                        <button className="btn-primary" onClick={() => confirmDeploy(exam)} style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600, gap: '6px', color: '#fff', borderColor: '#16a34a', background: '#16a34a', marginRight: '4px', borderRadius: '8px', boxShadow: '0 1px 2px rgba(22,163,74,0.1)' }}>
-                                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.125A59.769 59.769 0 0121.485 12 59.768 59.768 0 013.27 20.875L5.999 12zm0 0h7.5"></path></svg>
-                                            Deploy
-                                        </button>
-                                    )}
-                                    {exam.status === 'deployed' && (
-                                        <button className="btn-secondary" onClick={() => confirmMarkDone(exam)} style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600, gap: '6px', color: '#2563eb', borderColor: '#93c5fd', marginRight: '4px', borderRadius: '8px' }}>
-                                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                            Mark as Done
-                                        </button>
-                                    )}
-                                    <button className="btn-icon" onClick={() => navigate(`/professor/exams/${exam.id}`)} title="View Exam">
-                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"></path><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                                    </button>
-                                    <button className="btn-icon" onClick={() => exam.status === 'draft' && navigate(`/professor/exams/${exam.id}/edit`)} title={exam.status !== 'draft' ? 'Cannot edit a deployed exam' : 'Edit Exam'} disabled={exam.status !== 'draft'} style={exam.status !== 'draft' ? { opacity: 0.35, cursor: 'not-allowed' } : {}}>
-                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"></path></svg>
-                                    </button>
-                                    <button className="btn-icon danger" onClick={() => exam.status === 'draft' && confirmDelete(exam)} title={exam.status !== 'draft' ? 'Cannot delete a deployed exam' : 'Delete Exam'} disabled={exam.status !== 'draft'} style={exam.status !== 'draft' ? { opacity: 0.35, cursor: 'not-allowed' } : {}}>
-                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                    </button>
-                                </div>
+                                    return (
+                                        <div key={exam.id} style={{
+                                            background: '#fff', borderRadius: '10px', border: '1px solid var(--prof-border)', overflow: 'hidden',
+                                            display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                                        }}>
+                                            <div style={{ height: '4px', background: statusColor }} />
+                                            <div style={{ padding: '20px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                                <p style={{ margin: '0 0 6px 0', fontSize: '0.75rem', color: 'var(--prof-text-muted)', fontWeight: 600, letterSpacing: '0.05em' }}>
+                                                    {exam.code}
+                                                </p>
+                                                <h3 style={{ margin: '0 0 16px 0', fontSize: '1.05rem', color: 'var(--prof-text-main)', lineHeight: 1.3 }}>
+                                                    {exam.title}
+                                                </h3>
+
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 'auto', marginBottom: '16px' }}>
+                                                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: statusColor }}>
+                                                        {statusLabel}
+                                                    </span>
+                                                    {isIncomplete && (
+                                                        <span style={{ fontSize: '0.75rem', color: '#ef4444', background: '#fef2f2', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fee2e2' }}>
+                                                            Incomplete
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                <div style={{ height: '1px', background: 'var(--prof-border)', margin: '0 -20px 12px' }} />
+
+                                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                                                    {isIncomplete && (
+                                                        <button className="btn-icon" onClick={() => navigate(`/professor/exams/${exam.id}/edit`)} title="Add Sets" style={{ color: '#7c3aed' }}>
+                                                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                                                        </button>
+                                                    )}
+                                                    {exam.status === 'draft' && !isIncomplete && (
+                                                        <button className="btn-icon" onClick={() => confirmDeploy(exam)} title="Open Exam" style={{ color: '#16a34a' }}>
+                                                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                                                        </button>
+                                                    )}
+                                                    {exam.status === 'deployed' && (
+                                                        <button className="btn-icon" onClick={() => confirmMarkDone(exam)} title="Close Exam" style={{ color: '#2563eb' }}>
+                                                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                                                        </button>
+                                                    )}
+
+                                                    <button className="btn-icon" onClick={() => navigate(`/professor/exams/${exam.id}`)} title="View Details">
+                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"></path><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                                    </button>
+
+                                                    <button className="btn-icon" onClick={() => navigate(`/professor/exams/${exam.id}/edit`)} title={exam.status !== 'draft' ? 'Cannot edit an open/closed exam' : 'Edit Exam'} disabled={exam.status !== 'draft'} style={exam.status !== 'draft' ? { opacity: 0.35, cursor: 'not-allowed' } : {}}>
+                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"></path></svg>
+                                                    </button>
+
+                                                    <button className="btn-icon danger" onClick={() => confirmDelete(exam)} title={exam.status !== 'draft' ? 'Cannot delete an open/closed exam' : 'Delete Exam'} disabled={exam.status !== 'draft'} style={exam.status !== 'draft' ? { opacity: 0.35, cursor: 'not-allowed' } : {}}>
+                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
-                        );
-                    })}
+                        </div>
+                    ))}
                 </div>
             )}
 

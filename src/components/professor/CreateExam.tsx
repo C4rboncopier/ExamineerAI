@@ -6,6 +6,7 @@ import { fetchTemplates } from '../../lib/templates';
 import type { Template } from '../../lib/templates';
 import { createExam, updateExam, fetchExamById } from '../../lib/exams';
 import type { AllocationConfig } from '../../lib/exams';
+import { fetchAcademicYear, fetchSemester } from '../../lib/settings';
 import { fetchQuestionsBySubject } from '../../lib/questions';
 import { Toast } from '../common/Toast';
 
@@ -33,6 +34,9 @@ export function CreateExam() {
     const [title, setTitle] = useState('');
     const [code, setCode] = useState('');
     const [numSets, setNumSets] = useState(0);
+    const [maxAttempts, setMaxAttempts] = useState(1);
+    const [academicYear, setAcademicYear] = useState('2025-2026');
+    const [term, setTerm] = useState('1st Semester');
 
     // Subjects
     const [subjects, setSubjects] = useState<SubjectWithCounts[]>([]);
@@ -64,6 +68,13 @@ export function CreateExam() {
         fetchSubjects().then(({ data }) => setSubjects(data || []));
         fetchTemplates().then(({ data }) => setTemplates(data || []));
 
+        if (!isEditMode) {
+            Promise.all([fetchAcademicYear(), fetchSemester()]).then(([ay, sem]) => {
+                if (ay.value) setAcademicYear(ay.value);
+                if (sem.value) setTerm(sem.value);
+            });
+        }
+
         if (isEditMode && examId) {
             fetchExamById(examId).then(({ data, error }) => {
                 if (error || !data) {
@@ -72,6 +83,10 @@ export function CreateExam() {
                     setTitle(data.title);
                     setCode(data.code);
                     setNumSets(data.num_sets);
+                    setMaxAttempts(data.max_attempts ?? 1);
+                    // In edit mode keep the exam's original AY + term
+                    setAcademicYear(data.academic_year);
+                    setTerm(data.term);
                     setSelectedSubjectIds(data.exam_subjects.map(s => s.subject_id));
                     const config = data.question_allocation;
                     setAllocMode(config.mode);
@@ -203,11 +218,11 @@ export function CreateExam() {
             : { mode: 'per_subject', counts: { ...perSubjectCounts } };
 
         if (isEditMode && examId) {
-            const { error } = await updateExam(examId, title, code, selectedSubjectIds, numSets, allocationConfig);
+            const { error } = await updateExam(examId, title, code, selectedSubjectIds, numSets, allocationConfig, maxAttempts, academicYear, term);
             if (error) { setSubmitError(error); setIsSubmitting(false); return; }
             showToast('Exam updated and sets regenerated.');
         } else {
-            const { error } = await createExam(title, code, selectedSubjectIds, numSets, allocationConfig);
+            const { error } = await createExam(title, code, selectedSubjectIds, numSets, allocationConfig, maxAttempts, academicYear, term);
             if (error) { setSubmitError(error); setIsSubmitting(false); return; }
             showToast('Exam created successfully.');
         }
@@ -292,6 +307,28 @@ export function CreateExam() {
                                 <option value={0}>— Not set —</option>
                                 {[1, 2, 3, 4, 5].map(n => (
                                     <option key={n} value={n}>{n} Set{n !== 1 ? 's' : ''}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="cs-input-group row" style={{ marginTop: '14px' }}>
+                        <div className="cs-input-field flex-2">
+                            <label>Academic Year &amp; Term</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 12px', background: 'var(--prof-input-bg, #f8fafc)', border: '1px solid var(--prof-border)', borderRadius: '8px', fontSize: '0.9rem', color: 'var(--prof-text-secondary)' }}>
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15" style={{ flexShrink: 0, opacity: 0.5 }}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                                </svg>
+                                <span>{academicYear || '—'}</span>
+                                <span style={{ opacity: 0.4 }}>·</span>
+                                <span>{term || '—'}</span>
+                                <span style={{ marginLeft: 'auto', fontSize: '0.78rem', opacity: 0.5 }}>Set by admin</span>
+                            </div>
+                        </div>
+                        <div className="cs-input-field" style={{ minWidth: '150px' }}>
+                            <label>Max Attempts</label>
+                            <select value={maxAttempts} onChange={e => setMaxAttempts(Number(e.target.value))}>
+                                {[1, 2, 3, 4, 5].map(n => (
+                                    <option key={n} value={n}>{n} attempt{n !== 1 ? 's' : ''}</option>
                                 ))}
                             </select>
                         </div>
