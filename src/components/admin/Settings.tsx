@@ -402,27 +402,28 @@ export function Settings() {
                         <div className="settings-ay-edit">
                             <div className="settings-ay-inputs">
                                 <div className="cs-input-field">
-                                    <label>Start Year</label>
-                                    <input
-                                        type="number"
-                                        value={tempStartYear}
-                                        onChange={(e) => handleStartYearChange(e.target.value)}
-                                        min="2000"
-                                        max="2099"
-                                        placeholder="2025"
-                                    />
-                                </div>
-                                <div className="settings-ay-dash">–</div>
-                                <div className="cs-input-field">
-                                    <label>End Year</label>
-                                    <input
-                                        type="number"
-                                        value={tempEndYear}
-                                        onChange={(e) => setTempEndYear(e.target.value)}
-                                        min="2000"
-                                        max="2099"
-                                        placeholder="2026"
-                                    />
+                                    <label>Academic Year</label>
+                                    <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid var(--prof-border)', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleStartYearChange(String(parseInt(tempStartYear) - 1))}
+                                            disabled={parseInt(tempStartYear) <= 2000}
+                                            style={{ padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--prof-text-muted)', lineHeight: 1, transition: 'background 0.15s' }}
+                                            onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
+                                            onMouseOut={e => (e.currentTarget.style.background = 'none')}
+                                        >−</button>
+                                        <span style={{ flex: 1, textAlign: 'center', fontWeight: 600, fontSize: '0.95rem', color: 'var(--prof-text-main)', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                                            {tempStartYear} – {tempEndYear}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleStartYearChange(String(parseInt(tempStartYear) + 1))}
+                                            disabled={parseInt(tempStartYear) >= 2099}
+                                            style={{ padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--prof-text-muted)', lineHeight: 1, transition: 'background 0.15s' }}
+                                            onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
+                                            onMouseOut={e => (e.currentTarget.style.background = 'none')}
+                                        >+</button>
+                                    </div>
                                 </div>
                                 <div className="settings-ay-divider-v" />
                                 <div className="cs-input-field settings-ay-term-field">

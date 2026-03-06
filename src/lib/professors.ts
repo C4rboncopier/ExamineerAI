@@ -1,0 +1,81 @@
+import { supabase } from './supabase';
+
+export interface Program {
+    id: string;
+    code: string;
+    name: string;
+}
+
+export interface Professor {
+    id: string;
+    email: string | null;
+    full_name: string | null;
+    username: string | null;
+    program_id: string | null;
+    program: Program | null;
+    created_at: string;
+}
+
+export async function fetchPrograms(): Promise<Program[]> {
+    const { data } = await supabase
+        .from('programs')
+        .select('id, code, name')
+        .order('name');
+    return (data as Program[]) ?? [];
+}
+
+export async function fetchProfessors(): Promise<{ data: Professor[]; error: string | null }> {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, username, program_id, created_at, program:programs(id, code, name)')
+        .eq('role', 'professor')
+        .order('created_at', { ascending: false });
+    return { data: (data as unknown as Professor[]) ?? [], error: error?.message ?? null };
+}
+
+export async function createProfessor(payload: {
+    email: string;
+    full_name: string;
+    username: string;
+    password: string;
+    program_id: string | null;
+}): Promise<{ error: string | null }> {
+    const { data, error } = await supabase.functions.invoke('create-professor', {
+        body: payload,
+    });
+    if (error) return { error: error.message };
+    return { error: data?.error ?? null };
+}
+
+export async function updateProfessor(
+    id: string,
+    updates: { full_name: string; username: string; program_id: string | null; email?: string; password?: string }
+): Promise<{ error: string | null }> {
+    const { email, password, ...profileUpdates } = updates;
+
+    // Update profile fields directly (admin RLS allows this)
+    const { error: profileErr } = await supabase
+        .from('profiles')
+        .update(profileUpdates)
+        .eq('id', id);
+    if (profileErr) return { error: profileErr.message };
+
+    // Email/password changes require service_role via edge function
+    if (email || password) {
+        const { data, error: fnErr } = await supabase.functions.invoke('create-professor', {
+            body: { action: 'update', professor_id: id, ...(email ? { email } : {}), ...(password ? { password } : {}) },
+        });
+        if (fnErr) return { error: fnErr.message };
+        if (data?.error) return { error: data.error };
+    }
+
+    return { error: null };
+}
+
+export async function deleteProfessor(professor_id: string): Promise<{ error: string | null }> {
+    const { data, error } = await supabase.functions.invoke('create-professor', {
+        body: { action: 'delete', professor_id },
+    });
+    if (error) return { error: error.message };
+    return { error: data?.error ?? null };
+}

@@ -16,9 +16,14 @@ import { CreateExam } from './components/professor/CreateExam';
 import { ViewExam } from './components/professor/ViewExam';
 import { TemplatesList } from './components/professor/TemplatesList';
 import { CreateTemplate } from './components/professor/CreateTemplate';
+import { ProfessorSettings } from './components/professor/ProfessorSettings';
 
 import { ProfessorsList } from './components/admin/ProfessorsList';
+import { AddProfessor } from './components/admin/AddProfessor';
+import { EditProfessor } from './components/admin/EditProfessor';
 import { StudentsList } from './components/admin/StudentsList';
+import { AddStudent } from './components/admin/AddStudent';
+import { EditStudent } from './components/admin/EditStudent';
 import { Settings as AdminSettings } from './components/admin/Settings';
 
 function App() {
@@ -36,7 +41,11 @@ function App() {
             <Route path="/admin" element={<AdminDashboard />}>
               <Route index element={<Navigate to="professors" replace />} />
               <Route path="professors" element={<ProfessorsList />} />
+              <Route path="professors/addprofessor" element={<AddProfessor />} />
+              <Route path="professors/editprofessor/:id" element={<EditProfessor />} />
               <Route path="students" element={<StudentsList />} />
+              <Route path="students/addstudent" element={<AddStudent />} />
+              <Route path="students/editstudent/:id" element={<EditStudent />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>
           </Route>
@@ -59,7 +68,7 @@ function App() {
               <Route path="exams/create" element={<CreateExam />} />
               <Route path="exams/:examId" element={<ViewExam />} />
               <Route path="exams/:examId/edit" element={<CreateExam />} />
-
+              <Route path="settings" element={<ProfessorSettings />} />
             </Route>
           </Route>
 
