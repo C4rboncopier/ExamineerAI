@@ -32,7 +32,7 @@ export function CreateExam() {
     // Basic details
     const [title, setTitle] = useState('');
     const [code, setCode] = useState('');
-    const [numSets, setNumSets] = useState(1);
+    const [numSets, setNumSets] = useState(0);
 
     // Subjects
     const [subjects, setSubjects] = useState<SubjectWithCounts[]>([]);
@@ -185,9 +185,10 @@ export function CreateExam() {
     // ── Validation ────────────────────────────────────────────
     const isFormValid = useMemo(() => {
         if (!title.trim() || !code.trim()) return false;
-        if (selectedSubjectIds.length === 0) return false;
-        if (allocMode === 'equal' && totalQuestions < 1) return false;
-        if (allocMode === 'per_subject' && selectedSubjectIds.some(id => (perSubjectCounts[id] || 0) < 1)) return false;
+        if (selectedSubjectIds.length > 0) {
+            if (allocMode === 'equal' && totalQuestions < 1) return false;
+            if (allocMode === 'per_subject' && selectedSubjectIds.some(id => (perSubjectCounts[id] || 0) < 1)) return false;
+        }
         return true;
     }, [title, code, selectedSubjectIds, allocMode, totalQuestions, perSubjectCounts]);
 
@@ -234,7 +235,7 @@ export function CreateExam() {
 
             <div className="cs-header">
                 <h2>{isEditMode ? 'Edit Exam' : 'Create New Exam'}</h2>
-                <p>Configure exam details, select subjects, and set question allocation. Saving will generate all sets.</p>
+                <p>Only the exam title and code are required to save. Subjects, sets, and question allocation can be configured later by editing the exam.</p>
             </div>
 
             <form className="cq-form" onSubmit={handleSubmit}>
@@ -286,8 +287,9 @@ export function CreateExam() {
                             />
                         </div>
                         <div className="cs-input-field" style={{ minWidth: '120px' }}>
-                            <label>Number of Sets</label>
+                            <label>Number of Sets <span style={{ fontWeight: 400, color: 'var(--prof-text-muted)' }}>(optional)</span></label>
                             <select value={numSets} onChange={e => setNumSets(Number(e.target.value))}>
+                                <option value={0}>— Not set —</option>
                                 {[1, 2, 3, 4, 5].map(n => (
                                     <option key={n} value={n}>{n} Set{n !== 1 ? 's' : ''}</option>
                                 ))}
@@ -303,7 +305,7 @@ export function CreateExam() {
 
                 {/* ── Card 3: Subjects ── */}
                 <div className="cs-card">
-                    <h3 className="cs-card-title">Included Subjects</h3>
+                    <h3 className="cs-card-title">Included Subjects <span style={{ fontWeight: 400, color: 'var(--prof-text-muted)', fontSize: '0.85rem' }}>(optional — can be filled later)</span></h3>
                     <div className="cs-input-field">
                         <label>Search and Add Subjects</label>
                         <div className="cq-subject-search">
@@ -383,7 +385,7 @@ export function CreateExam() {
                 {/* ── Card 4: Question Allocation ── */}
                 {selectedSubjectIds.length > 0 && (
                     <div className="cs-card">
-                        <h3 className="cs-card-title">Question Allocation</h3>
+                        <h3 className="cs-card-title">Question Allocation <span style={{ fontWeight: 400, color: 'var(--prof-text-muted)', fontSize: '0.85rem' }}>(optional — can be filled later)</span></h3>
                         <p style={{ margin: '0 0 16px', fontSize: '0.875rem', color: 'var(--prof-text-muted)' }}>
                             Choose how questions are distributed across subjects. Within each subject, questions are spread equally across all Module Outcomes.
                         </p>
@@ -530,8 +532,10 @@ export function CreateExam() {
                         disabled={isSubmitting || !isFormValid || hasInsufficientWarning}
                     >
                         {isSubmitting
-                            ? (isEditMode ? 'Regenerating...' : 'Generating...')
-                            : (isEditMode ? 'Update & Regenerate Sets' : 'Generate Exam')
+                            ? 'Saving...'
+                            : isEditMode
+                                ? (selectedSubjectIds.length > 0 ? 'Update & Regenerate Sets' : 'Save Changes')
+                                : (selectedSubjectIds.length > 0 ? 'Generate Exam' : 'Save Exam')
                         }
                     </button>
                 </div>

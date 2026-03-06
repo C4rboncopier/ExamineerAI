@@ -223,6 +223,12 @@ export function ExamsList() {
                                 <div className="template-info">
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                                         <h3 className="subject-name" style={{ margin: 0 }}>{exam.title}</h3>
+                                        {exam.status === 'draft' && (exam.exam_subjects.length === 0 || exam.num_sets === 0) && (
+                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', whiteSpace: 'nowrap' }}>
+                                                <svg fill="currentColor" viewBox="0 0 20 20" width="11" height="11"><path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>
+                                                Incomplete
+                                            </span>
+                                        )}
                                         {exam.status === 'done' ? (
                                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, background: '#eff6ff', color: '#2563eb', border: '1px solid #93c5fd', whiteSpace: 'nowrap' }}>
                                                 <svg fill="currentColor" viewBox="0 0 20 20" width="11" height="11"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" /></svg>
@@ -248,7 +254,13 @@ export function ExamsList() {
                                     </div>
                                 </div>
                                 <div className="subject-card-actions" style={{ marginTop: 0, gap: '6px' }}>
-                                    {exam.status === 'draft' && (
+                                    {exam.status === 'draft' && (exam.exam_subjects.length === 0 || exam.num_sets === 0) && (
+                                        <button className="btn-secondary" onClick={() => navigate(`/professor/exams/${exam.id}/edit`)} style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600, gap: '6px', color: '#7c3aed', borderColor: '#c4b5fd', marginRight: '4px', borderRadius: '8px' }}>
+                                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                                            Add Sets
+                                        </button>
+                                    )}
+                                    {exam.status === 'draft' && exam.exam_subjects.length > 0 && exam.num_sets > 0 && (
                                         <button className="btn-primary" onClick={() => confirmDeploy(exam)} style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600, gap: '6px', color: '#fff', borderColor: '#16a34a', background: '#16a34a', marginRight: '4px', borderRadius: '8px', boxShadow: '0 1px 2px rgba(22,163,74,0.1)' }}>
                                             <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.125A59.769 59.769 0 0121.485 12 59.768 59.768 0 013.27 20.875L5.999 12zm0 0h7.5"></path></svg>
                                             Deploy

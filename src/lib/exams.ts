@@ -115,6 +115,9 @@ async function generateAndSaveSets(
     allocationConfig: AllocationConfig,
     numSets: number
 ): Promise<{ error: string | null }> {
+    // No subjects yet — skip set generation (sets will be created when exam is edited later)
+    if (subjectIds.length === 0) return { error: null };
+
     // 1. Fetch questions for each subject
     const questionsBySubject: Record<string, QuestionWithOutcomes[]> = {};
     for (const subjectId of subjectIds) {
@@ -153,9 +156,8 @@ async function generateAndSaveSets(
         pool.push(...distributeAcrossMOs(byMO, count));
     }
 
-    if (pool.length === 0) {
-        return { error: 'No questions could be selected. Check allocation settings and question bank.' };
-    }
+    // No questions available yet — skip set creation silently
+    if (pool.length === 0) return { error: null };
 
     // 4. For each set: shuffle the pool → save question_ids as JSONB
     for (let setNum = 1; setNum <= numSets; setNum++) {

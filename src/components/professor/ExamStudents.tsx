@@ -1,0 +1,359 @@
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { fetchExamById } from '../../lib/exams';
+import type { ExamWithSets } from '../../lib/exams';
+import { fetchStudents } from '../../lib/students';
+import type { Student } from '../../lib/students';
+import { fetchExamEnrollments, enrollStudent, unenrollStudent } from '../../lib/examEnrollments';
+import type { EnrolledStudent } from '../../lib/examEnrollments';
+import { Popup } from '../common/Popup';
+import { Toast } from '../common/Toast';
+
+interface ToastState { open: boolean; message: string; type: 'success' | 'error' | 'info'; }
+
+export function ExamStudents() {
+    const { examId } = useParams<{ examId: string }>();
+    const navigate = useNavigate();
+
+    const [exam, setExam] = useState<ExamWithSets | null>(null);
+    const [allStudents, setAllStudents] = useState<Student[]>([]);
+    const [enrollments, setEnrollments] = useState<EnrolledStudent[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    const [addSearch, setAddSearch] = useState('');
+    const [submittedSearch, setSubmittedSearch] = useState<string | null>(null);
+    const [enrollSearch, setEnrollSearch] = useState('');
+
+    const [unenrollTarget, setUnenrollTarget] = useState<EnrolledStudent | null>(null);
+    const [isUnenrolling, setIsUnenrolling] = useState(false);
+    const [enrollingId, setEnrollingId] = useState<string | null>(null);
+
+    const [toast, setToast] = useState<ToastState>({ open: false, message: '', type: 'success' });
+    const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') =>
+        setToast({ open: true, message, type }), []);
+    const closeToast = useCallback(() => setToast(prev => ({ ...prev, open: false })), []);
+
+    useEffect(() => {
+        if (!examId) return;
+        Promise.all([
+            fetchExamById(examId),
+            fetchStudents(),
+            fetchExamEnrollments(examId),
+        ]).then(([examRes, studRes, enrollRes]) => {
+            if (examRes.data) setExam(examRes.data);
+            if (!studRes.error) setAllStudents(studRes.data);
+            if (!enrollRes.error) setEnrollments(enrollRes.data);
+            setIsLoading(false);
+        });
+    }, [examId]);
+
+    const enrolledStudentIds = useMemo(() => new Set(enrollments.map(e => e.student_id)), [enrollments]);
+
+    function handleSearch() {
+        if (!addSearch.trim()) return;
+        setSubmittedSearch(addSearch.trim());
+    }
+
+    // Students not yet enrolled — for "Add Students" search
+    const availableStudents = useMemo(() => {
+        if (submittedSearch === null) return [];
+        const q = submittedSearch.toLowerCase();
+        return allStudents.filter(s => {
+            if (enrolledStudentIds.has(s.id)) return false;
+            if (!q) return true;
+            return (
+                s.full_name?.toLowerCase().includes(q) ||
+                s.username?.toLowerCase().includes(q) ||
+                s.email?.toLowerCase().includes(q) ||
+                s.program?.code?.toLowerCase().includes(q) ||
+                s.program?.name?.toLowerCase().includes(q)
+            );
+        });
+    }, [allStudents, enrolledStudentIds, submittedSearch]);
+
+    // Enrolled students — for search within enrolled list
+    const filteredEnrollments = useMemo(() => {
+        const q = enrollSearch.toLowerCase().trim();
+        if (!q) return enrollments;
+        return enrollments.filter(e =>
+            e.student?.full_name?.toLowerCase().includes(q) ||
+            e.student?.username?.toLowerCase().includes(q) ||
+            e.student?.email?.toLowerCase().includes(q) ||
+            e.student?.program?.code?.toLowerCase().includes(q) ||
+            e.student?.program?.name?.toLowerCase().includes(q)
+        );
+    }, [enrollments, enrollSearch]);
+
+    async function handleEnroll(student: Student) {
+        if (!examId) return;
+        setEnrollingId(student.id);
+        const { error } = await enrollStudent(examId, student.id);
+        setEnrollingId(null);
+        if (error) {
+            showToast(`Failed to enroll: ${error}`, 'error');
+            return;
+        }
+        // Optimistically add to enrollments list
+        const newEnrollment: EnrolledStudent = {
+            id: crypto.randomUUID(),
+            exam_id: examId,
+            student_id: student.id,
+            created_at: new Date().toISOString(),
+            student: {
+                full_name: student.full_name,
+                email: student.email,
+                username: student.username,
+                program: student.program,
+            },
+        };
+        setEnrollments(prev => [newEnrollment, ...prev]);
+        showToast(`${student.full_name ?? 'Student'} enrolled successfully.`);
+    }
+
+    async function handleUnenroll() {
+        if (!unenrollTarget) return;
+        setIsUnenrolling(true);
+        const { error } = await unenrollStudent(unenrollTarget.id);
+        setIsUnenrolling(false);
+        if (error) {
+            showToast(`Failed to remove: ${error}`, 'error');
+        } else {
+            setEnrollments(prev => prev.filter(e => e.id !== unenrollTarget.id));
+            showToast(`${unenrollTarget.student?.full_name ?? 'Student'} removed from exam.`);
+        }
+        setUnenrollTarget(null);
+    }
+
+    const inputStyle: React.CSSProperties = {
+        width: '100%', padding: '9px 12px 9px 38px', borderRadius: '8px',
+        border: '1.5px solid var(--prof-border)', fontSize: '0.875rem',
+        color: 'var(--prof-text-main)', outline: 'none', boxSizing: 'border-box',
+        background: '#fff',
+    };
+
+    if (isLoading) {
+        return (
+            <div className="subjects-container">
+                <p className="settings-loading-row">Loading...</p>
+            </div>
+        );
+    }
+
+    if (!exam) {
+        return (
+            <div className="subjects-container">
+                <p className="cs-error">Exam not found.</p>
+                <button className="btn-secondary" onClick={() => navigate('/professor/exams')} style={{ marginTop: '12px' }}>
+                    Back to Exams
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="subjects-container">
+            <button className="btn-back" onClick={() => navigate(`/professor/exams/${examId}`)}>
+                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                </svg>
+                Back to Exam
+            </button>
+
+            <div className="cs-header">
+                <h2>Exam Students</h2>
+                <p>
+                    Manage students enrolled in <strong>{exam.title}</strong>
+                    <span className="subject-code" style={{ marginLeft: '8px', verticalAlign: 'middle' }}>{exam.code}</span>
+                </p>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'start' }}>
+                {/* ── Enrolled Students ── */}
+                <div className="cs-card" style={{ padding: '20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>
+                            Enrolled
+                            <span style={{ marginLeft: '8px', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 600, background: '#eff6ff', color: '#2563eb', border: '1px solid #93c5fd' }}>
+                                {enrollments.length}
+                            </span>
+                        </h3>
+                    </div>
+
+                    {/* Search enrolled */}
+                    <div style={{ position: 'relative', marginBottom: '14px' }}>
+                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"
+                            style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--prof-text-muted)', pointerEvents: 'none' }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                        </svg>
+                        <input
+                            type="text"
+                            placeholder="Search enrolled students..."
+                            value={enrollSearch}
+                            onChange={e => setEnrollSearch(e.target.value)}
+                            style={inputStyle}
+                        />
+                    </div>
+
+                    {enrollments.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--prof-text-muted)', fontSize: '0.875rem' }}>
+                            <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" width="36" height="36" style={{ margin: '0 auto 10px', display: 'block', opacity: 0.4 }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                            </svg>
+                            No students enrolled yet.
+                        </div>
+                    ) : filteredEnrollments.length === 0 ? (
+                        <p style={{ textAlign: 'center', padding: '20px', color: 'var(--prof-text-muted)', fontSize: '0.875rem' }}>
+                            No students match your search.
+                        </p>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '480px', overflowY: 'auto' }}>
+                            {filteredEnrollments.map(enrollment => (
+                                <div
+                                    key={enrollment.id}
+                                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--prof-border)', background: 'var(--prof-surface)' }}
+                                >
+                                    <div style={{ minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                            <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--prof-text-main)' }}>
+                                                {enrollment.student?.full_name ?? '—'}
+                                            </span>
+                                            {enrollment.student?.program && (
+                                                <span style={{ padding: '1px 6px', borderRadius: '10px', fontSize: '11px', fontWeight: 600, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', whiteSpace: 'nowrap' }}>
+                                                    {enrollment.student.program.code}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <span style={{ fontSize: '0.775rem', color: 'var(--prof-text-muted)' }}>
+                                            @{enrollment.student?.username ?? '—'}
+                                        </span>
+                                    </div>
+                                    <button
+                                        className="btn-icon danger"
+                                        title="Remove from exam"
+                                        onClick={() => setUnenrollTarget(enrollment)}
+                                        style={{ flexShrink: 0 }}
+                                    >
+                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766z" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* ── Add Students ── */}
+                <div className="cs-card" style={{ padding: '20px' }}>
+                    <div style={{ marginBottom: '16px' }}>
+                        <h3 style={{ margin: '0 0 4px', fontSize: '1rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>
+                            Add Students
+                        </h3>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--prof-text-muted)' }}>
+                            Search by name, username, or program to enroll students.
+                        </p>
+                    </div>
+
+                    {/* Search available */}
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                        <div style={{ position: 'relative', flex: 1 }}>
+                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"
+                                style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--prof-text-muted)', pointerEvents: 'none' }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                            </svg>
+                            <input
+                                type="text"
+                                placeholder="Search by name, username, program..."
+                                value={addSearch}
+                                onChange={e => setAddSearch(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
+                                style={inputStyle}
+                            />
+                            {addSearch && (
+                                <button
+                                    onClick={() => { setAddSearch(''); setSubmittedSearch(null); }}
+                                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--prof-text-muted)', display: 'flex', padding: 0 }}
+                                >
+                                    <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
+                        <button className="btn-primary" onClick={handleSearch} style={{ padding: '0 14px', fontSize: '0.85rem', borderRadius: '8px', flexShrink: 0 }}>
+                            Search
+                        </button>
+                    </div>
+
+                    {submittedSearch === null ? (
+                        <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--prof-text-muted)', fontSize: '0.875rem' }}>
+                            <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" width="36" height="36" style={{ margin: '0 auto 10px', display: 'block', opacity: 0.4 }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                            </svg>
+                            Search to find students to enroll.
+                        </div>
+                    ) : availableStudents.length === 0 ? (
+                        <p style={{ textAlign: 'center', padding: '20px', color: 'var(--prof-text-muted)', fontSize: '0.875rem' }}>
+                            {submittedSearch ? 'No students match your search.' : 'All students are already enrolled.'}
+                        </p>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '480px', overflowY: 'auto' }}>
+                            {availableStudents.map(student => (
+                                <div
+                                    key={student.id}
+                                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--prof-border)', background: 'var(--prof-surface)' }}
+                                >
+                                    <div style={{ minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                            <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--prof-text-main)' }}>
+                                                {student.full_name ?? '—'}
+                                            </span>
+                                            {student.program && (
+                                                <span style={{ padding: '1px 6px', borderRadius: '10px', fontSize: '11px', fontWeight: 600, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', whiteSpace: 'nowrap' }}>
+                                                    {student.program.code}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <span style={{ fontSize: '0.775rem', color: 'var(--prof-text-muted)' }}>
+                                            @{student.username ?? '—'}
+                                        </span>
+                                    </div>
+                                    <button
+                                        className="btn-primary"
+                                        style={{ padding: '5px 12px', fontSize: '0.8rem', fontWeight: 600, borderRadius: '7px', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0, minWidth: '72px', justifyContent: 'center' }}
+                                        disabled={enrollingId === student.id}
+                                        onClick={() => handleEnroll(student)}
+                                    >
+                                        {enrollingId === student.id ? (
+                                            'Adding...'
+                                        ) : (
+                                            <>
+                                                <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                                </svg>
+                                                Enroll
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <Popup
+                isOpen={!!unenrollTarget}
+                title="Remove Student"
+                message={`Remove "${unenrollTarget?.student?.full_name}" from this exam? They will lose access to it.`}
+                type="danger"
+                onConfirm={handleUnenroll}
+                onCancel={() => setUnenrollTarget(null)}
+                confirmText={isUnenrolling ? 'Removing...' : 'Remove'}
+                cancelText="Cancel"
+            />
+
+            <Toast isOpen={toast.open} message={toast.message} type={toast.type} onClose={closeToast} />
+        </div>
+    );
+}

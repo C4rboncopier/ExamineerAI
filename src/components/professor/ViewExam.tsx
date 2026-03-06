@@ -131,6 +131,7 @@ export function ViewExam() {
 
     const subjectTags = exam.exam_subjects.filter(s => s.subjects);
     const alloc = exam.question_allocation;
+    const isIncomplete = exam.status === 'draft' && (exam.exam_subjects.length === 0 || exam.exam_sets.length === 0);
     const sortedSets: ExamSetDetail[] = [...(exam.exam_sets || [])].sort((a, b) => a.set_number - b.set_number);
     const currentSet = sortedSets[activeSet];
     const orderedIds = currentSet ? (shuffledMap[activeSet] ?? currentSet.question_ids) : [];
@@ -250,6 +251,17 @@ export function ViewExam() {
                             <button className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#2563eb', borderColor: '#93c5fd', padding: '8px 18px', fontSize: '0.9rem', fontWeight: 600, borderRadius: '8px' }} onClick={() => setIsDoneConfirmOpen(true)}>
                                 <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                 Mark as Done
+                            </button>
+                        </>
+                    ) : isIncomplete ? (
+                        <>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600, background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', boxShadow: '0 2px 4px rgba(194,65,12,0.08)' }}>
+                                <svg fill="currentColor" viewBox="0 0 20 20" width="16" height="16"><path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>
+                                Incomplete
+                            </span>
+                            <button className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', fontSize: '0.9rem', fontWeight: 600, borderRadius: '8px' }} onClick={() => navigate(`/professor/exams/${exam.id}/edit`)}>
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+                                Add Details
                             </button>
                         </>
                     ) : (
@@ -451,6 +463,17 @@ export function ViewExam() {
             <div className="cs-actions">
                 <button className="btn-secondary" onClick={() => navigate('/professor/exams')}>
                     Back
+                </button>
+
+                <button
+                    className="btn-secondary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '7px' }}
+                    onClick={() => navigate(`/professor/exams/${exam.id}/students`)}
+                >
+                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                    </svg>
+                    Manage Students
                 </button>
 
                 <button className="btn-primary" disabled={exam.status !== 'draft'} style={exam.status !== 'draft' ? { opacity: 0.4, cursor: 'not-allowed' } : {}} onClick={() => exam.status === 'draft' && navigate(`/professor/exams/${exam.id}/edit`)}>
