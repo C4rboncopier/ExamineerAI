@@ -28,18 +28,28 @@ export interface Exam {
     term: string;
     question_allocation: AllocationConfig;
     created_at: string;
-    status: 'draft' | 'deployed' | 'done';
+    status: 'locked' | 'unlocked';
+    program_ids: string[];
     exam_subjects: ExamSubject[];
 }
 
 export interface ExamSetDetail {
     id: string;
     set_number: number;
+    attempt_number: number;
     question_ids: string[];
+}
+
+export interface ExamAttemptRecord {
+    id: string;
+    exam_id: string;
+    attempt_number: number;
+    status: 'draft' | 'deployed' | 'done';
 }
 
 export interface ExamWithSets extends Exam {
     exam_sets: ExamSetDetail[];
+    exam_attempts: ExamAttemptRecord[];
 }
 
 // ─── Shuffle (Fisher-Yates) ───────────────────────────────────
@@ -116,7 +126,8 @@ async function generateAndSaveSets(
     examId: string,
     subjectIds: string[],
     allocationConfig: AllocationConfig,
-    numSets: number
+    numSets: number,
+    attemptNumber: number = 1
 ): Promise<{ error: string | null }> {
     // No subjects yet — skip set generation (sets will be created when exam is edited later)
     if (subjectIds.length === 0) return { error: null };
@@ -167,7 +178,7 @@ async function generateAndSaveSets(
         const shuffled = shuffle([...pool]);
         const { error: setError } = await supabase
             .from('exam_sets')
-            .insert({ exam_id: examId, set_number: setNum, question_ids: shuffled.map(q => q.id) });
+            .insert({ exam_id: examId, set_number: setNum, attempt_number: attemptNumber, question_ids: shuffled.map(q => q.id) });
 
         if (setError) return { error: `Failed to create set ${setNum}: ${setError.message}` };
     }
@@ -180,7 +191,7 @@ async function generateAndSaveSets(
 export async function fetchExams(): Promise<{ data: Exam[]; error: string | null }> {
     const { data, error } = await supabase
         .from('exams')
-        .select('id, title, code, num_sets, max_attempts, academic_year, term, question_allocation, created_at, status, exam_subjects(subject_id, subjects(course_code, course_title))')
+        .select('id, title, code, num_sets, max_attempts, academic_year, term, question_allocation, created_at, status, program_ids, exam_subjects(subject_id, subjects(course_code, course_title))')
         .order('created_at', { ascending: false });
 
     if (error) return { data: [], error: error.message };
@@ -191,9 +202,10 @@ export async function fetchExamById(id: string): Promise<{ data: ExamWithSets | 
     const { data, error } = await supabase
         .from('exams')
         .select(`
-            id, title, code, num_sets, max_attempts, academic_year, term, question_allocation, created_at, status,
+            id, title, code, num_sets, max_attempts, academic_year, term, question_allocation, created_at, status, program_ids,
             exam_subjects(subject_id, subjects(course_code, course_title)),
-            exam_sets(id, set_number, question_ids)
+            exam_sets(id, set_number, attempt_number, question_ids),
+            exam_attempts(id, exam_id, attempt_number, status)
         `)
         .eq('id', id)
         .single();
@@ -207,16 +219,16 @@ export async function createExam(
     code: string,
     subjectIds: string[],
     numSets: number,
-    allocationConfig: AllocationConfig,
     maxAttempts: number,
     academicYear: string,
-    term: string
+    term: string,
+    programIds: string[] = []
 ): Promise<{ data: Exam | null; error: string | null }> {
     const { data: { user } } = await supabase.auth.getUser();
 
     const { data: exam, error: insertError } = await supabase
         .from('exams')
-        .insert({ title, code, created_by: user?.id, num_sets: numSets, question_allocation: allocationConfig, max_attempts: maxAttempts, academic_year: academicYear, term })
+        .insert({ title, code, created_by: user?.id, num_sets: numSets, question_allocation: {}, max_attempts: maxAttempts, academic_year: academicYear, term, program_ids: programIds })
         .select('id')
         .single();
 
@@ -235,13 +247,6 @@ export async function createExam(
         }
     }
 
-    const { error: genError } = await generateAndSaveSets(exam.id, subjectIds, allocationConfig, numSets);
-    if (genError) {
-        await supabase.from('exams').delete().eq('id', exam.id);
-        return { data: null, error: genError };
-    }
-
-    // Return just the basic exam (list view shape)
     const { data: fetched } = await fetchExams();
     return { data: fetched.find(e => e.id === exam.id) || null, error: null };
 }
@@ -252,14 +257,14 @@ export async function updateExam(
     code: string,
     subjectIds: string[],
     numSets: number,
-    allocationConfig: AllocationConfig,
     maxAttempts: number,
     academicYear: string,
-    term: string
+    term: string,
+    programIds: string[] = []
 ): Promise<{ error: string | null }> {
     const { error: updateError } = await supabase
         .from('exams')
-        .update({ title, code, num_sets: numSets, question_allocation: allocationConfig, max_attempts: maxAttempts, academic_year: academicYear, term, updated_at: new Date().toISOString() })
+        .update({ title, code, num_sets: numSets, max_attempts: maxAttempts, academic_year: academicYear, term, program_ids: programIds, updated_at: new Date().toISOString() })
         .eq('id', id);
 
     if (updateError) {
@@ -267,7 +272,7 @@ export async function updateExam(
         return { error: updateError.message };
     }
 
-    // Replace subjects
+    // Replace subjects (papers remain intact — professor manages them per-attempt)
     await supabase.from('exam_subjects').delete().eq('exam_id', id);
     if (subjectIds.length > 0) {
         const { error: subjError } = await supabase
@@ -276,18 +281,46 @@ export async function updateExam(
         if (subjError) return { error: 'Failed to update subjects.' };
     }
 
-    // Delete old sets (cascades exam_set_questions) and regenerate
-    await supabase.from('exam_sets').delete().eq('exam_id', id);
-    return generateAndSaveSets(id, subjectIds, allocationConfig, numSets);
+    return { error: null };
 }
 
-export async function deployExam(id: string): Promise<{ error: string | null }> {
-    const { error } = await supabase.from('exams').update({ status: 'deployed' }).eq('id', id);
+export async function generateExamPapersForAttempt(
+    examId: string,
+    attemptNumber: number,
+    subjectIds: string[],
+    allocationConfig: AllocationConfig,
+    numSets: number
+): Promise<{ error: string | null }> {
+    await supabase.from('exam_sets').delete().eq('exam_id', examId).eq('attempt_number', attemptNumber);
+    return generateAndSaveSets(examId, subjectIds, allocationConfig, numSets, attemptNumber);
+}
+
+export async function deleteAttemptPapers(examId: string, attemptNumber: number): Promise<{ error: string | null }> {
+    const { error } = await supabase.from('exam_sets').delete().eq('exam_id', examId).eq('attempt_number', attemptNumber);
     return { error: error?.message ?? null };
 }
 
-export async function markExamDone(id: string): Promise<{ error: string | null }> {
-    const { error } = await supabase.from('exams').update({ status: 'done' }).eq('id', id);
+export async function unlockExam(id: string): Promise<{ error: string | null }> {
+    const { error } = await supabase.from('exams').update({ status: 'unlocked' }).eq('id', id);
+    return { error: error?.message ?? null };
+}
+
+export async function lockExam(id: string): Promise<{ error: string | null }> {
+    const { error } = await supabase.from('exams').update({ status: 'locked' }).eq('id', id);
+    return { error: error?.message ?? null };
+}
+
+export async function deployAttempt(examId: string, attemptNumber: number): Promise<{ error: string | null }> {
+    const { error } = await supabase
+        .from('exam_attempts')
+        .upsert({ exam_id: examId, attempt_number: attemptNumber, status: 'deployed' }, { onConflict: 'exam_id,attempt_number' });
+    return { error: error?.message ?? null };
+}
+
+export async function markAttemptDone(examId: string, attemptNumber: number): Promise<{ error: string | null }> {
+    const { error } = await supabase
+        .from('exam_attempts')
+        .upsert({ exam_id: examId, attempt_number: attemptNumber, status: 'done' }, { onConflict: 'exam_id,attempt_number' });
     return { error: error?.message ?? null };
 }
 

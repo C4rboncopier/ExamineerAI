@@ -11,8 +11,9 @@ import { Toast } from '../common/Toast';
 
 interface ToastState { open: boolean; message: string; type: 'success' | 'error' | 'info'; }
 
-export function ExamStudents() {
-    const { examId } = useParams<{ examId: string }>();
+export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
+    const { examId: examIdParam } = useParams<{ examId: string }>();
+    const examId = examIdProp ?? examIdParam;
     const navigate = useNavigate();
 
     const [exam, setExam] = useState<ExamWithSets | null>(null);
@@ -23,6 +24,11 @@ export function ExamStudents() {
     const [addSearch, setAddSearch] = useState('');
     const [submittedSearch, setSubmittedSearch] = useState<string | null>(null);
     const [enrollSearch, setEnrollSearch] = useState('');
+    const [submittedEnrollSearch, setSubmittedEnrollSearch] = useState('');
+
+    const [addPage, setAddPage] = useState(1);
+    const [enrolledPage, setEnrolledPage] = useState(1);
+    const ITEMS_PER_PAGE = 10;
 
     const [unenrollTarget, setUnenrollTarget] = useState<EnrolledStudent | null>(null);
     const [isUnenrolling, setIsUnenrolling] = useState(false);
@@ -49,9 +55,14 @@ export function ExamStudents() {
 
     const enrolledStudentIds = useMemo(() => new Set(enrollments.map(e => e.student_id)), [enrollments]);
 
-    function handleSearch() {
-        if (!addSearch.trim()) return;
+    function handleAddSearch() {
         setSubmittedSearch(addSearch.trim());
+        setAddPage(1);
+    }
+
+    function handleEnrollSearch() {
+        setSubmittedEnrollSearch(enrollSearch.trim());
+        setEnrolledPage(1);
     }
 
     // Students not yet enrolled — for "Add Students" search
@@ -73,7 +84,7 @@ export function ExamStudents() {
 
     // Enrolled students — for search within enrolled list
     const filteredEnrollments = useMemo(() => {
-        const q = enrollSearch.toLowerCase().trim();
+        const q = submittedEnrollSearch.toLowerCase().trim();
         if (!q) return enrollments;
         return enrollments.filter(e =>
             e.student?.full_name?.toLowerCase().includes(q) ||
@@ -82,7 +93,19 @@ export function ExamStudents() {
             e.student?.program?.code?.toLowerCase().includes(q) ||
             e.student?.program?.name?.toLowerCase().includes(q)
         );
-    }, [enrollments, enrollSearch]);
+    }, [enrollments, submittedEnrollSearch]);
+
+    const totalEnrolledPages = Math.max(1, Math.ceil(filteredEnrollments.length / ITEMS_PER_PAGE));
+    const paginatedEnrollments = useMemo(() => {
+        const start = (enrolledPage - 1) * ITEMS_PER_PAGE;
+        return filteredEnrollments.slice(start, start + ITEMS_PER_PAGE);
+    }, [filteredEnrollments, enrolledPage]);
+
+    const totalAddPages = Math.max(1, Math.ceil(availableStudents.length / ITEMS_PER_PAGE));
+    const paginatedAvailable = useMemo(() => {
+        const start = (addPage - 1) * ITEMS_PER_PAGE;
+        return availableStudents.slice(start, start + ITEMS_PER_PAGE);
+    }, [availableStudents, addPage]);
 
     async function handleEnroll(student: Student) {
         if (!examId) return;
@@ -152,22 +175,7 @@ export function ExamStudents() {
 
     return (
         <div className="subjects-container">
-            <button className="btn-back" onClick={() => navigate(`/professor/exams/${examId}`)}>
-                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-                </svg>
-                Back to Exam
-            </button>
-
-            <div className="cs-header">
-                <h2>Exam Students</h2>
-                <p>
-                    Manage students enrolled in <strong>{exam.title}</strong>
-                    <span className="subject-code" style={{ marginLeft: '8px', verticalAlign: 'middle' }}>{exam.code}</span>
-                </p>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'start' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', alignItems: 'start' }}>
                 {/* ── Enrolled Students ── */}
                 <div className="cs-card" style={{ padding: '20px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -180,18 +188,34 @@ export function ExamStudents() {
                     </div>
 
                     {/* Search enrolled */}
-                    <div style={{ position: 'relative', marginBottom: '14px' }}>
-                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"
-                            style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--prof-text-muted)', pointerEvents: 'none' }}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                        </svg>
-                        <input
-                            type="text"
-                            placeholder="Search enrolled students..."
-                            value={enrollSearch}
-                            onChange={e => setEnrollSearch(e.target.value)}
-                            style={inputStyle}
-                        />
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                        <div style={{ position: 'relative', flex: 1 }}>
+                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"
+                                style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--prof-text-muted)', pointerEvents: 'none' }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                            </svg>
+                            <input
+                                type="text"
+                                placeholder="Search enrolled students..."
+                                value={enrollSearch}
+                                onChange={e => setEnrollSearch(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') handleEnrollSearch(); }}
+                                style={inputStyle}
+                            />
+                            {enrollSearch && (
+                                <button
+                                    onClick={() => { setEnrollSearch(''); setSubmittedEnrollSearch(''); setEnrolledPage(1); }}
+                                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--prof-text-muted)', display: 'flex', padding: 0 }}
+                                >
+                                    <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
+                        <button className="btn-primary" onClick={handleEnrollSearch} style={{ padding: '0 14px', fontSize: '0.85rem', borderRadius: '8px', flexShrink: 0 }}>
+                            Search
+                        </button>
                     </div>
 
                     {enrollments.length === 0 ? (
@@ -206,40 +230,67 @@ export function ExamStudents() {
                             No students match your search.
                         </p>
                     ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '480px', overflowY: 'auto' }}>
-                            {filteredEnrollments.map(enrollment => (
-                                <div
-                                    key={enrollment.id}
-                                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--prof-border)', background: 'var(--prof-surface)' }}
-                                >
-                                    <div style={{ minWidth: 0 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                            <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--prof-text-main)' }}>
-                                                {enrollment.student?.full_name ?? '—'}
-                                            </span>
-                                            {enrollment.student?.program && (
-                                                <span style={{ padding: '1px 6px', borderRadius: '10px', fontSize: '11px', fontWeight: 600, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', whiteSpace: 'nowrap' }}>
-                                                    {enrollment.student.program.code}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <span style={{ fontSize: '0.775rem', color: 'var(--prof-text-muted)' }}>
-                                            @{enrollment.student?.username ?? '—'}
-                                        </span>
-                                    </div>
-                                    <button
-                                        className="btn-icon danger"
-                                        title="Remove from exam"
-                                        onClick={() => setUnenrollTarget(enrollment)}
-                                        style={{ flexShrink: 0 }}
+                        <>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {paginatedEnrollments.map(enrollment => (
+                                    <div
+                                        key={enrollment.id}
+                                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--prof-border)', background: 'var(--prof-surface)' }}
                                     >
-                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766z" />
-                                        </svg>
+                                        <div style={{ minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--prof-text-main)' }}>
+                                                    {enrollment.student?.full_name ?? '—'}
+                                                </span>
+                                                {enrollment.student?.program && (
+                                                    <span style={{ padding: '1px 6px', borderRadius: '10px', fontSize: '11px', fontWeight: 600, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', whiteSpace: 'nowrap' }}>
+                                                        {enrollment.student.program.code}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <span style={{ fontSize: '0.775rem', color: 'var(--prof-text-muted)' }}>
+                                                @{enrollment.student?.username ?? '—'}
+                                            </span>
+                                        </div>
+                                        <button
+                                            className="btn-icon danger"
+                                            title="Remove from exam"
+                                            onClick={() => setUnenrollTarget(enrollment)}
+                                            style={{ flexShrink: 0 }}
+                                        >
+                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M22 10.5h-6m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766z" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            {totalEnrolledPages > 1 && (
+                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--prof-border)' }}>
+                                    <button
+                                        onClick={() => setEnrolledPage(p => Math.max(1, p - 1))}
+                                        disabled={enrolledPage === 1}
+                                        className="btn-secondary"
+                                        type="button"
+                                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                    >
+                                        Previous
+                                    </button>
+                                    <span style={{ fontSize: '0.85rem', color: 'var(--prof-text-muted)' }}>
+                                        Page {enrolledPage} of {totalEnrolledPages}
+                                    </span>
+                                    <button
+                                        onClick={() => setEnrolledPage(p => Math.min(totalEnrolledPages, p + 1))}
+                                        disabled={enrolledPage === totalEnrolledPages}
+                                        className="btn-secondary"
+                                        type="button"
+                                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                    >
+                                        Next
                                     </button>
                                 </div>
-                            ))}
-                        </div>
+                            )}
+                        </>
                     )}
                 </div>
 
@@ -249,9 +300,6 @@ export function ExamStudents() {
                         <h3 style={{ margin: '0 0 4px', fontSize: '1rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>
                             Add Students
                         </h3>
-                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--prof-text-muted)' }}>
-                            Search by name, username, or program to enroll students.
-                        </p>
                     </div>
 
                     {/* Search available */}
@@ -266,12 +314,12 @@ export function ExamStudents() {
                                 placeholder="Search by name, username, program..."
                                 value={addSearch}
                                 onChange={e => setAddSearch(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
+                                onKeyDown={e => { if (e.key === 'Enter') handleAddSearch(); }}
                                 style={inputStyle}
                             />
                             {addSearch && (
                                 <button
-                                    onClick={() => { setAddSearch(''); setSubmittedSearch(null); }}
+                                    onClick={() => { setAddSearch(''); setSubmittedSearch(null); setAddPage(1); }}
                                     style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--prof-text-muted)', display: 'flex', padding: 0 }}
                                 >
                                     <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
@@ -280,7 +328,7 @@ export function ExamStudents() {
                                 </button>
                             )}
                         </div>
-                        <button className="btn-primary" onClick={handleSearch} style={{ padding: '0 14px', fontSize: '0.85rem', borderRadius: '8px', flexShrink: 0 }}>
+                        <button className="btn-primary" onClick={handleAddSearch} style={{ padding: '0 14px', fontSize: '0.85rem', borderRadius: '8px', flexShrink: 0 }}>
                             Search
                         </button>
                     </div>
@@ -297,47 +345,74 @@ export function ExamStudents() {
                             {submittedSearch ? 'No students match your search.' : 'All students are already enrolled.'}
                         </p>
                     ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '480px', overflowY: 'auto' }}>
-                            {availableStudents.map(student => (
-                                <div
-                                    key={student.id}
-                                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--prof-border)', background: 'var(--prof-surface)' }}
-                                >
-                                    <div style={{ minWidth: 0 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                            <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--prof-text-main)' }}>
-                                                {student.full_name ?? '—'}
-                                            </span>
-                                            {student.program && (
-                                                <span style={{ padding: '1px 6px', borderRadius: '10px', fontSize: '11px', fontWeight: 600, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', whiteSpace: 'nowrap' }}>
-                                                    {student.program.code}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <span style={{ fontSize: '0.775rem', color: 'var(--prof-text-muted)' }}>
-                                            @{student.username ?? '—'}
-                                        </span>
-                                    </div>
-                                    <button
-                                        className="btn-primary"
-                                        style={{ padding: '5px 12px', fontSize: '0.8rem', fontWeight: 600, borderRadius: '7px', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0, minWidth: '72px', justifyContent: 'center' }}
-                                        disabled={enrollingId === student.id}
-                                        onClick={() => handleEnroll(student)}
+                        <>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {paginatedAvailable.map(student => (
+                                    <div
+                                        key={student.id}
+                                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--prof-border)', background: 'var(--prof-surface)' }}
                                     >
-                                        {enrollingId === student.id ? (
-                                            'Adding...'
-                                        ) : (
-                                            <>
-                                                <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                                                </svg>
-                                                Enroll
-                                            </>
-                                        )}
+                                        <div style={{ minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--prof-text-main)' }}>
+                                                    {student.full_name ?? '—'}
+                                                </span>
+                                                {student.program && (
+                                                    <span style={{ padding: '1px 6px', borderRadius: '10px', fontSize: '11px', fontWeight: 600, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', whiteSpace: 'nowrap' }}>
+                                                        {student.program.code}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <span style={{ fontSize: '0.775rem', color: 'var(--prof-text-muted)' }}>
+                                                @{student.username ?? '—'}
+                                            </span>
+                                        </div>
+                                        <button
+                                            className="btn-primary"
+                                            style={{ padding: '5px 12px', fontSize: '0.8rem', fontWeight: 600, borderRadius: '7px', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0, minWidth: '72px', justifyContent: 'center' }}
+                                            disabled={enrollingId === student.id}
+                                            onClick={() => handleEnroll(student)}
+                                        >
+                                            {enrollingId === student.id ? (
+                                                'Adding...'
+                                            ) : (
+                                                <>
+                                                    <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                                    </svg>
+                                                    Enroll
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            {totalAddPages > 1 && (
+                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--prof-border)' }}>
+                                    <button
+                                        onClick={() => setAddPage(p => Math.max(1, p - 1))}
+                                        disabled={addPage === 1}
+                                        className="btn-secondary"
+                                        type="button"
+                                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                    >
+                                        Previous
+                                    </button>
+                                    <span style={{ fontSize: '0.85rem', color: 'var(--prof-text-muted)' }}>
+                                        Page {addPage} of {totalAddPages}
+                                    </span>
+                                    <button
+                                        onClick={() => setAddPage(p => Math.min(totalAddPages, p + 1))}
+                                        disabled={addPage === totalAddPages}
+                                        className="btn-secondary"
+                                        type="button"
+                                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                    >
+                                        Next
                                     </button>
                                 </div>
-                            ))}
-                        </div>
+                            )}
+                        </>
                     )}
                 </div>
             </div>

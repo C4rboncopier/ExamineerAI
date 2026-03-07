@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { fetchSubjects } from '../../lib/subjects';
 import type { SubjectWithCounts } from '../../lib/subjects';
 import { createTemplate, updateTemplate, fetchTemplateById } from '../../lib/templates';
+import { fetchPrograms } from '../../lib/settings';
+import type { Program } from '../../lib/settings';
 import { Toast } from '../common/Toast';
 
 interface ToastState {
@@ -16,6 +18,10 @@ export function CreateTemplate() {
     const navigate = useNavigate();
     const isEditMode = !!templateId;
 
+    const [programs, setPrograms] = useState<Program[]>([]);
+    const [selectedProgramIds, setSelectedProgramIds] = useState<string[]>([]);
+    const [programDropdownOpen, setProgramDropdownOpen] = useState(false);
+    const [programSearch, setProgramSearch] = useState('');
     const [title, setTitle] = useState('');
     const [code, setCode] = useState('');
     const [subjects, setSubjects] = useState<SubjectWithCounts[]>([]);
@@ -31,8 +37,25 @@ export function CreateTemplate() {
         setToast({ open: true, message, type });
     const closeToast = useCallback(() => setToast(prev => ({ ...prev, open: false })), []);
 
+    const programDropdownRef = useRef<HTMLDivElement>(null);
+    const subjectDropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (programDropdownRef.current && !programDropdownRef.current.contains(event.target as Node)) {
+                setProgramDropdownOpen(false);
+            }
+            if (subjectDropdownRef.current && !subjectDropdownRef.current.contains(event.target as Node)) {
+                setSubjectDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     useEffect(() => {
         fetchSubjects().then(({ data }) => setSubjects(data || []));
+        fetchPrograms().then(({ data }) => setPrograms(data || []));
 
         if (isEditMode && templateId) {
             fetchTemplateById(templateId).then(({ data, error }) => {
@@ -42,6 +65,7 @@ export function CreateTemplate() {
                     setTitle(data.title);
                     setCode(data.code);
                     setSelectedSubjectIds(data.subject_ids);
+                    setSelectedProgramIds(data.program_ids ?? []);
                 }
                 setIsLoadingTemplate(false);
             });
@@ -49,6 +73,15 @@ export function CreateTemplate() {
     }, [isEditMode, templateId]);
 
     const goBack = () => navigate('/professor/templates');
+
+    const filteredPrograms = useMemo(() => {
+        if (!programSearch.trim()) return programs;
+        const q = programSearch.toLowerCase().trim();
+        return programs.filter(p =>
+            p.name.toLowerCase().includes(q) ||
+            p.code.toLowerCase().includes(q)
+        );
+    }, [programs, programSearch]);
 
     const filteredSubjects = useMemo(() => {
         if (!subjectSearch.trim()) return subjects;
@@ -77,7 +110,7 @@ export function CreateTemplate() {
         setIsSubmitting(true);
 
         if (isEditMode && templateId) {
-            const { error } = await updateTemplate(templateId, title, code, selectedSubjectIds);
+            const { error } = await updateTemplate(templateId, title, code, selectedSubjectIds, selectedProgramIds);
             if (error) {
                 setSubmitError(error);
                 setIsSubmitting(false);
@@ -85,7 +118,7 @@ export function CreateTemplate() {
             }
             showToast('Template updated successfully.');
         } else {
-            const { error } = await createTemplate(title, code, selectedSubjectIds);
+            const { error } = await createTemplate(title, code, selectedSubjectIds, selectedProgramIds);
             if (error) {
                 setSubmitError(error);
                 setIsSubmitting(false);
@@ -146,6 +179,92 @@ export function CreateTemplate() {
                             />
                         </div>
                     </div>
+                    <div className="cs-input-group" style={{ marginTop: '14px' }}>
+                        <div className="cs-input-field">
+                            <label>Restrict to Program <span style={{ fontWeight: 400, color: 'var(--prof-text-muted)' }}>(optional)</span></label>
+                            <div className="cq-subject-search" ref={programDropdownRef}>
+                                <div
+                                    className={`cq-subject-trigger ${programDropdownOpen ? 'open' : ''}`}
+                                    onClick={() => setProgramDropdownOpen(!programDropdownOpen)}
+                                >
+                                    <span className="cq-placeholder">
+                                        {selectedProgramIds.length > 0
+                                            ? `${selectedProgramIds.length} program${selectedProgramIds.length > 1 ? 's' : ''} selected`
+                                            : 'Click to select programs...'}
+                                    </span>
+                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"></path>
+                                    </svg>
+                                </div>
+                                {programDropdownOpen && (
+                                    <div className="cq-subject-dropdown">
+                                        <input
+                                            type="text"
+                                            className="cq-subject-search-input"
+                                            placeholder="Search programs..."
+                                            value={programSearch}
+                                            onChange={e => setProgramSearch(e.target.value)}
+                                            autoFocus
+                                        />
+                                        <div className="cq-subject-options">
+                                            {filteredPrograms.length === 0 ? (
+                                                <div className="cq-subject-no-results">No programs found</div>
+                                            ) : filteredPrograms.map(p => {
+                                                const isSelected = selectedProgramIds.includes(p.id);
+                                                return (
+                                                    <div
+                                                        key={p.id}
+                                                        className={`cq-subject-option ${isSelected ? 'selected' : ''}`}
+                                                        onClick={() => {
+                                                            setSelectedProgramIds(prev =>
+                                                                isSelected ? prev.filter(id => id !== p.id) : [...prev, p.id]
+                                                            );
+                                                            setProgramSearch('');
+                                                        }}
+                                                        style={{ cursor: 'pointer' }}
+                                                    >
+                                                        <span className="cq-subject-option-code">{p.code}</span>
+                                                        <span>{p.name}</span>
+                                                        {isSelected && <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#16a34a' }}>✓</span>}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            {selectedProgramIds.length > 0 && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
+                                    {selectedProgramIds.map(id => {
+                                        const program = programs.find(p => p.id === id);
+                                        if (!program) return null;
+                                        return (
+                                            <div key={id} style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', padding: '6px 12px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                                                <span style={{ fontSize: '14px', color: '#334155', marginRight: '8px' }}>
+                                                    <strong>{program.code}</strong> – {program.name}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSelectedProgramIds(prev => prev.filter(pid => pid !== id))}
+                                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
+                                                    title="Remove Program"
+                                                >
+                                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            {selectedProgramIds.length > 0 && (
+                                <p style={{ marginTop: '6px', fontSize: '0.8rem', color: 'var(--prof-text-muted)' }}>
+                                    Only students enrolled in the selected program(s) will be able to take this exam.
+                                </p>
+                            )}
+                        </div>
+                    </div>
                 </div>
 
                 <div className="cs-card">
@@ -153,7 +272,7 @@ export function CreateTemplate() {
 
                     <div className="cs-input-field">
                         <label>Search and Add Subjects</label>
-                        <div className="cq-subject-search">
+                        <div className="cq-subject-search" ref={subjectDropdownRef}>
                             <div
                                 className={`cq-subject-trigger ${subjectDropdownOpen ? 'open' : ''}`}
                                 onClick={() => setSubjectDropdownOpen(!subjectDropdownOpen)}

@@ -262,7 +262,7 @@
     padding: 24px 32px;
     box-shadow: var(--prof-shadow);
     border: 1px solid var(--prof-border);
-    margin-bottom: 32px;
+    margin-bottom: 12px;
 }
 
 .cs-card-title {
@@ -1436,7 +1436,19 @@ select:focus {
 .cq-form {
     display: flex;
     flex-direction: column;
+}
+
+.cq-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
     gap: 24px;
+    align-items: start;
+}
+
+@media (max-width: 991px) {
+    .cq-form-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Searchable Subject Dropdown */

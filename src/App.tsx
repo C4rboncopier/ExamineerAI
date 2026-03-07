@@ -14,7 +14,6 @@ import { CreateQuestion } from './components/professor/CreateQuestion';
 import { ExamsList } from './components/professor/ExamsList';
 import { CreateExam } from './components/professor/CreateExam';
 import { ViewExam } from './components/professor/ViewExam';
-import { ExamStudents } from './components/professor/ExamStudents';
 import { TemplatesList } from './components/professor/TemplatesList';
 import { CreateTemplate } from './components/professor/CreateTemplate';
 import { ProfessorSettings } from './components/professor/ProfessorSettings';
@@ -69,7 +68,6 @@ function App() {
               <Route path="exams/create" element={<CreateExam />} />
               <Route path="exams/:examId" element={<ViewExam />} />
               <Route path="exams/:examId/edit" element={<CreateExam />} />
-              <Route path="exams/:examId/students" element={<ExamStudents />} />
               <Route path="settings" element={<ProfessorSettings />} />
             </Route>
           </Route>

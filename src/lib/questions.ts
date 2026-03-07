@@ -218,7 +218,7 @@ export async function fetchQuestionsByIds(
     .select('id, question_text, choices, correct_choice, image_url, course_outcomes(title, order_index), module_outcomes(description, order_index)')
     .in('id', ids);
   if (error) return { data: [], error: error.message };
-  return { data: data as QuestionSummary[], error: null };
+  return { data: data as unknown as QuestionSummary[], error: null };
 }
 
 // ─── UPDATE ──────────────────────────────────────────────────
