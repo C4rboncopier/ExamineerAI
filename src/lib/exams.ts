@@ -5,9 +5,10 @@ import type { QuestionWithOutcomes } from './questions';
 // ─── Types ────────────────────────────────────────────────────
 
 export interface AllocationConfig {
-    mode: 'equal' | 'per_subject';
+    mode: 'equal' | 'per_subject' | 'per_mo';
     total?: number;
     counts?: Record<string, number>;
+    mo_counts?: Record<string, number>;
 }
 
 export interface ExamSubject {
@@ -140,7 +141,7 @@ async function generateAndSaveSets(
         questionsBySubject[subjectId] = data;
     }
 
-    // 2. Compute per-subject allocations
+    // 2. Compute per-subject allocations (not used for per_mo mode)
     const perSubjectCounts: Record<string, number> = {};
     if (allocationConfig.mode === 'equal') {
         const total = allocationConfig.total || 0;
@@ -151,7 +152,7 @@ async function generateAndSaveSets(
             perSubjectCounts[id] = base + (rem > 0 ? 1 : 0);
             if (rem > 0) rem--;
         }
-    } else {
+    } else if (allocationConfig.mode === 'per_subject') {
         for (const id of subjectIds) {
             perSubjectCounts[id] = allocationConfig.counts?.[id] || 0;
         }
@@ -159,15 +160,32 @@ async function generateAndSaveSets(
 
     // 3. Build the question pool — same across all sets
     const pool: QuestionWithOutcomes[] = [];
-    for (const subjectId of subjectIds) {
-        const count = perSubjectCounts[subjectId] || 0;
-        if (count === 0) continue;
-        const byMO: Record<string, QuestionWithOutcomes[]> = {};
-        for (const q of questionsBySubject[subjectId]) {
-            if (!byMO[q.module_outcome_id]) byMO[q.module_outcome_id] = [];
-            byMO[q.module_outcome_id].push(q);
+    if (allocationConfig.mode === 'per_mo') {
+        for (const subjectId of subjectIds) {
+            const byMO: Record<string, QuestionWithOutcomes[]> = {};
+            for (const q of questionsBySubject[subjectId]) {
+                if (!byMO[q.module_outcome_id]) byMO[q.module_outcome_id] = [];
+                byMO[q.module_outcome_id].push(q);
+            }
+            for (const moId of Object.keys(byMO)) {
+                const count = allocationConfig.mo_counts?.[moId] || 0;
+                if (count > 0) {
+                    const shuffledMO = shuffle([...byMO[moId]]);
+                    pool.push(...shuffledMO.slice(0, Math.min(count, shuffledMO.length)));
+                }
+            }
         }
-        pool.push(...distributeAcrossMOs(byMO, count));
+    } else {
+        for (const subjectId of subjectIds) {
+            const count = perSubjectCounts[subjectId] || 0;
+            if (count === 0) continue;
+            const byMO: Record<string, QuestionWithOutcomes[]> = {};
+            for (const q of questionsBySubject[subjectId]) {
+                if (!byMO[q.module_outcome_id]) byMO[q.module_outcome_id] = [];
+                byMO[q.module_outcome_id].push(q);
+            }
+            pool.push(...distributeAcrossMOs(byMO, count));
+        }
     }
 
     // No questions available yet — skip set creation silently

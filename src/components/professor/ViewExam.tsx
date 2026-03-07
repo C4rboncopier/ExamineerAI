@@ -7,8 +7,8 @@ import {
     deployAttempt, markAttemptDone,
 } from '../../lib/exams';
 import type { ExamWithSets, ExamSetDetail, AllocationConfig } from '../../lib/exams';
-import { fetchQuestionsByIds } from '../../lib/questions';
-import type { QuestionSummary } from '../../lib/questions';
+import { fetchQuestionsByIds, fetchQuestionsBySubject } from '../../lib/questions';
+import type { QuestionSummary, QuestionWithOutcomes } from '../../lib/questions';
 import { printExam } from '../../lib/printExam';
 import type { PaperSize, SizeUnit } from '../../lib/printExam';
 import { fetchSchoolInfo, fetchAcademicYear, fetchSemester } from '../../lib/settings';
@@ -77,12 +77,15 @@ export function ViewExam() {
 
     // ── Generate papers form ──
     const [showGenerateForm, setShowGenerateForm] = useState<number | null>(null);
-    const [genAllocMode, setGenAllocMode] = useState<'equal' | 'per_subject'>('equal');
+    const [genAllocMode, setGenAllocMode] = useState<'equal' | 'per_subject' | 'per_mo'>('equal');
+    const [genPerMOCounts, setGenPerMOCounts] = useState<Record<string, number>>({});
     const [genTotalQuestions, setGenTotalQuestions] = useState(20);
     const [genPerSubjectCounts, setGenPerSubjectCounts] = useState<Record<string, number>>({});
     const [isGenerating, setIsGenerating] = useState(false);
     const [isDeletingAttempt, setIsDeletingAttempt] = useState<number | null>(null);
     const [generateError, setGenerateError] = useState<string | null>(null);
+    const [availableQuestionsStats, setAvailableQuestionsStats] = useState<Record<string, { total: number, coStats: Record<string, number>, moStats: Record<string, number>, raw: QuestionWithOutcomes[] }>>({});
+    const [isFetchingStats, setIsFetchingStats] = useState(false);
 
     // ── Print ──
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -292,7 +295,8 @@ export function ViewExam() {
         navigate('/professor/exams');
     };
 
-    const openGenerateForm = (attemptNumber: number) => {
+    const openGenerateForm = async (attemptNumber: number) => {
+        if (!exam) return;
         const counts: Record<string, number> = {};
         exam.exam_subjects.forEach(s => { counts[s.subject_id] = 10; });
         setGenPerSubjectCounts(counts);
@@ -300,6 +304,37 @@ export function ViewExam() {
         setGenTotalQuestions(20);
         setGenerateError(null);
         setShowGenerateForm(attemptNumber);
+
+        setIsFetchingStats(true);
+        const stats: Record<string, { total: number, coStats: Record<string, number>, moStats: Record<string, number>, raw: QuestionWithOutcomes[] }> = {};
+        for (const s of exam.exam_subjects) {
+            const { data } = await fetchQuestionsBySubject(s.subject_id);
+            if (data) {
+                const coStats: Record<string, number> = {};
+                const moStats: Record<string, number> = {};
+                data.forEach(q => {
+                    const co = q.course_outcomes?.title || 'Uncategorized CO';
+                    const mo = q.module_outcomes ? `MO${(q.course_outcomes?.order_index ?? 0) + 1}${q.module_outcomes.order_index + 1}` : 'Uncategorized MO';
+                    coStats[co] = (coStats[co] || 0) + 1;
+                    moStats[mo] = (moStats[mo] || 0) + 1;
+                });
+                stats[s.subject_id] = { total: data.length, coStats, moStats, raw: data };
+            }
+        }
+        setAvailableQuestionsStats(stats);
+        // Init per-MO counts to 0 for every MO found in the fetched stats
+        const moCounts: Record<string, number> = {};
+        for (const statData of Object.values(stats)) {
+            const seen = new Set<string>();
+            for (const q of statData.raw) {
+                if (!seen.has(q.module_outcome_id)) {
+                    seen.add(q.module_outcome_id);
+                    moCounts[q.module_outcome_id] = 0;
+                }
+            }
+        }
+        setGenPerMOCounts(moCounts);
+        setIsFetchingStats(false);
     };
 
     const handleGeneratePapers = async (attemptNumber: number) => {
@@ -309,7 +344,9 @@ export function ViewExam() {
         const subjectIds = exam.exam_subjects.map(s => s.subject_id);
         const allocationConfig: AllocationConfig = genAllocMode === 'equal'
             ? { mode: 'equal', total: genTotalQuestions }
-            : { mode: 'per_subject', counts: { ...genPerSubjectCounts } };
+            : genAllocMode === 'per_subject'
+            ? { mode: 'per_subject', counts: { ...genPerSubjectCounts } }
+            : { mode: 'per_mo', mo_counts: { ...genPerMOCounts } };
         const { error } = await generateExamPapersForAttempt(exam.id, attemptNumber, subjectIds, allocationConfig, exam.num_sets);
         if (error) { setGenerateError(error); setIsGenerating(false); return; }
         await loadExam();
@@ -402,13 +439,13 @@ export function ViewExam() {
                                 </span>
                             )}
                         </div>
-                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                            <button className="btn-secondary" onClick={() => navigate(`/professor/exams/${exam.id}/edit`)}>
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <button className="btn-secondary" style={{ padding: '7px 16px', height: '38px', display: 'inline-flex', alignItems: 'center' }} onClick={() => navigate(`/professor/exams/${exam.id}/edit`)}>
                                 Edit Exam
                             </button>
                             <button
                                 className="btn-secondary"
-                                style={{ color: '#ef4444', borderColor: '#fca5a5' }}
+                                style={{ color: '#ef4444', borderColor: '#fca5a5', padding: '7px 16px', height: '38px', display: 'inline-flex', alignItems: 'center' }}
                                 onClick={() => setIsDeleteConfirmOpen(true)}
                             >
                                 Delete
@@ -416,7 +453,7 @@ export function ViewExam() {
                             {exam.status === 'locked' ? (
                                 <button
                                     className="btn-primary"
-                                    style={{ background: '#16a34a', borderColor: '#16a34a' }}
+                                    style={{ background: '#16a34a', borderColor: '#16a34a', padding: '7px 16px', height: '38px', display: 'inline-flex', alignItems: 'center' }}
                                     onClick={() => setIsUnlockConfirmOpen(true)}
                                 >
                                     Unlock
@@ -424,7 +461,7 @@ export function ViewExam() {
                             ) : (
                                 <button
                                     className="btn-secondary"
-                                    style={{ color: '#f59e0b', borderColor: '#fcd34d' }}
+                                    style={{ color: '#f59e0b', borderColor: '#fcd34d', padding: '7px 16px', height: '38px', display: 'inline-flex', alignItems: 'center' }}
                                     onClick={() => setIsLockConfirmOpen(true)}
                                 >
                                     Lock
@@ -546,50 +583,342 @@ export function ViewExam() {
                             </p>
 
                             {/* Mode toggle */}
-                            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
                                 <button
                                     type="button"
                                     onClick={() => setGenAllocMode('equal')}
-                                    style={{ padding: '8px 16px', borderRadius: '8px', border: `1.5px solid ${genAllocMode === 'equal' ? 'var(--prof-primary)' : 'var(--prof-border)'}`, background: genAllocMode === 'equal' ? 'var(--prof-primary)' : '#fff', color: genAllocMode === 'equal' ? '#fff' : 'var(--prof-text-main)', fontWeight: 500, fontSize: '0.875rem', cursor: 'pointer' }}
+                                    style={{ padding: '8px 16px', borderRadius: '8px', border: `1.5px solid ${genAllocMode === 'equal' ? 'var(--prof-primary)' : 'var(--prof-border)'}`, background: genAllocMode === 'equal' ? 'var(--prof-primary)' : '#fff', color: genAllocMode === 'equal' ? '#fff' : 'var(--prof-text-main)', fontWeight: 500, fontSize: '0.875rem', cursor: 'pointer', transition: 'all 0.15s' }}
                                 >
                                     Equal distribution
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setGenAllocMode('per_subject')}
-                                    style={{ padding: '8px 16px', borderRadius: '8px', border: `1.5px solid ${genAllocMode === 'per_subject' ? 'var(--prof-primary)' : 'var(--prof-border)'}`, background: genAllocMode === 'per_subject' ? 'var(--prof-primary)' : '#fff', color: genAllocMode === 'per_subject' ? '#fff' : 'var(--prof-text-main)', fontWeight: 500, fontSize: '0.875rem', cursor: 'pointer' }}
+                                    style={{ padding: '8px 16px', borderRadius: '8px', border: `1.5px solid ${genAllocMode === 'per_subject' ? 'var(--prof-primary)' : 'var(--prof-border)'}`, background: genAllocMode === 'per_subject' ? 'var(--prof-primary)' : '#fff', color: genAllocMode === 'per_subject' ? '#fff' : 'var(--prof-text-main)', fontWeight: 500, fontSize: '0.875rem', cursor: 'pointer', transition: 'all 0.15s' }}
                                 >
                                     Custom per subject
                                 </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setGenAllocMode('per_mo')}
+                                    style={{ padding: '8px 16px', borderRadius: '8px', border: `1.5px solid ${genAllocMode === 'per_mo' ? 'var(--prof-primary)' : 'var(--prof-border)'}`, background: genAllocMode === 'per_mo' ? 'var(--prof-primary)' : '#fff', color: genAllocMode === 'per_mo' ? '#fff' : 'var(--prof-text-main)', fontWeight: 500, fontSize: '0.875rem', cursor: 'pointer', transition: 'all 0.15s' }}
+                                >
+                                    Manual per MO
+                                </button>
                             </div>
 
-                            {genAllocMode === 'equal' ? (
-                                <div className="cs-input-field" style={{ maxWidth: '200px', marginBottom: '16px' }}>
-                                    <label>Total Questions</label>
-                                    <input
-                                        type="number" min="1"
-                                        value={genTotalQuestions}
-                                        onChange={e => setGenTotalQuestions(Math.max(1, parseInt(e.target.value) || 1))}
-                                    />
-                                </div>
-                            ) : (
-                                <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                    {exam.exam_subjects.map(s => (
-                                        <div key={s.subject_id} style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                                            <span style={{ fontSize: '0.875rem', minWidth: '240px' }}>
-                                                <strong>{s.subjects?.course_code}</strong> — {s.subjects?.course_title}
-                                            </span>
-                                            <input
-                                                type="number" min="1"
-                                                style={{ width: '80px', padding: '6px 10px', borderRadius: '6px', border: '1.5px solid var(--prof-border)', fontSize: '0.875rem' }}
-                                                value={genPerSubjectCounts[s.subject_id] || ''}
-                                                onChange={e => setGenPerSubjectCounts(prev => ({ ...prev, [s.subject_id]: Math.max(1, parseInt(e.target.value) || 1) }))}
-                                            />
-                                            <span style={{ fontSize: '0.8rem', color: 'var(--prof-text-muted)' }}>questions</span>
+                            {(() => {
+                                // Compute projected allocations based on actual generation logic
+                                const projectedStats: Record<string, { total: number, coStats: Record<string, number>, moStats: Record<string, number> }> = {};
+                                const subjectIds = exam.exam_subjects.map(s => s.subject_id);
+                                let baseCounts: Record<string, number> = {};
+
+                                if (genAllocMode === 'equal') {
+                                    const total = genTotalQuestions || 0;
+                                    const n = subjectIds.length;
+                                    const base = Math.floor(total / (n || 1));
+                                    let rem = total % (n || 1);
+                                    for (const id of subjectIds) {
+                                        baseCounts[id] = base + (rem > 0 ? 1 : 0);
+                                        if (rem > 0) rem--;
+                                    }
+                                } else {
+                                    for (const id of subjectIds) {
+                                        baseCounts[id] = genPerSubjectCounts[id] || 0;
+                                    }
+                                }
+
+                                for (const subjectId of subjectIds) {
+                                    const stats = availableQuestionsStats[subjectId];
+                                    if (!stats) continue;
+
+                                    const byMO: Record<string, QuestionWithOutcomes[]> = {};
+                                    for (const q of stats.raw) {
+                                        if (!byMO[q.module_outcome_id]) byMO[q.module_outcome_id] = [];
+                                        byMO[q.module_outcome_id].push(q);
+                                    }
+
+                                    if (genAllocMode === 'per_mo') {
+                                        const coStatsMap: Record<string, number> = {};
+                                        const moStatsMap: Record<string, number> = {};
+                                        let actualTotal = 0;
+                                        for (const [moId, questions] of Object.entries(byMO)) {
+                                            const allocated = Math.min(genPerMOCounts[moId] || 0, questions.length);
+                                            if (allocated > 0) {
+                                                const sampleQ = questions[0];
+                                                const coName = sampleQ.course_outcomes?.title || 'Uncategorized CO';
+                                                const moName = sampleQ.module_outcomes ? `MO${(sampleQ.course_outcomes?.order_index ?? 0) + 1}${sampleQ.module_outcomes.order_index + 1}` : 'Uncategorized MO';
+                                                coStatsMap[coName] = (coStatsMap[coName] || 0) + allocated;
+                                                moStatsMap[moName] = (moStatsMap[moName] || 0) + allocated;
+                                                actualTotal += allocated;
+                                            }
+                                        }
+                                        projectedStats[subjectId] = { total: actualTotal, coStats: coStatsMap, moStats: moStatsMap };
+                                        continue;
+                                    }
+
+                                    const targetCount = baseCounts[subjectId] || 0;
+                                    const actualCount = Math.min(targetCount, stats.total);
+
+                                    if (actualCount === 0) {
+                                        projectedStats[subjectId] = { total: 0, coStats: {}, moStats: {} };
+                                        continue;
+                                    }
+
+                                    const moIds = Object.keys(byMO);
+                                    const allocs: Record<string, number> = {};
+                                    const base = Math.floor(actualCount / moIds.length);
+                                    let remainder = actualCount % moIds.length;
+                                    for (const id of moIds) {
+                                        allocs[id] = base + (remainder > 0 ? 1 : 0);
+                                        if (remainder > 0) remainder--;
+                                    }
+
+                                    let excess = 0;
+                                    for (const id of moIds) {
+                                        const avail = byMO[id].length;
+                                        if (allocs[id] > avail) {
+                                            excess += allocs[id] - avail;
+                                            allocs[id] = avail;
+                                        }
+                                    }
+
+                                    for (const id of moIds) {
+                                        if (excess === 0) break;
+                                        const spare = byMO[id].length - allocs[id];
+                                        if (spare > 0) {
+                                            const take = Math.min(spare, excess);
+                                            allocs[id] += take;
+                                            excess -= take;
+                                        }
+                                    }
+
+                                    const coStatsMap: Record<string, number> = {};
+                                    const moStatsMap: Record<string, number> = {};
+                                    let actualTotal = 0;
+
+                                    for (const id of moIds) {
+                                        const allocated = allocs[id];
+                                        if (allocated > 0) {
+                                            const sampleQ = byMO[id][0];
+                                            const coName = sampleQ.course_outcomes?.title || 'Uncategorized CO';
+                                            const moName = sampleQ.module_outcomes ? `MO${(sampleQ.course_outcomes?.order_index ?? 0) + 1}${sampleQ.module_outcomes.order_index + 1}` : 'Uncategorized MO';
+
+                                            moStatsMap[moName] = (moStatsMap[moName] || 0) + allocated;
+                                            coStatsMap[coName] = (coStatsMap[coName] || 0) + allocated;
+                                            actualTotal += allocated;
+                                        }
+                                    }
+
+                                    projectedStats[subjectId] = { total: actualTotal, coStats: coStatsMap, moStats: moStatsMap };
+                                }
+
+                                let anyExceeded = false;
+                                if (genAllocMode === 'per_mo') {
+                                    for (const subjectId of subjectIds) {
+                                        const stats = availableQuestionsStats[subjectId];
+                                        if (!stats) continue;
+                                        const avByMO: Record<string, number> = {};
+                                        for (const q of stats.raw) { avByMO[q.module_outcome_id] = (avByMO[q.module_outcome_id] || 0) + 1; }
+                                        if (Object.keys(avByMO).some(moId => (genPerMOCounts[moId] || 0) > (avByMO[moId] || 0))) anyExceeded = true;
+                                    }
+                                } else {
+                                    for (const id of subjectIds) {
+                                        const req = baseCounts[id] || 0;
+                                        const avail = availableQuestionsStats[id]?.total || 0;
+                                        if (req > avail) anyExceeded = true;
+                                    }
+                                }
+
+                                const renderStatsBreakdown = (pStats: any) => {
+                                    if (isFetchingStats) return <div style={{ fontSize: '0.8rem', color: 'var(--prof-text-muted)', marginTop: '8px' }}>Loading projected stats...</div>;
+                                    if (!pStats) return <div style={{ fontSize: '0.8rem', color: '#ef4444', marginTop: '8px' }}>Failed to project stats.</div>;
+
+                                    return (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginTop: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                                            <div>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Projected COs</span>
+                                                </div>
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                                    {Object.entries(pStats.coStats).map(([co, count]) => (
+                                                        <span key={co} style={{ fontSize: '0.75rem', padding: '4px 10px', background: '#f0f9ff', color: '#0369a1', borderRadius: '6px', border: '1px solid #bae6fd', fontWeight: 500 }}>
+                                                            {co}: <strong style={{ color: '#0c4a6e' }}>{count as number}</strong>
+                                                        </span>
+                                                    ))}
+                                                    {Object.keys(pStats.coStats).length === 0 && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>None</span>}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Projected MOs</span>
+                                                </div>
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                                    {Object.entries(pStats.moStats).map(([mo, count]) => (
+                                                        <span key={mo} style={{ fontSize: '0.75rem', padding: '4px 10px', background: '#fffbeb', color: '#b45309', borderRadius: '6px', border: '1px solid #fde68a', fontWeight: 500 }}>
+                                                            {mo}: <strong style={{ color: '#78350f' }}>{count as number}</strong>
+                                                        </span>
+                                                    ))}
+                                                    {Object.keys(pStats.moStats).length === 0 && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>None</span>}
+                                                </div>
+                                            </div>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
+                                    );
+                                };
+
+                                return (
+                                    <>
+                                        {genAllocMode === 'equal' ? (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+                                                <div className="cs-input-field" style={{ maxWidth: '240px', margin: 0 }}>
+                                                    <label>Total Questions per Set</label>
+                                                    <input
+                                                        type="number" min="1"
+                                                        value={genTotalQuestions}
+                                                        onChange={e => setGenTotalQuestions(Math.max(1, parseInt(e.target.value) || 1))}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ) : genAllocMode === 'per_subject' ? (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '16px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                                                <span style={{ fontSize: '0.95rem', fontWeight: 600, color: '#334155' }}>Total Configured Questions per Set</span>
+                                                <div style={{ background: '#fff', padding: '6px 16px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
+                                                    {Object.values(genPerSubjectCounts).reduce((sum, count) => sum + (count || 0), 0)}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '16px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                                                <span style={{ fontSize: '0.95rem', fontWeight: 600, color: '#334155' }}>Total Questions per Set</span>
+                                                <div style={{ background: '#fff', padding: '6px 16px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
+                                                    {Object.values(genPerMOCounts).reduce((sum, count) => sum + (count || 0), 0)}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div style={{ marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                            {exam.exam_subjects.map(s => {
+                                                const pStats = projectedStats[s.subject_id];
+                                                const available = availableQuestionsStats[s.subject_id]?.total || 0;
+                                                const targetCount = baseCounts[s.subject_id] || 0;
+                                                const hasWarning = genAllocMode === 'per_mo' ? (() => {
+                                                    const st = availableQuestionsStats[s.subject_id];
+                                                    if (!st) return false;
+                                                    const avByMO: Record<string, number> = {};
+                                                    for (const q of st.raw) { avByMO[q.module_outcome_id] = (avByMO[q.module_outcome_id] || 0) + 1; }
+                                                    return Object.keys(avByMO).some(moId => (genPerMOCounts[moId] || 0) > (avByMO[moId] || 0));
+                                                })() : targetCount > available;
+
+                                                return (
+                                                    <div key={s.subject_id} style={{ display: 'flex', flexDirection: 'column', background: hasWarning ? '#fef2f2' : '#f8fafc', padding: '20px', borderRadius: '12px', border: `1px solid ${hasWarning ? '#fca5a5' : '#e2e8f0'}`, boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                <span style={{ fontSize: '1rem', color: '#0f172a', fontWeight: 600 }}>
+                                                                    {s.subjects?.course_code}
+                                                                </span>
+                                                                <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                                                    {s.subjects?.course_title}
+                                                                </span>
+                                                            </div>
+
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: 'auto', background: '#fff', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                                                                {genAllocMode === 'equal' ? (
+                                                                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: hasWarning ? '#ef4444' : '#0f172a' }}>
+                                                                        {targetCount} <span style={{ fontWeight: 400, color: '#64748b' }}>questions</span>
+                                                                    </div>
+                                                                ) : genAllocMode === 'per_subject' ? (
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                        <input
+                                                                            type="number" min="1"
+                                                                            style={{ width: '70px', padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem', textAlign: 'center' }}
+                                                                            value={genPerSubjectCounts[s.subject_id] || ''}
+                                                                            onChange={e => setGenPerSubjectCounts(prev => ({ ...prev, [s.subject_id]: Math.max(1, parseInt(e.target.value) || 1) }))}
+                                                                        />
+                                                                        <span style={{ fontSize: '0.85rem', color: '#64748b' }}>questions</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: hasWarning ? '#ef4444' : '#0f172a' }}>
+                                                                        {(() => {
+                                                                            const st = availableQuestionsStats[s.subject_id];
+                                                                            if (!st) return 0;
+                                                                            const moIds = [...new Set(st.raw.map(q => q.module_outcome_id))];
+                                                                            return moIds.reduce((sum, moId) => sum + (genPerMOCounts[moId] || 0), 0);
+                                                                        })()} <span style={{ fontWeight: 400, color: '#64748b' }}>questions</span>
+                                                                    </div>
+                                                                )}
+                                                                {hasWarning && (
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#ef4444', fontSize: '0.8rem', fontWeight: 500, marginLeft: '8px', paddingLeft: '12px', borderLeft: '1px solid #e2e8f0' }}>
+                                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                                                        Only {available} available
+                                                                    </div>
+                                                                )}
+                                                                {!hasWarning && (
+                                                                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginLeft: '8px', paddingLeft: '12px', borderLeft: '1px solid #e2e8f0' }}>
+                                                                        {available} total in bank
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        {genAllocMode === 'per_mo' && !isFetchingStats && (() => {
+                                                            const st = availableQuestionsStats[s.subject_id];
+                                                            if (!st) return null;
+                                                            const coMap: Record<string, { co: { id: string; title: string; order_index: number }; mos: { moId: string; desc: string; order_index: number; available: number }[] }> = {};
+                                                            for (const q of st.raw) {
+                                                                const coId = q.course_outcomes.id;
+                                                                if (!coMap[coId]) coMap[coId] = { co: q.course_outcomes, mos: [] };
+                                                                const existing = coMap[coId].mos.find(m => m.moId === q.module_outcome_id);
+                                                                if (existing) {
+                                                                    existing.available++;
+                                                                } else {
+                                                                    coMap[coId].mos.push({ moId: q.module_outcome_id, desc: q.module_outcomes.description, order_index: q.module_outcomes.order_index, available: 1 });
+                                                                }
+                                                            }
+                                                            const sortedCOs = Object.values(coMap).sort((a, b) => a.co.order_index - b.co.order_index);
+                                                            return (
+                                                                <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                                    {sortedCOs.map(({ co, mos }) => (
+                                                                        <div key={co.id}>
+                                                                            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                                                                                CO{co.order_index + 1}: {co.title}
+                                                                            </div>
+                                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                                                                {[...mos].sort((a, b) => a.order_index - b.order_index).map(mo => {
+                                                                                    const moLabel = `MO${co.order_index + 1}${mo.order_index + 1}`;
+                                                                                    const isExceeded = (genPerMOCounts[mo.moId] || 0) > mo.available;
+                                                                                    return (
+                                                                                        <div key={mo.moId} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 12px', background: isExceeded ? '#fef2f2' : '#fff', borderRadius: '8px', border: `1px solid ${isExceeded ? '#fca5a5' : '#e2e8f0'}` }}>
+                                                                                            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a', minWidth: '38px' }}>{moLabel}</span>
+                                                                                            <span style={{ fontSize: '0.8rem', color: '#475569', flex: 1 }}>{mo.desc}</span>
+                                                                                            <span style={{ fontSize: '0.74rem', color: isExceeded ? '#ef4444' : '#94a3b8', marginRight: '4px', whiteSpace: 'nowrap' }}>{mo.available} avail.</span>
+                                                                                            <input
+                                                                                                type="number" min="0"
+                                                                                                style={{ width: '58px', padding: '4px 8px', borderRadius: '6px', border: `1px solid ${isExceeded ? '#fca5a5' : '#cbd5e1'}`, fontSize: '0.85rem', textAlign: 'center' }}
+                                                                                                value={genPerMOCounts[mo.moId] ?? 0}
+                                                                                                onChange={e => setGenPerMOCounts(prev => ({ ...prev, [mo.moId]: Math.max(0, parseInt(e.target.value) || 0) }))}
+                                                                                            />
+                                                                                        </div>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                        {renderStatsBreakdown(pStats)}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {anyExceeded && (
+                                            <div style={{ padding: '12px 16px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', color: '#b91c1c', fontSize: '0.9rem', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <svg fill="currentColor" viewBox="0 0 20 20" width="18" height="18"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
+                                                You requested more questions than are available in one or more subjects. Please lower the count to proceed.
+                                            </div>
+                                        )}
+                                    </>
+                                );
+                            })()}
 
                             {generateError && <p className="cs-error" style={{ marginBottom: '12px' }}>{generateError}</p>}
 

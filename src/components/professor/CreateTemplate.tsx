@@ -241,7 +241,7 @@ export function CreateTemplate() {
                                         return (
                                             <div key={id} style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', padding: '6px 12px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
                                                 <span style={{ fontSize: '14px', color: '#334155', marginRight: '8px' }}>
-                                                    <strong>{program.code}</strong> – {program.name}
+                                                    {program.code}
                                                 </span>
                                                 <button
                                                     type="button"

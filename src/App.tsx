@@ -26,6 +26,11 @@ import { AddStudent } from './components/admin/AddStudent';
 import { EditStudent } from './components/admin/EditStudent';
 import { Settings as AdminSettings } from './components/admin/Settings';
 
+import { ExamsList as StudentExamsList } from './components/student/ExamsList';
+import { ViewExam as StudentViewExam } from './components/student/ViewExam';
+import { GradesList as StudentGradesList } from './components/student/GradesList';
+import { Settings as StudentSettings } from './components/student/Settings';
+
 function App() {
   return (
     <BrowserRouter>
@@ -73,7 +78,13 @@ function App() {
           </Route>
 
           <Route element={<ProtectedRoute allowedRoles={['student']} />}>
-            <Route path="/student" element={<StudentDashboard />} />
+            <Route path="/student" element={<StudentDashboard />}>
+              <Route index element={<Navigate to="exams" replace />} />
+              <Route path="exams" element={<StudentExamsList />} />
+              <Route path="exams/:examId" element={<StudentViewExam />} />
+              <Route path="grades" element={<StudentGradesList />} />
+              <Route path="settings" element={<StudentSettings />} />
+            </Route>
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
