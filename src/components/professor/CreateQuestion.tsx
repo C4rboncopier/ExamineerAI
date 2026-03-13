@@ -7,6 +7,8 @@ import { mapToQuestionData } from '../../lib/question-utils';
 import { fetchSubjects, fetchSubjectWithOutcomes } from '../../lib/subjects';
 import type { SubjectWithCounts, SubjectWithOutcomes } from '../../lib/subjects';
 import { createQuestion, updateQuestion, fetchQuestionById } from '../../lib/questions';
+import { generateQuestionVariations } from '../../lib/gemini';
+import type { GeneratedQuestion } from '../../lib/gemini';
 import { Toast } from '../common/Toast';
 
 function renderLatex(text: string): string {
@@ -56,6 +58,16 @@ export function CreateQuestion() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
+    const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
+
+    // AI variation generation
+    const [aiEnabled, setAiEnabled] = useState(false);
+    const [aiCount, setAiCount] = useState(3);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [generateError, setGenerateError] = useState<string | null>(null);
+    const [generatedVariations, setGeneratedVariations] = useState<GeneratedQuestion[]>([]);
+    const [includedVariations, setIncludedVariations] = useState<Set<number>>(new Set());
+    const [showAiDisableConfirm, setShowAiDisableConfirm] = useState(false);
 
     const goBack = () => {
         if (subjectId) {
@@ -213,19 +225,70 @@ export function CreateQuestion() {
             return;
         }
 
+        // Save included AI variations
+        const toSave = generatedVariations.filter((_, i) => includedVariations.has(i));
+        for (const v of toSave) {
+            const { error: vErr } = await createQuestion({
+                question_text: v.question_text,
+                choices: v.choices,
+                correct_choice: v.correct_choice,
+                subject_id: selectedSubjectId,
+                course_outcome_id: coId,
+                module_outcome_id: moId,
+            }, null);
+            if (vErr) { setSubmitError(vErr); setIsSubmitting(false); return; }
+        }
+
         setIsSubmitting(false);
 
+        const varMsg = toSave.length > 0 ? ` ${toSave.length} variation${toSave.length !== 1 ? 's' : ''} also saved.` : '';
+        setToastType('success');
         if (isEditMode) {
-            setToastMessage('Question updated successfully!');
+            setToastMessage(`Question updated successfully!${varMsg}`);
             setTimeout(() => goBack(), 1200);
         } else {
-            setToastMessage('Question added successfully!');
+            setToastMessage(`Question added successfully!${varMsg}`);
             resetForm();
+            setGeneratedVariations([]);
+            setIncludedVariations(new Set());
             document.querySelector('.prof-content-scroll')?.scrollTo(0, 0);
         }
     };
 
     const hasExistingImage = isEditMode && initialData?.imageUrl && !removeImage && !imageFile;
+
+    const canGenerate = questionText.trim() !== '' &&
+        choices.every(c => c.trim() !== '') &&
+        selectedSubjectId !== '' && coId !== '' && moId !== '';
+
+    const handleAiToggle = (checked: boolean) => {
+        if (!checked && generatedVariations.length > 0) {
+            setShowAiDisableConfirm(true);
+            return;
+        }
+        setAiEnabled(checked);
+        if (!checked) setGenerateError(null);
+    };
+
+    const confirmAiDisable = () => {
+        setShowAiDisableConfirm(false);
+        setAiEnabled(false);
+        setGeneratedVariations([]);
+        setIncludedVariations(new Set());
+        setGenerateError(null);
+    };
+
+    const handleGenerateVariations = async () => {
+        setIsGenerating(true);
+        setGenerateError(null);
+        setGeneratedVariations([]);
+        setIncludedVariations(new Set());
+        const { data, error } = await generateQuestionVariations(questionText, choices, correctChoice, aiCount);
+        setIsGenerating(false);
+        if (error) { setGenerateError(error); return; }
+        setGeneratedVariations(data);
+        setIncludedVariations(new Set(data.map((_, i) => i)));
+    };
 
     if (isLoadingQuestion) {
         return (
@@ -439,6 +502,157 @@ export function CreateQuestion() {
                     )}
                 </div>
 
+                {/* AI Variation Generation */}
+                <div className="cs-card">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <h3 className="cs-card-title" style={{ margin: 0 }}>AI Variation Generation</h3>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                            <span style={{ fontSize: '0.85rem', color: aiEnabled ? 'var(--prof-primary)' : 'var(--prof-text-muted)', fontWeight: 500 }}>
+                                {aiEnabled ? 'On' : 'Off'}
+                            </span>
+                            <div style={{ position: 'relative', width: '40px', height: '22px' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={aiEnabled}
+                                    onChange={e => handleAiToggle(e.target.checked)}
+                                    style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
+                                />
+                                <div style={{
+                                    position: 'absolute', inset: 0, borderRadius: '11px',
+                                    background: aiEnabled ? 'var(--prof-primary)' : '#cbd5e1',
+                                    transition: 'background 0.2s',
+                                }} />
+                                <div style={{
+                                    position: 'absolute', top: '3px',
+                                    left: aiEnabled ? '21px' : '3px',
+                                    width: '16px', height: '16px', borderRadius: '50%',
+                                    background: '#fff', transition: 'left 0.2s',
+                                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                                }} />
+                            </div>
+                        </label>
+                    </div>
+
+                    {aiEnabled && (
+                        <div style={{ marginTop: '20px' }}>
+                            <p style={{ fontSize: '0.88rem', color: 'var(--prof-text-muted)', marginBottom: '16px', marginTop: 0 }}>
+                                Generate similar questions based on your original. All variations inherit the same Subject, CO, and MO.
+                            </p>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                                <label style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--prof-text-main)', whiteSpace: 'nowrap' }}>
+                                    Number of variations
+                                </label>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={5}
+                                    value={aiCount}
+                                    onChange={e => setAiCount(Math.min(5, Math.max(1, parseInt(e.target.value) || 1)))}
+                                    style={{ width: '70px', padding: '6px 10px', borderRadius: '7px', border: '1.5px solid var(--prof-border)', fontSize: '0.9rem', background: 'var(--prof-surface)', color: 'var(--prof-text-main)', outline: 'none' }}
+                                />
+                                <button
+                                    type="button"
+                                    className="btn-primary"
+                                    onClick={handleGenerateVariations}
+                                    disabled={!canGenerate || isGenerating}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                                >
+                                    {isGenerating ? (
+                                        <>
+                                            <svg style={{ animation: 'spin 1s linear infinite' }} fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                            </svg>
+                                            Generating...
+                                        </>
+                                    ) : 'Generate Variations'}
+                                </button>
+                            </div>
+
+                            {!canGenerate && (
+                                <p style={{ fontSize: '0.8rem', color: 'var(--prof-text-muted)', marginBottom: '12px', marginTop: '-8px' }}>
+                                    Fill in all required fields above before generating.
+                                </p>
+                            )}
+
+                            {generateError && <p className="cs-error" style={{ marginBottom: '12px' }}>{generateError}</p>}
+
+                            {generatedVariations.length > 0 && (
+                                <div>
+                                    <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '10px' }}>
+                                        Generated Variations
+                                    </p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+                                        {generatedVariations.map((v, i) => {
+                                            const included = includedVariations.has(i);
+                                            return (
+                                                <div
+                                                    key={i}
+                                                    onClick={() => setIncludedVariations(prev => {
+                                                        const next = new Set(prev);
+                                                        if (next.has(i)) next.delete(i); else next.add(i);
+                                                        return next;
+                                                    })}
+                                                    style={{
+                                                        padding: '14px 16px', borderRadius: '10px', cursor: 'pointer',
+                                                        border: `2px solid ${included ? 'var(--prof-primary)' : 'var(--prof-border)'}`,
+                                                        background: included ? 'rgba(15,37,84,0.03)' : 'var(--prof-surface)',
+                                                        transition: 'border-color 0.15s, background 0.15s',
+                                                    }}
+                                                >
+                                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                                                        <div style={{
+                                                            flexShrink: 0, marginTop: '2px',
+                                                            width: '18px', height: '18px', borderRadius: '4px',
+                                                            border: `2px solid ${included ? 'var(--prof-primary)' : '#cbd5e1'}`,
+                                                            background: included ? 'var(--prof-primary)' : 'transparent',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        }}>
+                                                            {included && (
+                                                                <svg fill="none" strokeWidth="2.5" stroke="#fff" viewBox="0 0 24 24" width="11" height="11">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                                                </svg>
+                                                            )}
+                                                        </div>
+                                                        <div style={{ flex: 1 }}>
+                                                            <p style={{ margin: '0 0 10px', fontSize: '0.9rem', color: 'var(--prof-text-main)', fontWeight: 500 }}>
+                                                                <span style={{ color: 'var(--prof-text-muted)', fontWeight: 600, marginRight: '6px', fontSize: '0.8rem' }}>#{i + 1}</span>
+                                                                {v.question_text}
+                                                            </p>
+                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                                                {v.choices.map((choice, ci) => {
+                                                                    const isCorrect = ci === v.correct_choice;
+                                                                    return (
+                                                                        <span
+                                                                            key={ci}
+                                                                            style={{
+                                                                                padding: '4px 10px', borderRadius: '6px', fontSize: '0.82rem',
+                                                                                background: isCorrect ? 'rgba(22,163,74,0.1)' : 'var(--prof-bg)',
+                                                                                color: isCorrect ? '#16a34a' : 'var(--prof-text-muted)',
+                                                                                border: `1px solid ${isCorrect ? 'rgba(22,163,74,0.3)' : 'var(--prof-border)'}`,
+                                                                                fontWeight: isCorrect ? 600 : 400,
+                                                                            }}
+                                                                        >
+                                                                            {String.fromCharCode(65 + ci)}. {choice}{isCorrect ? ' ✓' : ''}
+                                                                        </span>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <p style={{ fontSize: '0.8rem', color: 'var(--prof-text-muted)', marginTop: '-4px' }}>
+                                        Selected variations will be saved when you click <strong>Save Question</strong>.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
                 <div className="cs-actions">
                     <button type="button" className="btn-secondary" onClick={goBack}>
                         Cancel
@@ -455,9 +669,40 @@ export function CreateQuestion() {
             <Toast
                 isOpen={!!toastMessage}
                 message={toastMessage || ''}
-                type="success"
+                type={toastType}
                 onClose={() => setToastMessage(null)}
             />
+
+            {showAiDisableConfirm && (
+                <div className="ql-summary-overlay" onClick={() => setShowAiDisableConfirm(false)} style={{ zIndex: 2000 }}>
+                    <div className="ql-summary-modal" style={{ maxWidth: '420px', borderRadius: '12px', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+                        <div className="ql-summary-header" style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ef4444', fontSize: '1.2rem', margin: 0, fontWeight: 700 }}>
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="22" height="22">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                Discard Variations?
+                            </h3>
+                            <button className="ql-summary-close" onClick={() => setShowAiDisableConfirm(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', padding: 0, display: 'flex' }}>
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        <div style={{ padding: '24px' }}>
+                            <p style={{ fontSize: '1rem', color: '#64748b', marginTop: 0, marginBottom: '28px', lineHeight: 1.5 }}>
+                                Turning off AI Variation Generation will permanently discard <strong>{generatedVariations.length} generated variation{generatedVariations.length !== 1 ? 's' : ''}</strong>. Are you sure you want to proceed?
+                            </p>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <button type="button" onClick={() => setShowAiDisableConfirm(false)} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#0f172a', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', transition: 'all 0.15s' }}>
+                                    Keep Variations
+                                </button>
+                                <button type="button" onClick={confirmAiDisable} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #ef4444', background: '#ef4444', color: '#fff', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', transition: 'all 0.15s' }}>
+                                    Discard & Turn Off
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

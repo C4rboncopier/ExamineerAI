@@ -71,7 +71,7 @@ export async function fetchEnrolledExamById(examId: string): Promise<{ data: Stu
         .single();
 
     if (error) return { data: null, error: error.message };
-    return { data: data as StudentExam, error: null };
+    return { data: data as unknown as StudentExam, error: null };
 }
 
 export async function fetchStudentSubmissions(

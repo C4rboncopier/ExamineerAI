@@ -213,7 +213,7 @@ export async function fetchExams(): Promise<{ data: Exam[]; error: string | null
         .order('created_at', { ascending: false });
 
     if (error) return { data: [], error: error.message };
-    return { data: data as Exam[], error: null };
+    return { data: data as unknown as Exam[], error: null };
 }
 
 export async function fetchExamById(id: string): Promise<{ data: ExamWithSets | null; error: string | null }> {
@@ -229,7 +229,7 @@ export async function fetchExamById(id: string): Promise<{ data: ExamWithSets | 
         .single();
 
     if (error) return { data: null, error: error.message };
-    return { data: data as ExamWithSets, error: null };
+    return { data: data as unknown as ExamWithSets, error: null };
 }
 
 export async function createExam(
