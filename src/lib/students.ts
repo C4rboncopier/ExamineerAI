@@ -6,6 +6,7 @@ export interface Student {
     email: string | null;
     full_name: string | null;
     username: string | null;
+    student_id: string | null;
     program_id: string | null;
     program: Program | null;
     created_at: string;
@@ -14,7 +15,7 @@ export interface Student {
 export async function fetchStudents(): Promise<{ data: Student[]; error: string | null }> {
     const { data, error } = await supabase
         .from('profiles')
-        .select('id, email, full_name, username, program_id, created_at, program:programs(id, code, name)')
+        .select('id, email, full_name, username, student_id, program_id, created_at, program:programs(id, code, name)')
         .eq('role', 'student')
         .order('created_at', { ascending: false });
     return { data: (data as unknown as Student[]) ?? [], error: error?.message ?? null };
@@ -26,6 +27,7 @@ export async function createStudent(payload: {
     username: string;
     password: string;
     program_id: string | null;
+    student_id?: string | null;
 }): Promise<{ error: string | null; emailError: string | null }> {
     const { data, error } = await supabase.functions.invoke('create-student', { body: payload });
     if (error) return { error: error.message, emailError: null };
@@ -35,7 +37,7 @@ export async function createStudent(payload: {
 
 export async function updateStudent(
     id: string,
-    updates: { full_name: string; email: string; username: string; program_id: string | null }
+    updates: { full_name: string; email: string; username: string; program_id: string | null; student_id?: string | null }
 ): Promise<{ error: string | null }> {
     const { email, ...profileUpdates } = updates;
 

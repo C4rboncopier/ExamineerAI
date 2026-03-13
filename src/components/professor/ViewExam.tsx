@@ -13,6 +13,7 @@ import { printExam } from '../../lib/printExam';
 import type { PaperSize, SizeUnit } from '../../lib/printExam';
 import { fetchSchoolInfo, fetchAcademicYear, fetchSemester } from '../../lib/settings';
 import { Popup } from '../common/Popup';
+import { LoadingOverlay } from '../common/LoadingOverlay';
 import { ExamStudents } from './ExamStudents';
 
 function renderMathHtml(text: string): string {
@@ -107,6 +108,10 @@ export function ViewExam() {
     const [isAttemptDeploying, setIsAttemptDeploying] = useState(false);
     const [isAttemptDoneOpen, setIsAttemptDoneOpen] = useState(false);
     const [isAttemptDoneProcessing, setIsAttemptDoneProcessing] = useState(false);
+
+    // ── Regenerate / delete attempt confirm ──
+    const [isRegenerateConfirmOpen, setIsRegenerateConfirmOpen] = useState(false);
+    const [isDeleteAttemptConfirmOpen, setIsDeleteAttemptConfirmOpen] = useState(false);
 
     // ── School info ──
     const [schoolName, setSchoolName] = useState('');
@@ -207,6 +212,7 @@ export function ViewExam() {
     );
 
     const canGeneratePapers = exam.num_sets > 0 && exam.exam_subjects.length > 0;
+    const prevAttemptDone = activeAttempt === 1 || attemptStatusMap[activeAttempt - 1] === 'done';
 
     const handleRearrange = () => {
         if (!currentSet) return;
@@ -339,14 +345,23 @@ export function ViewExam() {
 
     const handleGeneratePapers = async (attemptNumber: number) => {
         if (!exam) return;
+        const totalForValidation = genAllocMode === 'equal'
+            ? genTotalQuestions
+            : genAllocMode === 'per_subject'
+                ? Object.values(genPerSubjectCounts).reduce((s, n) => s + (n || 0), 0)
+                : Object.values(genPerMOCounts).reduce((s, n) => s + (n || 0), 0);
+        if (totalForValidation > 100) {
+            setGenerateError('Total questions per set cannot exceed 100.');
+            return;
+        }
         setIsGenerating(true);
         setGenerateError(null);
         const subjectIds = exam.exam_subjects.map(s => s.subject_id);
         const allocationConfig: AllocationConfig = genAllocMode === 'equal'
             ? { mode: 'equal', total: genTotalQuestions }
             : genAllocMode === 'per_subject'
-            ? { mode: 'per_subject', counts: { ...genPerSubjectCounts } }
-            : { mode: 'per_mo', mo_counts: { ...genPerMOCounts } };
+                ? { mode: 'per_subject', counts: { ...genPerSubjectCounts } }
+                : { mode: 'per_mo', mo_counts: { ...genPerMOCounts } };
         const { error } = await generateExamPapersForAttempt(exam.id, attemptNumber, subjectIds, allocationConfig, exam.num_sets);
         if (error) { setGenerateError(error); setIsGenerating(false); return; }
         await loadExam();
@@ -552,15 +567,22 @@ export function ViewExam() {
                         }}>
                             {attemptStatus === 'deployed' ? 'Open' : attemptStatus === 'done' ? 'Closed' : 'Draft'}
                         </span>
-                        <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             {attemptStatus === 'draft' && currentAttemptSets.length > 0 && (
-                                <button
-                                    className="btn-primary"
-                                    style={{ fontSize: '0.85rem', padding: '6px 14px', background: '#16a34a', borderColor: '#16a34a' }}
-                                    onClick={() => setIsAttemptDeployOpen(true)}
-                                >
-                                    Open Attempt
-                                </button>
+                                prevAttemptDone ? (
+                                    <button
+                                        className="btn-primary"
+                                        style={{ fontSize: '0.85rem', padding: '6px 14px', background: '#16a34a', borderColor: '#16a34a' }}
+                                        onClick={() => setIsAttemptDeployOpen(true)}
+                                    >
+                                        Open Attempt
+                                    </button>
+                                ) : (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', color: '#94a3b8', padding: '6px 12px', borderRadius: '8px', border: '1px dashed #cbd5e1', background: '#f8fafc' }}>
+                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75M3.75 21.75h16.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                                        Close Attempt {activeAttempt - 1} first
+                                    </span>
+                                )
                             )}
                             {attemptStatus === 'deployed' && (
                                 <button
@@ -769,19 +791,50 @@ export function ViewExam() {
                                 return (
                                     <>
                                         {genAllocMode === 'equal' ? (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
-                                                <div className="cs-input-field" style={{ maxWidth: '240px', margin: 0 }}>
-                                                    <label>Total Questions per Set</label>
-                                                    <input
-                                                        type="number" min="1"
-                                                        value={genTotalQuestions}
-                                                        onChange={e => setGenTotalQuestions(Math.max(1, parseInt(e.target.value) || 1))}
-                                                    />
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', flexWrap: 'wrap' }}>
+                                                    <div className="cs-input-field" style={{ maxWidth: '240px', margin: 0 }}>
+                                                        <label>Total Questions per Set</label>
+                                                        <input
+                                                            type="number" min="1" max="100"
+                                                            value={genTotalQuestions}
+                                                            onChange={e => setGenTotalQuestions(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
+                                                        />
+                                                    </div>
+                                                    {!isFetchingStats && (
+                                                        <button
+                                                            type="button"
+                                                            className="btn-secondary"
+                                                            title="Distribute the total across subjects proportionally based on available question counts"
+                                                            style={{ fontSize: '0.82rem', padding: '7px 14px', marginBottom: '1px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                                            onClick={() => {
+                                                                const subjs = [...exam.exam_subjects]
+                                                                    .map(s => ({ id: s.subject_id, available: availableQuestionsStats[s.subject_id]?.total || 0 }))
+                                                                    .sort((a, b) => a.available - b.available);
+                                                                const counts: Record<string, number> = {};
+                                                                let remaining = genTotalQuestions;
+                                                                for (let i = 0; i < subjs.length; i++) {
+                                                                    const share = Math.floor(remaining / (subjs.length - i));
+                                                                    const allocated = Math.min(share, subjs[i].available);
+                                                                    counts[subjs[i].id] = allocated;
+                                                                    remaining -= allocated;
+                                                                }
+                                                                setGenPerSubjectCounts(counts);
+                                                                setGenAllocMode('per_subject');
+                                                            }}
+                                                        >
+                                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 107.5 7.5h-7.5V6z" />
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0013.5 3v7.5z" />
+                                                            </svg>
+                                                            Auto Allocate
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         ) : genAllocMode === 'per_subject' ? (
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '16px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-                                                <span style={{ fontSize: '0.95rem', fontWeight: 600, color: '#334155' }}>Total Configured Questions per Set</span>
+                                                <span style={{ fontSize: '0.95rem', fontWeight: 600, color: '#334155' }}>Total Questions per Set</span>
                                                 <div style={{ background: '#fff', padding: '6px 16px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
                                                     {Object.values(genPerSubjectCounts).reduce((sum, count) => sum + (count || 0), 0)}
                                                 </div>
@@ -937,14 +990,21 @@ export function ViewExam() {
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                             </svg>
                             {canGeneratePapers ? (
-                                <>
-                                    <p style={{ color: 'var(--prof-text-muted)', marginBottom: '16px', fontSize: '0.9rem' }}>
-                                        No papers generated for Attempt {activeAttempt} yet.
+                                prevAttemptDone ? (
+                                    <>
+                                        <p style={{ color: 'var(--prof-text-muted)', marginBottom: '16px', fontSize: '0.9rem' }}>
+                                            No papers generated for Attempt {activeAttempt} yet.
+                                        </p>
+                                        <button className="btn-primary" onClick={() => openGenerateForm(activeAttempt)}>
+                                            Generate Papers
+                                        </button>
+                                    </>
+                                ) : (
+                                    <p style={{ color: 'var(--prof-text-muted)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75M3.75 21.75h16.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                                        Attempt {activeAttempt - 1} must be closed before generating papers for Attempt {activeAttempt}.
                                     </p>
-                                    <button className="btn-primary" onClick={() => openGenerateForm(activeAttempt)}>
-                                        Generate Papers
-                                    </button>
-                                </>
+                                )
                             ) : (
                                 <p style={{ color: 'var(--prof-text-muted)', fontSize: '0.9rem' }}>
                                     {exam.exam_subjects.length === 0
@@ -958,12 +1018,12 @@ export function ViewExam() {
                         /* Set viewer */
                         <div className="cs-card">
                             {/* Attempt actions bar */}
-                            {attemptStatus === 'draft' && (
+                            {attemptStatus === 'draft' && prevAttemptDone && (
                                 <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid var(--prof-border)' }}>
                                     <button
                                         className="btn-secondary"
                                         style={{ fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                        onClick={() => openGenerateForm(activeAttempt)}
+                                        onClick={() => setIsRegenerateConfirmOpen(true)}
                                     >
                                         <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
                                         Regenerate
@@ -971,7 +1031,7 @@ export function ViewExam() {
                                     <button
                                         className="btn-icon danger"
                                         title="Delete papers for this attempt"
-                                        onClick={() => handleDeleteAttemptPapers(activeAttempt)}
+                                        onClick={() => setIsDeleteAttemptConfirmOpen(true)}
                                         disabled={isDeletingAttempt === activeAttempt}
                                     >
                                         {isDeletingAttempt === activeAttempt
@@ -1128,7 +1188,34 @@ export function ViewExam() {
                 <ExamStudents examId={examId} />
             )}
 
+            {/* ── Loading overlay (blocks all interaction while generating) ── */}
+            <LoadingOverlay
+                isOpen={isGenerating}
+                message="Generating exam sets…"
+                subtext="This may take a moment. Please wait."
+            />
+
             {/* ── Modals ── */}
+            <Popup
+                isOpen={isRegenerateConfirmOpen}
+                title="Regenerate Papers"
+                message={`Regenerate all papers for Attempt ${activeAttempt}? The existing sets will be replaced with newly generated ones.`}
+                type="warning"
+                onConfirm={() => { setIsRegenerateConfirmOpen(false); openGenerateForm(activeAttempt); }}
+                onCancel={() => setIsRegenerateConfirmOpen(false)}
+                confirmText="Regenerate"
+                cancelText="Cancel"
+            />
+            <Popup
+                isOpen={isDeleteAttemptConfirmOpen}
+                title="Delete Attempt Papers"
+                message={`Delete all papers for Attempt ${activeAttempt}? This cannot be undone.`}
+                type="danger"
+                onConfirm={() => { setIsDeleteAttemptConfirmOpen(false); handleDeleteAttemptPapers(activeAttempt); }}
+                onCancel={() => setIsDeleteAttemptConfirmOpen(false)}
+                confirmText={isDeletingAttempt === activeAttempt ? 'Deleting...' : 'Delete'}
+                cancelText="Cancel"
+            />
             <Popup
                 isOpen={isUnlockConfirmOpen}
                 title="Unlock Exam"

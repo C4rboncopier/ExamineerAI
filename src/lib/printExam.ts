@@ -102,7 +102,7 @@ function buildExamHtml(opts: PrintExamOptions): string {
 
         return `
 <div class="question-block">
-    <div class="question-text"><b>${i + 1}.</b> ${renderMath(q.question_text)}${moTag}</div>
+    <div class="question-text"><b>${i + 1}.</b>${moTag} ${renderMath(q.question_text)}</div>
     ${imageHtml}
     <div class="choices-grid">${choices}</div>
 </div>`;
@@ -287,14 +287,22 @@ ${questionBlocks}
 
 export function printExam(opts: PrintExamOptions): void {
     const html = buildExamHtml(opts);
-    const win = window.open('', '_blank');
-    if (!win) {
-        alert('Pop-up blocked. Please allow pop-ups for this site to print exams.');
-        return;
-    }
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    // Wait for KaTeX CSS + fonts and images to load before opening the print dialog
-    setTimeout(() => win.print(), 900);
+
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;border:0;';
+
+    iframe.onload = () => {
+        const iframeWin = iframe.contentWindow;
+        if (!iframeWin) { document.body.removeChild(iframe); return; }
+
+        const cleanup = () => { if (document.body.contains(iframe)) document.body.removeChild(iframe); };
+        iframeWin.addEventListener('afterprint', cleanup);
+        setTimeout(cleanup, 60_000); // safety fallback
+
+        iframeWin.focus();
+        iframeWin.print();
+    };
+
+    iframe.srcdoc = html;
+    document.body.appendChild(iframe);
 }

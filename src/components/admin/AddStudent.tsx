@@ -18,6 +18,7 @@ interface AddForm {
     email: string;
     full_name: string;
     username: string;
+    student_id: string;
     program_id: string;
     password: string;
 }
@@ -25,7 +26,7 @@ interface AddForm {
 export function AddStudent() {
     const navigate = useNavigate();
     const [programs, setPrograms] = useState<Program[]>([]);
-    const [addForm, setAddForm] = useState<AddForm>({ email: '', full_name: '', username: '', program_id: '', password: '' });
+    const [addForm, setAddForm] = useState<AddForm>({ email: '', full_name: '', username: '', student_id: '', program_id: '', password: '' });
     const [showPassword, setShowPassword] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
@@ -81,6 +82,7 @@ export function AddStudent() {
                 username: addForm.username,
                 password: addForm.password,
                 program_id: addForm.program_id,
+                student_id: addForm.student_id || null,
             });
             if (error) { setFormError(error); return; }
             const toastMessage = emailError
@@ -143,6 +145,14 @@ export function AddStudent() {
                             <input type="text" required style={inputStyle} placeholder="e.g. jmDoe" value={addForm.username} onChange={e => setAddForm(f => ({ ...f, username: e.target.value }))} />
                         </div>
 
+                        {/* Student ID */}
+                        <div>
+                            <label style={labelStyle}>Student ID <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
+                            <input type="text" style={inputStyle} placeholder="e.g. 2021-00123" value={addForm.student_id} onChange={e => setAddForm(f => ({ ...f, student_id: e.target.value }))} />
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '16px' }}>
                         {/* Password */}
                         <div>
                             <label style={labelStyle}>Temporary Password</label>

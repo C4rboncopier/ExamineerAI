@@ -9,6 +9,7 @@ interface EditForm {
     email: string;
     full_name: string;
     username: string;
+    student_id: string;
     program_id: string;
 }
 
@@ -22,6 +23,7 @@ export function EditStudent() {
         email: student?.email ?? '',
         full_name: student?.full_name ?? '',
         username: student?.username ?? '',
+        student_id: student?.student_id ?? '',
         program_id: student?.program_id ?? '',
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,6 +78,7 @@ export function EditStudent() {
                 full_name: form.full_name,
                 email: form.email,
                 username: form.username,
+                student_id: form.student_id || null,
                 program_id: form.program_id,
             });
             if (error) { setFormError(error); return; }
@@ -141,17 +144,31 @@ export function EditStudent() {
                         </div>
                     </div>
 
-                    {/* Username */}
-                    <div>
-                        <label style={labelStyle}>Username</label>
-                        <input
-                            type="text"
-                            required
-                            style={inputStyle}
-                            placeholder="e.g. jmDoe"
-                            value={form.username}
-                            onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
-                        />
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '16px' }}>
+                        {/* Username */}
+                        <div>
+                            <label style={labelStyle}>Username</label>
+                            <input
+                                type="text"
+                                required
+                                style={inputStyle}
+                                placeholder="e.g. jmDoe"
+                                value={form.username}
+                                onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
+                            />
+                        </div>
+
+                        {/* Student ID */}
+                        <div>
+                            <label style={labelStyle}>Student ID <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
+                            <input
+                                type="text"
+                                style={inputStyle}
+                                placeholder="e.g. 2021-00123"
+                                value={form.student_id}
+                                onChange={e => setForm(f => ({ ...f, student_id: e.target.value }))}
+                            />
+                        </div>
                     </div>
 
                     <div>
