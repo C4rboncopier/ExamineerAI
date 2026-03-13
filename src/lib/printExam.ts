@@ -1,8 +1,5 @@
 import katex from 'katex';
 
-export type PaperSize = 'A4' | 'Letter' | 'Legal' | 'Long' | 'Custom';
-export type SizeUnit = 'in' | 'cm' | 'mm';
-
 export interface PrintExamOptions {
     title: string;
     code: string;
@@ -18,18 +15,7 @@ export interface PrintExamOptions {
         image_url: string | null;
         mo_label?: string | null;
     }>;
-    paperSize: PaperSize;
-    customWidth?: number;
-    customHeight?: number;
-    customUnit?: SizeUnit;
 }
-
-const NAMED_PAGE_SIZE: Record<Exclude<PaperSize, 'Custom'>, string> = {
-    A4:     'A4',
-    Letter: 'Letter',
-    Legal:  '8.5in 14in',
-    Long:   '8.5in 13in',
-};
 
 function escapeHtml(str: string): string {
     return str
@@ -75,18 +61,10 @@ function renderMath(text: string): string {
     return parts.join('');
 }
 
-function resolvePageSize(opts: PrintExamOptions): string {
-    if (opts.paperSize === 'Custom' && opts.customWidth && opts.customHeight && opts.customUnit) {
-        return `${opts.customWidth}${opts.customUnit} ${opts.customHeight}${opts.customUnit}`;
-    }
-    return NAMED_PAGE_SIZE[opts.paperSize as Exclude<PaperSize, 'Custom'>] ?? opts.paperSize;
-}
-
 function buildExamHtml(opts: PrintExamOptions): string {
     const { title, code, schoolName, schoolLogoUrl, academicYear, semester, setLabel, questions } = opts;
     const aySem = [academicYear, semester].filter(Boolean).join(' / ');
     const LABELS = ['A', 'B', 'C', 'D'];
-    const pageSizeCss = resolvePageSize(opts);
 
     const questionBlocks = questions.map((q, i) => {
         const choices = LABELS.map((lbl, ci) => {
@@ -122,7 +100,7 @@ function buildExamHtml(opts: PrintExamOptions): string {
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.33/dist/katex.min.css" />
 <style>
 @page {
-    size: ${pageSizeCss} portrait;
+    size: 8.5in 11in portrait;
     margin: 12mm 15mm 20mm 15mm;
     @bottom-center {
         content: "Page " counter(page) " of " counter(pages);
@@ -287,22 +265,25 @@ ${questionBlocks}
 
 export function printExam(opts: PrintExamOptions): void {
     const html = buildExamHtml(opts);
+    const blob = new Blob([html], { type: 'text/html' });
+    const blobUrl = URL.createObjectURL(blob);
 
     const iframe = document.createElement('iframe');
-    iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;border:0;';
+    // In-viewport but invisible — off-screen iframes don't honour @page { size } in Chrome
+    iframe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;';
 
     iframe.onload = () => {
         const iframeWin = iframe.contentWindow;
-        if (!iframeWin) { document.body.removeChild(iframe); return; }
+        if (!iframeWin) { document.body.removeChild(iframe); URL.revokeObjectURL(blobUrl); return; }
 
-        const cleanup = () => { if (document.body.contains(iframe)) document.body.removeChild(iframe); };
+        const cleanup = () => { if (document.body.contains(iframe)) document.body.removeChild(iframe); URL.revokeObjectURL(blobUrl); };
         iframeWin.addEventListener('afterprint', cleanup);
-        setTimeout(cleanup, 60_000); // safety fallback
+        setTimeout(cleanup, 60_000);
 
         iframeWin.focus();
         iframeWin.print();
     };
 
-    iframe.srcdoc = html;
+    iframe.src = blobUrl; // src + blob URL respects @page { size }; srcdoc does not
     document.body.appendChild(iframe);
 }

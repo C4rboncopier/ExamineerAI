@@ -10,7 +10,6 @@ import type { ExamWithSets, ExamSetDetail, AllocationConfig } from '../../lib/ex
 import { fetchQuestionsByIds, fetchQuestionsBySubject } from '../../lib/questions';
 import type { QuestionSummary, QuestionWithOutcomes } from '../../lib/questions';
 import { printExam } from '../../lib/printExam';
-import type { PaperSize, SizeUnit } from '../../lib/printExam';
 import { fetchSchoolInfo, fetchAcademicYear, fetchSemester } from '../../lib/settings';
 import { Popup } from '../common/Popup';
 import { LoadingOverlay } from '../common/LoadingOverlay';
@@ -41,18 +40,6 @@ function renderMathHtml(text: string): string {
 const SET_LABELS = ['A', 'B', 'C', 'D', 'E'];
 const CHOICE_LABELS = ['A', 'B', 'C', 'D'];
 const ITEMS_PER_PAGE = 20;
-const PAPER_SIZES: { value: PaperSize; label: string; desc: string }[] = [
-    { value: 'A4', label: 'A4', desc: '210 × 297 mm' },
-    { value: 'Letter', label: 'Letter', desc: '8.5 × 11 in' },
-    { value: 'Legal', label: 'Legal', desc: '8.5 × 14 in' },
-    { value: 'Long', label: 'Long', desc: '8.5 × 13 in' },
-    { value: 'Custom', label: 'Custom', desc: 'Enter your own size' },
-];
-const SIZE_UNITS: { value: SizeUnit; label: string }[] = [
-    { value: 'in', label: 'Inches (in)' },
-    { value: 'cm', label: 'Centimeters (cm)' },
-    { value: 'mm', label: 'Millimeters (mm)' },
-];
 
 type Tab = 'overview' | 'papers' | 'students';
 
@@ -89,11 +76,6 @@ export function ViewExam() {
     const [isFetchingStats, setIsFetchingStats] = useState(false);
 
     // ── Print ──
-    const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-    const [paperSize, setPaperSize] = useState<PaperSize>('A4');
-    const [customWidth, setCustomWidth] = useState('');
-    const [customHeight, setCustomHeight] = useState('');
-    const [customUnit, setCustomUnit] = useState<SizeUnit>('in');
 
     // ── Lock / Unlock / Delete ──
     const [isUnlockConfirmOpen, setIsUnlockConfirmOpen] = useState(false);
@@ -204,13 +186,6 @@ export function ViewExam() {
     const totalPages = Math.ceil(currentQuestions.length / ITEMS_PER_PAGE);
     const pagedQuestions = currentQuestions.slice(currentPage * ITEMS_PER_PAGE, (currentPage + 1) * ITEMS_PER_PAGE);
 
-    const customWidthNum = parseFloat(customWidth);
-    const customHeightNum = parseFloat(customHeight);
-    const isCustomValid = paperSize !== 'Custom' || (
-        !isNaN(customWidthNum) && customWidthNum > 0 &&
-        !isNaN(customHeightNum) && customHeightNum > 0
-    );
-
     const canGeneratePapers = exam.num_sets > 0 && exam.exam_subjects.length > 0;
     const prevAttemptDone = activeAttempt === 1 || attemptStatusMap[activeAttempt - 1] === 'done';
 
@@ -245,10 +220,6 @@ export function ViewExam() {
                     ? `${(q.course_outcomes?.order_index ?? 0) + 1}${q.module_outcomes.order_index + 1}`
                     : null,
             })),
-            paperSize,
-            customWidth: customWidthNum || undefined,
-            customHeight: customHeightNum || undefined,
-            customUnit,
         });
     };
 
@@ -1078,7 +1049,7 @@ export function ViewExam() {
                                         <button
                                             className="btn-primary"
                                             style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '0.85rem', fontWeight: 600, borderRadius: '8px' }}
-                                            onClick={() => setIsPrintModalOpen(true)}
+                                            onClick={() => handlePrint()}
                                         >
                                             <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
@@ -1267,98 +1238,6 @@ export function ViewExam() {
                 cancelText="Cancel"
             />
 
-            {/* ── Print modal ── */}
-            {isPrintModalOpen && (
-                <div className="ql-summary-overlay" onClick={() => setIsPrintModalOpen(false)} style={{ zIndex: 2000 }}>
-                    <div className="ql-summary-modal" style={{ maxWidth: '440px' }} onClick={e => e.stopPropagation()}>
-                        <div className="ql-summary-header" style={{ padding: '20px 24px' }}>
-                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--prof-text-main)', fontSize: '1.1rem' }}>
-                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20" style={{ color: 'var(--prof-primary)' }}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
-                                </svg>
-                                Print — Set {SET_LABELS[activeSet] ?? activeSet + 1}
-                            </h3>
-                            <button className="ql-summary-close" onClick={() => setIsPrintModalOpen(false)}>
-                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                        </div>
-                        <div style={{ padding: '24px' }}>
-                            <p style={{ fontSize: '0.95rem', color: 'var(--prof-text-muted)', marginBottom: '20px', marginTop: 0 }}>
-                                Select your preferred paper size.
-                            </p>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                                {PAPER_SIZES.filter(p => p.value !== 'Custom').map(({ value, label, desc }) => {
-                                    const isSelected = paperSize === value;
-                                    return (
-                                        <label key={value} style={{ display: 'flex', alignItems: 'center', padding: '12px 14px', borderRadius: '10px', border: `2px solid ${isSelected ? 'var(--prof-primary)' : 'var(--prof-border)'}`, backgroundColor: isSelected ? 'rgba(15, 37, 84, 0.04)' : 'var(--prof-surface)', cursor: 'pointer', transition: 'all 0.2s ease' }}>
-                                            <div style={{ position: 'relative', width: '20px', height: '20px', borderRadius: '50%', border: `2px solid ${isSelected ? 'var(--prof-primary)' : '#cbd5e1'}`, marginRight: '12px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>
-                                                {isSelected && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--prof-primary)' }} />}
-                                            </div>
-                                            <input type="radio" name="paper-size" value={value} checked={isSelected} onChange={() => setPaperSize(value)} style={{ display: 'none' }} />
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <span style={{ fontWeight: 600, fontSize: '0.9rem', color: isSelected ? 'var(--prof-primary)' : 'var(--prof-text-main)' }}>{label}</span>
-                                                <span style={{ fontSize: '0.75rem', color: 'var(--prof-text-muted)', marginTop: '1px' }}>{desc}</span>
-                                            </div>
-                                        </label>
-                                    );
-                                })}
-                            </div>
-                            {(() => {
-                                const { value, label, desc } = PAPER_SIZES.find(p => p.value === 'Custom')!;
-                                const isSelected = paperSize === value;
-                                return (
-                                    <div>
-                                        <label style={{ display: 'flex', alignItems: 'center', padding: '12px 14px', borderRadius: '10px', border: `2px solid ${isSelected ? 'var(--prof-primary)' : 'var(--prof-border)'}`, backgroundColor: isSelected ? 'rgba(15, 37, 84, 0.04)' : 'var(--prof-surface)', cursor: 'pointer', transition: 'all 0.2s ease' }}>
-                                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: `2px solid ${isSelected ? 'var(--prof-primary)' : '#cbd5e1'}`, marginRight: '10px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                {isSelected && <div style={{ width: '9px', height: '9px', borderRadius: '50%', backgroundColor: 'var(--prof-primary)' }} />}
-                                            </div>
-                                            <input type="radio" name="paper-size" value={value} checked={isSelected} onChange={() => setPaperSize(value)} style={{ display: 'none' }} />
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <span style={{ fontWeight: 600, fontSize: '0.9rem', color: isSelected ? 'var(--prof-primary)' : 'var(--prof-text-main)' }}>{label}</span>
-                                                <span style={{ fontSize: '0.75rem', color: 'var(--prof-text-muted)', marginTop: '1px' }}>{desc}</span>
-                                            </div>
-                                        </label>
-                                        {isSelected && (
-                                            <div style={{ marginTop: '10px', padding: '16px', background: 'var(--prof-bg)', borderRadius: '8px', border: '1px solid var(--prof-border)' }}>
-                                                <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--prof-text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Unit</p>
-                                                <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
-                                                    {SIZE_UNITS.map(u => (
-                                                        <button key={u.value} type="button" onClick={() => setCustomUnit(u.value)}
-                                                            style={{ padding: '6px 14px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: customUnit === u.value ? 600 : 400, border: `1.5px solid ${customUnit === u.value ? 'var(--prof-primary)' : 'var(--prof-border)'}`, background: customUnit === u.value ? 'rgba(15,37,84,0.06)' : 'var(--prof-surface)', color: customUnit === u.value ? 'var(--prof-primary)' : 'var(--prof-text-muted)', cursor: 'pointer' }}>
-                                                            {u.label}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                                    {[{ label: 'Width', val: customWidth, set: setCustomWidth }, { label: 'Height', val: customHeight, set: setCustomHeight }].map(({ label, val, set }) => (
-                                                        <div key={label}>
-                                                            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--prof-text-muted)', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</label>
-                                                            <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid var(--prof-border)', borderRadius: '7px', overflow: 'hidden', background: 'var(--prof-surface)' }}>
-                                                                <input type="number" min="1" step="0.1" placeholder="e.g. 8.5" value={val} onChange={e => set(e.target.value)}
-                                                                    style={{ flex: 1, border: 'none', outline: 'none', padding: '8px 10px', fontSize: '0.9rem', background: 'transparent', color: 'var(--prof-text-main)' }} />
-                                                                <span style={{ padding: '0 10px', fontSize: '0.8rem', color: 'var(--prof-text-muted)', borderLeft: '1px solid var(--prof-border)' }}>{customUnit}</span>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })()}
-                            <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-                                <button className="btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={() => setIsPrintModalOpen(false)}>Cancel</button>
-                                <button className="btn-primary" style={{ flex: 1, padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} disabled={!isCustomValid} onClick={() => { setIsPrintModalOpen(false); handlePrint(); }}>
-                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                                    </svg>
-                                    Generate PDF
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
