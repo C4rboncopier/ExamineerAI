@@ -71,7 +71,8 @@ function App() {
               <Route path="templates/:templateId/edit" element={<CreateTemplate />} />
               <Route path="exams" element={<ExamsList />} />
               <Route path="exams/create" element={<CreateExam />} />
-              <Route path="exams/:examId" element={<ViewExam />} />
+              <Route path="exams/:examId" element={<Navigate to="overview" replace />} />
+              <Route path="exams/:examId/:tab" element={<ViewExam />} />
               <Route path="exams/:examId/edit" element={<CreateExam />} />
               <Route path="settings" element={<ProfessorSettings />} />
             </Route>

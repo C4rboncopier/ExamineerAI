@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Fragment, useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import katex from 'katex';
 import {
@@ -14,6 +14,17 @@ import { fetchSchoolInfo, fetchAcademicYear, fetchSemester } from '../../lib/set
 import { Popup } from '../common/Popup';
 import { LoadingOverlay } from '../common/LoadingOverlay';
 import { ExamStudents } from './ExamStudents';
+import OMRScanner from './OMRScanner';
+import {
+    fetchAttemptGrades,
+    fetchSetAnswerKey,
+    gradeOMR,
+    saveOMRSubmission,
+    deleteSubmission,
+    setNumberToLetter,
+    type AttemptGradeRow,
+    type SetAnswerKey,
+} from '../../lib/grading';
 
 function renderMathHtml(text: string): string {
     const mathPattern = /\$\$([^$]+?)\$\$/g;
@@ -40,11 +51,12 @@ function renderMathHtml(text: string): string {
 const SET_LABELS = ['A', 'B', 'C', 'D', 'E'];
 const CHOICE_LABELS = ['A', 'B', 'C', 'D'];
 const ITEMS_PER_PAGE = 20;
+const GRADES_PER_PAGE = 10;
 
-type Tab = 'overview' | 'papers' | 'students';
+type Tab = 'overview' | 'papers' | 'students' | 'scan';
 
 export function ViewExam() {
-    const { examId } = useParams<{ examId: string }>();
+    const { examId, tab } = useParams<{ examId: string; tab?: string }>();
     const navigate = useNavigate();
 
     // ── Core exam state ──
@@ -53,8 +65,11 @@ export function ViewExam() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // ── Tab navigation ──
-    const [activeTab, setActiveTab] = useState<Tab>('overview');
+    // ── Tab navigation (derived from URL) ──
+    const activeTab: Tab =
+        tab === 'papers' || tab === 'students' || tab === 'scan' || tab === 'overview'
+            ? tab
+            : 'overview';
 
     // ── Papers tab ──
     const [activeAttempt, setActiveAttempt] = useState(1);
@@ -101,6 +116,29 @@ export function ViewExam() {
     const [schoolAy, setSchoolAy] = useState('');
     const [schoolSem, setSchoolSem] = useState('');
 
+    // ── Grades ──
+    const [gradesData, setGradesData] = useState<Record<number, AttemptGradeRow[]>>({});
+    const [isLoadingGrades, setIsLoadingGrades] = useState(false);
+    const [scannerAttempt, setScannerAttempt] = useState<number | null>(null);
+
+    // ── Grade answer viewer / editor ──
+    const [expandedGradeKey, setExpandedGradeKey] = useState<string | null>(null);
+    const [answerKeyCache, setAnswerKeyCache] = useState<Record<string, SetAnswerKey | null>>({});
+    const [loadingAnswerKey, setLoadingAnswerKey] = useState<string | null>(null);
+    const [editingGradeKey, setEditingGradeKey] = useState<string | null>(null);
+    const [editingAnswers, setEditingAnswers] = useState<Record<string, number>>({});
+    const [editingSaving, setEditingSaving] = useState(false);
+
+    // ── Grade accordion ──
+    const [expandedAttempt, setExpandedAttempt] = useState<number | null>(null);
+
+    // ── Grade select / bulk delete ──
+    const [selectModeAttempt, setSelectModeAttempt] = useState<number | null>(null);
+    const [selectedGradeKeys, setSelectedGradeKeys] = useState<Set<string>>(new Set());
+    const [gradePageMap, setGradePageMap] = useState<Record<number, number>>({});
+    const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+    const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
     useEffect(() => {
         fetchSchoolInfo().then(({ name, logoUrl }) => {
             if (name) setSchoolName(name);
@@ -125,6 +163,23 @@ export function ViewExam() {
     }, [examId]);
 
     useEffect(() => { loadExam(); }, [loadExam]);
+
+    const loadGradesOnly = useCallback(async () => {
+        if (!exam || !examId) return;
+        setIsLoadingGrades(true);
+        const deployed = exam.exam_attempts.filter(
+            a => a.status === 'deployed' || a.status === 'done'
+        );
+        const newGrades: Record<number, AttemptGradeRow[]> = {};
+        await Promise.all(deployed.map(async a => {
+            const { data } = await fetchAttemptGrades(examId, a.attempt_number);
+            newGrades[a.attempt_number] = data;
+        }));
+        setGradesData(newGrades);
+        setIsLoadingGrades(false);
+    }, [exam, examId]);
+
+    useEffect(() => { loadGradesOnly(); }, [loadGradesOnly]);
 
     useEffect(() => {
         setActiveSet(0);
@@ -351,11 +406,95 @@ export function ViewExam() {
         setShuffledMap({});
     };
 
+    // ── Grade answer viewer / editor helpers ──
+
+    const GRADE_ANSWER_LETTERS = ['A', 'B', 'C', 'D', 'E'];
+
+    async function handleToggleGradeView(gradeKey: string, attemptNum: number, setNumber: number) {
+        if (expandedGradeKey === gradeKey) {
+            setExpandedGradeKey(null);
+            setEditingGradeKey(null);
+            return;
+        }
+        setExpandedGradeKey(gradeKey);
+        const cacheKey = `${attemptNum}-${setNumber}`;
+        if (!(cacheKey in answerKeyCache)) {
+            setLoadingAnswerKey(cacheKey);
+            const { data } = await fetchSetAnswerKey(examId!, attemptNum, setNumber);
+            setAnswerKeyCache(prev => ({ ...prev, [cacheKey]: data }));
+            setLoadingAnswerKey(null);
+        }
+    }
+
+    function handleStartEditGrade(gradeKey: string, answers: Record<string, number>) {
+        setEditingGradeKey(gradeKey);
+        setEditingAnswers({ ...answers });
+    }
+
+    function handleToggleAnswerCell(qId: string) {
+        setEditingAnswers(prev => {
+            const current = prev[qId] ?? -1;
+            const next = current >= 4 ? -1 : current + 1;
+            return { ...prev, [qId]: next };
+        });
+    }
+
+    async function handleSaveGrade(attemptNum: number, studentId: string, setNumber: number) {
+        const cacheKey = `${attemptNum}-${setNumber}`;
+        const answerKey = answerKeyCache[cacheKey];
+        if (!answerKey) return;
+        setEditingSaving(true);
+        const letters = answerKey.questionIds.map(qId => {
+            const idx = editingAnswers[qId] ?? -1;
+            return idx >= 0 ? (GRADE_ANSWER_LETTERS[idx] ?? '') : '';
+        });
+        const { score, totalItems, answers } = gradeOMR(answerKey.questionIds, letters, answerKey.questions);
+        const { error } = await saveOMRSubmission({
+            examId: examId!,
+            studentId,
+            attemptNumber: attemptNum,
+            setNumber,
+            answers,
+            score,
+            totalItems,
+        });
+        setEditingSaving(false);
+        if (error) { alert(`Save failed: ${error}`); return; }
+        setEditingGradeKey(null);
+        await loadGradesOnly();
+    }
+
+    async function handleBulkDeleteConfirmed() {
+        setIsBulkDeleteOpen(false);
+        setIsBulkDeleting(true);
+        const ops: Promise<{ error: string | null }>[] = [];
+        for (const [attemptStr, attemptRows] of Object.entries(gradesData)) {
+            for (const { enrollment, submission } of attemptRows) {
+                if (!submission) continue;
+                const gk = `${attemptStr}-${enrollment.student_id}`;
+                if (selectedGradeKeys.has(gk)) {
+                    ops.push(deleteSubmission({ examId: examId!, studentId: enrollment.student_id, attemptNumber: Number(attemptStr) }));
+                }
+            }
+        }
+        await Promise.all(ops);
+        setIsBulkDeleting(false);
+        setSelectedGradeKeys(new Set());
+        setSelectModeAttempt(null);
+        setExpandedGradeKey(null);
+        setEditingGradeKey(null);
+        await loadGradesOnly();
+    }
+
     const statusColor = exam.status === 'unlocked' ? '#16a34a' : '#f59e0b';
     const statusLabel = exam.status === 'unlocked' ? 'Unlocked' : 'Locked';
     const attemptStatus = attemptStatusMap[activeAttempt] ?? 'draft';
 
-    const TAB_LABELS: Record<Tab, string> = { overview: 'Overview', papers: 'Exam Papers', students: 'Students' };
+    const deployedAttempts = exam.exam_attempts
+        .filter(a => a.status === 'deployed' || a.status === 'done')
+        .sort((a, b) => a.attempt_number - b.attempt_number);
+
+    const TAB_LABELS: Record<Tab, string> = { overview: 'Overview', papers: 'Exam Papers', students: 'Students', scan: 'Scan OMR' };
 
     return (
         <div className="qb-container create-question-wrapper">
@@ -379,12 +518,12 @@ export function ViewExam() {
 
             {/* ── Tab nav ── */}
             <div style={{ display: 'flex', borderBottom: '2px solid var(--prof-border)', marginBottom: '24px' }}>
-                {(['overview', 'papers', 'students'] as Tab[]).map(tab => {
-                    const isActive = activeTab === tab;
+                {(['overview', 'papers', 'students', 'scan'] as Tab[]).map(t => {
+                    const isActive = activeTab === t;
                     return (
                         <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab)}
+                            key={t}
+                            onClick={() => navigate(`/professor/exams/${examId}/${t}`)}
                             style={{
                                 padding: '11px 20px',
                                 border: 'none',
@@ -398,7 +537,7 @@ export function ViewExam() {
                                 transition: 'all 0.15s',
                             }}
                         >
-                            {TAB_LABELS[tab]}
+                            {TAB_LABELS[t]}
                         </button>
                     );
                 })}
@@ -408,81 +547,390 @@ export function ViewExam() {
                 OVERVIEW TAB
             ══════════════════════════════════════════════ */}
             {activeTab === 'overview' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '20px', alignItems: 'start' }}>
 
-                    {/* Status card + actions */}
-                    <div className="cs-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-                        <div>
+                    {/* ── Left column: Student Grades ── */}
+                    <div>
+                        {deployedAttempts.length === 0 ? (
+                            <div className="cs-card" style={{ padding: '48px 24px', textAlign: 'center' }}>
+                                <p style={{ margin: '0 0 6px', fontSize: '0.92rem', color: 'var(--prof-text-muted)' }}>No grades yet.</p>
+                                <p style={{ margin: 0, fontSize: '0.83rem', color: 'var(--prof-text-muted)' }}>Deploy an attempt in the Exam Papers tab, then scan OMR sheets to record grades.</p>
+                            </div>
+                        ) : (
+                            <div className="cs-card" style={{ padding: 0, overflow: 'hidden' }}>
+                                <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--prof-border)' }}>
+                                    <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--prof-text-muted)' }}>Student Grades</p>
+                                    {isLoadingGrades && (
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', color: 'var(--prof-text-muted)' }}>
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                                            Loading
+                                        </span>
+                                    )}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    {deployedAttempts.map(({ attempt_number, status }) => {
+                                        const rows = gradesData[attempt_number] ?? [];
+                                        const isDone = status === 'done';
+                                        const statusColor = isDone ? '#2563eb' : '#16a34a';
+                                        const statusBg   = isDone ? '#eff6ff' : '#f0fdf4';
+                                        const statusBdr  = isDone ? '#bfdbfe' : '#bbf7d0';
+                                        const isSelecting = selectModeAttempt === attempt_number;
+                                        const submittedRows = rows.filter(r => r.submission != null);
+                                        const submittedKeys = submittedRows.map(r => `${attempt_number}-${r.enrollment.student_id}`);
+                                        const selectedCount = submittedKeys.filter(k => selectedGradeKeys.has(k)).length;
+                                        const allSelected = submittedKeys.length > 0 && submittedKeys.every(k => selectedGradeKeys.has(k));
+                                        const page = gradePageMap[attempt_number] ?? 0;
+                                        const totalGradePages = Math.ceil(rows.length / GRADES_PER_PAGE);
+                                        const pagedRows = rows.slice(page * GRADES_PER_PAGE, (page + 1) * GRADES_PER_PAGE);
+                                        const colCount = isSelecting ? 8 : 7;
+                                        const isOpen = expandedAttempt !== -1 && (expandedAttempt ?? deployedAttempts[0]?.attempt_number) === attempt_number;
+                                        return (
+                                            <div key={attempt_number} style={{ borderBottom: '1px solid var(--prof-border)' }}>
+                                                {/* ── Attempt header strip ── */}
+                                                <div
+                                                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 16px', background: '#f8fafc', borderBottom: isOpen ? '1px solid var(--prof-border)' : 'none', flexWrap: 'wrap', gap: '6px', cursor: 'pointer', userSelect: 'none' }}
+                                                    onClick={() => setExpandedAttempt(isOpen ? -1 : attempt_number)}
+                                                >
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                                                        <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="12" height="12" style={{ flexShrink: 0, color: 'var(--prof-text-muted)', transition: 'transform 0.15s', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                                                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>Attempt {attempt_number}</span>
+                                                        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: statusColor, background: statusBg, padding: '1px 7px', borderRadius: '9px', border: `1px solid ${statusBdr}` }}>
+                                                            {isDone ? 'Closed' : 'Open'}
+                                                        </span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+                                                        {isSelecting ? (
+                                                            <>
+                                                                {selectedCount > 0 && (
+                                                                    <button
+                                                                        className="btn-primary danger-btn"
+                                                                        style={{ padding: '4px 10px', fontSize: '0.77rem', height: '26px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                                                        onClick={() => setIsBulkDeleteOpen(true)}
+                                                                        disabled={isBulkDeleting}
+                                                                    >
+                                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                                                                        Delete ({selectedCount})
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    className="btn-secondary"
+                                                                    style={{ padding: '4px 10px', fontSize: '0.77rem', height: '26px' }}
+                                                                    onClick={() => { setSelectModeAttempt(null); setSelectedGradeKeys(new Set()); }}
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                {submittedRows.length > 0 && (
+                                                                    <button
+                                                                        className="btn-secondary"
+                                                                        style={{ padding: '4px 10px', fontSize: '0.77rem', height: '26px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                                                        onClick={() => { setSelectModeAttempt(attempt_number); setSelectedGradeKeys(new Set()); setExpandedGradeKey(null); setEditingGradeKey(null); }}
+                                                                    >
+                                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 11 12 14 22 4"/></svg>
+                                                                        Select
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    className="btn-secondary"
+                                                                    style={{ padding: '4px 10px', fontSize: '0.77rem', height: '26px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                                                    onClick={() => { setScannerAttempt(attempt_number); navigate(`/professor/exams/${examId}/scan`); }}
+                                                                >
+                                                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75V16.5zM16.5 6.75h.75v.75h-.75v-.75zM13.5 13.5h.75v.75h-.75v-.75zM13.5 19.5h.75v.75h-.75v-.75zM19.5 13.5h.75v.75h-.75v-.75zM19.5 19.5h.75v.75h-.75v-.75zM16.5 16.5h.75v.75h-.75v-.75z" />
+                                                                    </svg>
+                                                                    Scan
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {isOpen && (rows.length === 0 && !isLoadingGrades ? (
+                                                    <p style={{ color: 'var(--prof-text-muted)', fontSize: '0.82rem', margin: 0, padding: '12px 16px' }}>No students enrolled.</p>
+                                                ) : (
+                                                    <>
+                                                    <div style={{ overflowX: 'auto' }}>
+                                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                                        <thead>
+                                                            <tr>
+                                                                {isSelecting && (
+                                                                    <th style={{ width: '32px', padding: '6px 10px 6px 16px', borderBottom: '1px solid var(--prof-border)' }}>
+                                                                        <input type="checkbox" checked={allSelected} style={{ cursor: 'pointer', width: '14px', height: '14px' }} onChange={() => {
+                                                                            if (allSelected) {
+                                                                                setSelectedGradeKeys(prev => { const n = new Set(prev); submittedKeys.forEach(k => n.delete(k)); return n; });
+                                                                            } else {
+                                                                                setSelectedGradeKeys(prev => { const n = new Set(prev); submittedKeys.forEach(k => n.add(k)); return n; });
+                                                                            }
+                                                                        }} />
+                                                                    </th>
+                                                                )}
+                                                                <th style={{ textAlign: 'left', padding: '6px 10px 6px 16px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Student</th>
+                                                                <th style={{ textAlign: 'left', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ID</th>
+                                                                <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Set</th>
+                                                                <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scanned</th>
+                                                                <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Score</th>
+                                                                <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>%</th>
+                                                                <th style={{ padding: '6px 16px 6px 10px', borderBottom: '1px solid var(--prof-border)' }}></th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {pagedRows.map(({ enrollment, submission }) => {
+                                                                const gradeKey = `${attempt_number}-${enrollment.student_id}`;
+                                                                const isExpanded = expandedGradeKey === gradeKey;
+                                                                const isEditing = editingGradeKey === gradeKey;
+                                                                const isSelected = selectedGradeKeys.has(gradeKey);
+                                                                const cacheKey = submission ? `${attempt_number}-${submission.set_number}` : null;
+                                                                const answerKey = cacheKey ? (answerKeyCache[cacheKey] ?? null) : null;
+                                                                const isLoadingKey = cacheKey ? loadingAnswerKey === cacheKey : false;
+                                                                return (
+                                                                    <Fragment key={enrollment.student_id}>
+                                                                        <tr
+                                                                            style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--prof-border, #eee)', background: isSelected ? '#eff6ff' : undefined, cursor: isSelecting && submission ? 'pointer' : undefined }}
+                                                                            onClick={() => {
+                                                                                if (!isSelecting || !submission) return;
+                                                                                setSelectedGradeKeys(prev => { const n = new Set(prev); if (n.has(gradeKey)) n.delete(gradeKey); else n.add(gradeKey); return n; });
+                                                                            }}
+                                                                        >
+                                                                            {isSelecting && (
+                                                                                <td style={{ padding: '7px 10px 7px 16px', width: '32px' }}>
+                                                                                    {submission && <input type="checkbox" checked={isSelected} onChange={() => {}} style={{ cursor: 'pointer', width: '14px', height: '14px' }} />}
+                                                                                </td>
+                                                                            )}
+                                                                            <td style={{ padding: '7px 10px 7px 16px', fontSize: '0.83rem' }}>{enrollment.student?.full_name ?? '—'}</td>
+                                                                            <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: '0.77rem', color: 'var(--prof-text-muted)' }}>{enrollment.student?.student_id ?? '—'}</td>
+                                                                            <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.83rem' }}>
+                                                                                {submission ? <strong style={{ color: 'var(--prof-text-main)' }}>{setNumberToLetter(submission.set_number)}</strong> : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                                                            </td>
+                                                                            <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.78rem', color: 'var(--prof-text-muted)' }}>
+                                                                                {submission?.submitted_at ? new Date(submission.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                                                            </td>
+                                                                            <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.82rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>
+                                                                                {submission?.score != null
+                                                                                    ? `${submission.score} / ${submission.total_items}`
+                                                                                    : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                                                            </td>
+                                                                            <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                                                                                {submission?.score != null ? (() => {
+                                                                                    const pct = (submission.total_items ?? 0) > 0 ? Math.round((submission.score / submission.total_items!) * 100) : 0;
+                                                                                    const pctColor = pct >= 75 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626';
+                                                                                    const pctBg = pct >= 75 ? '#f0fdf4' : pct >= 50 ? '#fffbeb' : '#fff1f2';
+                                                                                    const pctBdr = pct >= 75 ? '#bbf7d0' : pct >= 50 ? '#fde68a' : '#fecaca';
+                                                                                    return <span style={{ fontSize: '0.78rem', fontWeight: 600, color: pctColor, background: pctBg, border: `1px solid ${pctBdr}`, borderRadius: '8px', padding: '2px 7px' }}>{pct}%</span>;
+                                                                                })() : <span style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>—</span>}
+                                                                            </td>
+                                                                            <td style={{ padding: '7px 16px 7px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                                                                {submission && !isSelecting && (
+                                                                                    <button onClick={e => { e.stopPropagation(); handleToggleGradeView(gradeKey, attempt_number, submission.set_number); }} style={{ padding: '3px 10px', borderRadius: '6px', border: '1px solid var(--prof-border)', background: isExpanded ? '#eff6ff' : '#fff', color: isExpanded ? '#2563eb' : 'var(--prof-text-main)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500 }}>
+                                                                                        {isExpanded ? 'Hide' : 'View'}
+                                                                                    </button>
+                                                                                )}
+                                                                            </td>
+                                                                        </tr>
+                                                                        {isExpanded && submission && !isSelecting && (
+                                                                            <tr style={{ borderBottom: '1px solid var(--prof-border,#e2e8f0)' }}>
+                                                                                <td colSpan={colCount} style={{ padding: '0', background: '#f8fafc', borderTop: '1px solid var(--prof-border,#e2e8f0)' }}>
+                                                                                    {isLoadingKey ? (
+                                                                                        <div style={{ padding: '18px 16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--prof-text-muted)', fontSize: '0.83rem' }}>
+                                                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                                                                                            Loading answer key…
+                                                                                        </div>
+                                                                                    ) : !answerKey ? (
+                                                                                        <div style={{ padding: '16px', color: '#dc2626', fontSize: '0.83rem' }}>Answer key not available for this set.</div>
+                                                                                    ) : (() => {
+                                                                                        const activeAnswers = isEditing ? editingAnswers : submission.answers;
+                                                                                        let correct = 0, wrong = 0, blank = 0;
+                                                                                        answerKey.questionIds.forEach(qId => {
+                                                                                            const ch = activeAnswers[qId] ?? -1;
+                                                                                            if (ch === -1) { blank++; return; }
+                                                                                            if (answerKey.questions[qId]?.correct_choice === ch) correct++; else wrong++;
+                                                                                        });
+                                                                                        const total = answerKey.questionIds.length;
+                                                                                        const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
+                                                                                        const pctColor = pct >= 75 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626';
+                                                                                        return (
+                                                                                            <>
+                                                                                                {/* ── Header ── */}
+                                                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--prof-border,#e2e8f0)', flexWrap: 'wrap', gap: '8px' }}>
+                                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.82rem', flexWrap: 'wrap' }}>
+                                                                                                        <span style={{ fontWeight: 700, color: '#0f172a' }}>{correct} / {total}</span>
+                                                                                                        <span style={{ fontWeight: 600, color: pctColor }}>{pct}%</span>
+                                                                                                        <span style={{ color: '#15803d' }}>✓ {correct} correct</span>
+                                                                                                        <span style={{ color: '#dc2626' }}>✗ {wrong} wrong</span>
+                                                                                                        {blank > 0 && <span style={{ color: '#94a3b8' }}>— {blank} blank</span>}
+                                                                                                    </div>
+                                                                                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                                                                                        {isEditing ? (
+                                                                                                            <>
+                                                                                                                <button onClick={() => setEditingGradeKey(null)} style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid var(--prof-border,#e2e8f0)', background: '#fff', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500, color: 'var(--prof-text-main)' }}>Cancel</button>
+                                                                                                                <button onClick={() => handleSaveGrade(attempt_number, enrollment.student_id, submission.set_number)} disabled={editingSaving} style={{ padding: '4px 14px', borderRadius: '6px', border: 'none', background: '#16a34a', color: '#fff', cursor: editingSaving ? 'not-allowed' : 'pointer', fontSize: '0.78rem', fontWeight: 600, opacity: editingSaving ? 0.7 : 1 }}>
+                                                                                                                    {editingSaving ? 'Saving…' : 'Save'}
+                                                                                                                </button>
+                                                                                                            </>
+                                                                                                        ) : (
+                                                                                                            <button onClick={() => handleStartEditGrade(gradeKey, submission.answers)} style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid var(--prof-border,#e2e8f0)', background: '#fff', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500, color: 'var(--prof-text-main)' }}>Edit Answers</button>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                                {/* ── Answer grid ── */}
+                                                                                                <div style={{ padding: '12px 16px', overflowX: 'auto' }}>
+                                                                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 36px)', gap: '4px', minWidth: '400px' }}>
+                                                                                                        {answerKey.questionIds.map((qId, qi) => {
+                                                                                                            const rawChoice = isEditing ? (editingAnswers[qId] ?? -1) : (submission.answers[qId] ?? -1);
+                                                                                                            const letter = rawChoice >= 0 ? (GRADE_ANSWER_LETTERS[rawChoice] ?? '') : '';
+                                                                                                            const correctNum = answerKey.questions[qId]?.correct_choice;
+                                                                                                            const correctLetter = correctNum != null ? (GRADE_ANSWER_LETTERS[correctNum] ?? '') : '';
+                                                                                                            const isC = letter !== '' && correctLetter !== '' && letter === correctLetter;
+                                                                                                            const isW = letter !== '' && correctLetter !== '' && letter !== correctLetter;
+                                                                                                            return (
+                                                                                                                <button
+                                                                                                                    key={qId}
+                                                                                                                    onClick={() => isEditing && handleToggleAnswerCell(qId)}
+                                                                                                                    title={`Q${qi + 1}${correctLetter ? ` · Correct: ${correctLetter}` : ''}${isEditing ? ' · Click to change' : ''}`}
+                                                                                                                    style={{
+                                                                                                                        width: '36px', height: '42px',
+                                                                                                                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1px',
+                                                                                                                        border: `1px solid ${isC ? '#86efac' : isW ? '#fca5a5' : '#e2e8f0'}`,
+                                                                                                                        borderRadius: '5px',
+                                                                                                                        background: isC ? '#f0fdf4' : isW ? '#fff1f2' : '#fff',
+                                                                                                                        cursor: isEditing ? 'pointer' : 'default',
+                                                                                                                        outline: 'none',
+                                                                                                                        padding: 0,
+                                                                                                                    }}
+                                                                                                                >
+                                                                                                                    <span style={{ fontSize: '0.52rem', color: '#94a3b8', fontWeight: 600, lineHeight: 1 }}>Q{qi + 1}</span>
+                                                                                                                    <span style={{ fontSize: '0.88rem', fontWeight: 700, color: isC ? '#16a34a' : isW ? '#dc2626' : letter ? '#334155' : '#cbd5e1', lineHeight: 1 }}>{letter || '—'}</span>
+                                                                                                                    <span style={{ fontSize: '0.52rem', lineHeight: 1, color: isW ? '#dc2626' : 'transparent' }}>{isW ? correctLetter : '·'}</span>
+                                                                                                                </button>
+                                                                                                            );
+                                                                                                        })}
+                                                                                                    </div>
+                                                                                                    {isEditing && <p style={{ margin: '8px 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>Click a cell to cycle: A → B → C → D → E → blank</p>}
+                                                                                                </div>
+                                                                                            </>
+                                                                                        );
+                                                                                    })()}
+                                                                                </td>
+                                                                            </tr>
+                                                                        )}
+                                                                    </Fragment>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                    </div>
+                                                    {totalGradePages > 1 && (
+                                                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', padding: '10px 16px', borderTop: '1px solid var(--prof-border)' }}>
+                                                            <button className="btn-secondary" style={{ padding: '5px 14px', fontSize: '0.8rem' }} disabled={page === 0} onClick={() => setGradePageMap(prev => ({ ...prev, [attempt_number]: page - 1 }))}>Prev</button>
+                                                            <span style={{ fontSize: '0.78rem', color: 'var(--prof-text-muted)', minWidth: '60px', textAlign: 'center' }}>{page + 1} / {totalGradePages}</span>
+                                                            <button className="btn-secondary" style={{ padding: '5px 14px', fontSize: '0.8rem' }} disabled={page >= totalGradePages - 1} onClick={() => setGradePageMap(prev => ({ ...prev, [attempt_number]: page + 1 }))}>Next</button>
+                                                        </div>
+                                                    )}
+                                                    </>
+                                                ))}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ── Right column: Actions + Details ── */}
+                    <div className="cs-card" style={{ padding: 0, overflow: 'hidden' }}>
+
+                        {/* Status header strip */}
+                        <div style={{
+                            padding: '12px 16px',
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            background: exam.status === 'unlocked' ? '#f0fdf4' : '#fefce8',
+                            borderBottom: `1px solid ${exam.status === 'unlocked' ? '#bbf7d0' : '#fde68a'}`,
+                        }}>
                             {exam.status === 'unlocked' ? (
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600, background: '#dcfce7', color: '#16a34a', border: '1px solid #86efac' }}>
-                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
-                                    Unlocked — visible &amp; accessible to students
-                                </span>
+                                <svg fill="none" strokeWidth="2" stroke="#16a34a" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
                             ) : (
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600, background: '#fef9c3', color: '#854d0e', border: '1px solid #fde047' }}>
-                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
-                                    Locked — students can see but not access
-                                </span>
+                                <svg fill="none" strokeWidth="2" stroke="#92400e" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
                             )}
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: exam.status === 'unlocked' ? '#15803d' : '#92400e', letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                                {exam.status === 'unlocked' ? 'Unlocked' : 'Locked'}
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: exam.status === 'unlocked' ? '#16a34a' : '#a16207', marginLeft: '2px' }}>
+                                {exam.status === 'unlocked' ? '— visible to students' : '— hidden from students'}
+                            </span>
                         </div>
-                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-                            <button className="btn-secondary" style={{ padding: '7px 16px', height: '38px', display: 'inline-flex', alignItems: 'center' }} onClick={() => navigate(`/professor/exams/${exam.id}/edit`)}>
-                                Edit Exam
-                            </button>
+
+                        {/* Action buttons */}
+                        <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '6px', borderBottom: '1px solid var(--prof-border)' }}>
                             <button
                                 className="btn-secondary"
-                                style={{ color: '#ef4444', borderColor: '#fca5a5', padding: '7px 16px', height: '38px', display: 'inline-flex', alignItems: 'center' }}
-                                onClick={() => setIsDeleteConfirmOpen(true)}
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start' }}
+                                onClick={() => navigate(`/professor/exams/${exam.id}/edit`)}
                             >
-                                Delete
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>
+                                Edit Exam
                             </button>
                             {exam.status === 'locked' ? (
                                 <button
-                                    className="btn-primary"
-                                    style={{ background: '#16a34a', borderColor: '#16a34a', padding: '7px 16px', height: '38px', display: 'inline-flex', alignItems: 'center' }}
+                                    className="btn-secondary"
+                                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', color: '#16a34a', borderColor: '#86efac' }}
                                     onClick={() => setIsUnlockConfirmOpen(true)}
                                 >
-                                    Unlock
+                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                                    Unlock Exam
                                 </button>
                             ) : (
                                 <button
                                     className="btn-secondary"
-                                    style={{ color: '#f59e0b', borderColor: '#fcd34d', padding: '7px 16px', height: '38px', display: 'inline-flex', alignItems: 'center' }}
+                                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', color: '#b45309', borderColor: '#fcd34d' }}
                                     onClick={() => setIsLockConfirmOpen(true)}
                                 >
-                                    Lock
+                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                                    Lock Exam
                                 </button>
                             )}
+                            <button
+                                className="btn-secondary"
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', color: '#dc2626', borderColor: '#fca5a5' }}
+                                onClick={() => setIsDeleteConfirmOpen(true)}
+                            >
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                                Delete Exam
+                            </button>
                         </div>
-                    </div>
 
-                    {/* Exam details */}
-                    <div className="cs-card">
-                        <h3 className="cs-card-title">Exam Details</h3>
-                        <dl style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '12px 24px', fontSize: '0.9rem', margin: 0 }}>
-                            <dt style={{ fontWeight: 600, color: 'var(--prof-text-muted)' }}>Academic Year</dt>
-                            <dd style={{ margin: 0 }}>{exam.academic_year}</dd>
-                            <dt style={{ fontWeight: 600, color: 'var(--prof-text-muted)' }}>Term</dt>
-                            <dd style={{ margin: 0 }}>{exam.term}</dd>
-                            <dt style={{ fontWeight: 600, color: 'var(--prof-text-muted)' }}>Sets per Attempt</dt>
-                            <dd style={{ margin: 0 }}>{exam.num_sets === 0 ? <span style={{ color: '#ef4444' }}>Not set</span> : exam.num_sets}</dd>
-                            <dt style={{ fontWeight: 600, color: 'var(--prof-text-muted)' }}>Max Attempts</dt>
-                            <dd style={{ margin: 0 }}>{exam.max_attempts}</dd>
-                            <dt style={{ fontWeight: 600, color: 'var(--prof-text-muted)' }}>Subjects</dt>
-                            <dd style={{ margin: 0 }}>
-                                {subjectTags.length === 0 ? (
-                                    <span style={{ color: '#ef4444' }}>None linked</span>
-                                ) : (
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                        {subjectTags.map(s => (
-                                            <span key={s.subject_id} style={{ background: '#f1f5f9', padding: '3px 10px', borderRadius: '12px', fontSize: '0.82rem', color: '#475569', border: '1px solid #e2e8f0' }}>
-                                                {s.subjects!.course_code} — {s.subjects!.course_title}
-                                            </span>
-                                        ))}
+                        {/* Exam details list */}
+                        <div style={{ padding: '12px 16px' }}>
+                            <p style={{ margin: '0 0 10px', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--prof-text-muted)' }}>Exam Details</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                                {[
+                                    { label: 'Academic Year', value: exam.academic_year },
+                                    { label: 'Term', value: exam.term },
+                                    { label: 'Sets / Attempt', value: exam.num_sets === 0 ? <span style={{ color: '#ef4444' }}>Not set</span> : exam.num_sets },
+                                    { label: 'Max Attempts', value: exam.max_attempts },
+                                ].map(({ label, value }) => (
+                                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '6px 0', borderBottom: '1px solid var(--prof-border)' }}>
+                                        <span style={{ fontSize: '0.78rem', color: 'var(--prof-text-muted)', fontWeight: 500 }}>{label}</span>
+                                        <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--prof-text-main)', textAlign: 'right' }}>{value}</span>
                                     </div>
-                                )}
-                            </dd>
-                        </dl>
+                                ))}
+                                <div style={{ paddingTop: '8px' }}>
+                                    <span style={{ fontSize: '0.78rem', color: 'var(--prof-text-muted)', fontWeight: 500, display: 'block', marginBottom: '5px' }}>Subjects</span>
+                                    {subjectTags.length === 0 ? (
+                                        <span style={{ fontSize: '0.82rem', color: '#ef4444' }}>None linked</span>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                            {subjectTags.map(s => (
+                                                <span key={s.subject_id} style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '10px', fontSize: '0.75rem', color: '#475569', border: '1px solid #e2e8f0', fontWeight: 500 }}>
+                                                    {s.subjects!.course_code}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -1159,6 +1607,81 @@ export function ViewExam() {
                 <ExamStudents examId={examId} />
             )}
 
+            {/* ══════════════════════════════════════════════
+                SCAN OMR TAB
+            ══════════════════════════════════════════════ */}
+            {activeTab === 'scan' && (() => {
+                if (deployedAttempts.length === 0) {
+                    return (
+                        <div className="cs-card" style={{ textAlign: 'center', padding: '56px 24px' }}>
+                            <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" width="44" height="44" style={{ margin: '0 auto 14px', display: 'block', opacity: 0.3 }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
+                            </svg>
+                            <p style={{ color: 'var(--prof-text-muted)', fontSize: '0.92rem', margin: 0 }}>
+                                No attempts have been deployed yet. Open an attempt first before scanning.
+                            </p>
+                        </div>
+                    );
+                }
+
+                const effectiveAttempt = scannerAttempt ?? (expandedAttempt != null && expandedAttempt > 0 ? expandedAttempt : null) ?? deployedAttempts[0].attempt_number;
+
+                return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+                        {/* Section header + attempt selector */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>Scan OMR Sheets</h3>
+                                <p style={{ margin: '3px 0 0', fontSize: '0.83rem', color: 'var(--prof-text-muted)' }}>
+                                    Attempt {effectiveAttempt} — {deployedAttempts.find(a => a.attempt_number === effectiveAttempt)?.status === 'done' ? 'Closed' : 'Open'}
+                                </p>
+                            </div>
+                            {deployedAttempts.length > 1 && (
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    {deployedAttempts.map(({ attempt_number, status }) => {
+                                        const isActive = effectiveAttempt === attempt_number;
+                                        return (
+                                            <button
+                                                key={attempt_number}
+                                                onClick={() => setScannerAttempt(attempt_number)}
+                                                style={{
+                                                    padding: '6px 16px',
+                                                    borderRadius: '8px',
+                                                    border: `1.5px solid ${isActive ? 'var(--prof-primary)' : 'var(--prof-border)'}`,
+                                                    background: isActive ? 'var(--prof-primary)' : '#fff',
+                                                    color: isActive ? '#fff' : 'var(--prof-text-main)',
+                                                    fontWeight: isActive ? 700 : 500,
+                                                    fontSize: '0.85rem',
+                                                    cursor: 'pointer',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px',
+                                                }}
+                                            >
+                                                Attempt {attempt_number}
+                                                <span style={{ fontSize: '0.75rem', opacity: 0.75, fontWeight: 400 }}>
+                                                    {status === 'done' ? '(Closed)' : '(Open)'}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* OMR Scanner inline */}
+                        <OMRScanner
+                            examId={exam.id}
+                            attemptNumber={effectiveAttempt}
+                            enrollments={(gradesData[effectiveAttempt] ?? []).map(r => r.enrollment)}
+                            existingGrades={gradesData[effectiveAttempt] ?? []}
+                            onComplete={loadGradesOnly}
+                        />
+                    </div>
+                );
+            })()}
+
             {/* ── Loading overlay (blocks all interaction while generating) ── */}
             <LoadingOverlay
                 isOpen={isGenerating}
@@ -1237,6 +1760,17 @@ export function ViewExam() {
                 confirmText={isDeleting ? 'Deleting...' : 'Delete'}
                 cancelText="Cancel"
             />
+            <Popup
+                isOpen={isBulkDeleteOpen}
+                title="Remove Selected Submissions"
+                message={`Remove ${selectedGradeKeys.size} student submission${selectedGradeKeys.size === 1 ? '' : 's'}? This will permanently delete their scores and answers and cannot be undone.`}
+                type="danger"
+                onConfirm={handleBulkDeleteConfirmed}
+                onCancel={() => setIsBulkDeleteOpen(false)}
+                confirmText={isBulkDeleting ? 'Deleting...' : 'Remove'}
+                cancelText="Cancel"
+            />
+
 
         </div>
     );

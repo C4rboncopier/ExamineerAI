@@ -231,6 +231,7 @@
     flex: 1;
     overflow-y: auto;
     padding: 40px;
+    scrollbar-gutter: stable;
 }
 
 /* Create Subject Component */

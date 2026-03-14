@@ -111,9 +111,9 @@ html, body {
 
 /* ── Mid row (set + roll side by side) ────────────────── */
 .md  { display: flex; justify-content: space-between; gap: .2in; align-items: flex-start; }
-.bx  { border: 2px solid #000; padding: .06in .15in; border-radius: 6px; box-sizing: border-box; }
+.bx  { border: 2.5px solid #000; padding: .06in .15in; border-radius: 6px; box-sizing: border-box; }
 .md > .bx { flex: 1; }
-.bt  { font-size: 8.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; text-align: center; margin-bottom: .06in; padding-bottom: .04in; border-bottom: 1px solid #aaa; }
+.bt  { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; text-align: center; background: #000; color: #fff; padding: .05in .1in; margin: -.06in -.15in .09in; border-radius: 4px 4px 0 0; }
 
 /* ── Bubble (shared) ──────────────────────────────────── */
 .bb  { display: inline-flex; align-items: center; justify-content: center; width: .17in; height: .17in; border: 1.5px solid #000; border-radius: 50%; flex-shrink: 0; }
@@ -132,7 +132,7 @@ html, body {
 .bc   { width: .25in; display: flex; justify-content: center; align-items: center; }
 
 /* ── Answer section ───────────────────────────────────── */
-.ab  { border: 2px solid #000; padding: .06in .15in; border-radius: 6px; flex: 1; display: flex; flex-direction: column; }
+.ab  { border: 2.5px solid #000; padding: .06in .15in; border-radius: 6px; flex: 1; display: flex; flex-direction: column; }
 .ag  { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 .15in; margin-top: .04in; flex: 1; }
 .ac  { display: flex; flex-direction: column; align-items: center; }
 .ah  { display: flex; gap: .03in; align-items: center; margin-bottom: .03in; padding-bottom: .03in; border-bottom: 1.5px solid #000; height: .2in; }
