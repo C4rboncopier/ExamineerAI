@@ -10,11 +10,12 @@ interface ModuleOutcome {
 
 interface CourseOutcome {
     id: string;
+    description: string;
     modules: ModuleOutcome[];
 }
 
 const initialOutcomes = (): CourseOutcome[] => [
-    { id: crypto.randomUUID(), modules: [{ id: crypto.randomUUID(), description: '' }] }
+    { id: crypto.randomUUID(), description: '', modules: [{ id: crypto.randomUUID(), description: '' }] }
 ];
 
 export function CreateSubject() {
@@ -47,6 +48,7 @@ export function CreateSubject() {
             const sorted = [...data.course_outcomes].sort((a, b) => a.order_index - b.order_index);
             setOutcomes(sorted.map(co => ({
                 id: crypto.randomUUID(),
+                description: co.description,
                 modules: [...co.module_outcomes]
                     .sort((a, b) => a.order_index - b.order_index)
                     .map(mo => ({
@@ -62,7 +64,7 @@ export function CreateSubject() {
     const goBack = () => navigate('/professor/subjects');
 
     const addCourseOutcome = () => {
-        setOutcomes([...outcomes, { id: crypto.randomUUID(), modules: [{ id: crypto.randomUUID(), description: '' }] }]);
+        setOutcomes([...outcomes, { id: crypto.randomUUID(), description: '', modules: [{ id: crypto.randomUUID(), description: '' }] }]);
     };
 
     const removeCourseOutcome = (coId: string) => {
@@ -89,6 +91,10 @@ export function CreateSubject() {
         }));
     };
 
+    const updateCourseOutcomeDescription = (coId: string, description: string) => {
+        setOutcomes(outcomes.map(co => co.id === coId ? { ...co, description } : co));
+    };
+
     const updateModuleOutcomeDescription = (coId: string, moId: string, description: string) => {
         setOutcomes(outcomes.map(co => {
             if (co.id === coId) {
@@ -109,6 +115,7 @@ export function CreateSubject() {
 
         const payload = outcomes.map((co, i) => ({
             title: `CO ${i + 1}`,
+            description: co.description,
             modules: co.modules.map(mo => ({ description: mo.description })),
         }));
 
@@ -186,10 +193,18 @@ export function CreateSubject() {
                     <div className="co-list">
                         {outcomes.map((co, coIndex) => (
                             <div key={co.id} className="co-card">
-                                <div className="co-header">
+                                <div className="mo-item">
                                     <span className="co-badge">CO{coIndex + 1}</span>
+                                    <textarea
+                                        className="mo-textarea"
+                                        placeholder="Describe what students will achieve in this course outcome..."
+                                        value={co.description}
+                                        onChange={e => updateCourseOutcomeDescription(co.id, e.target.value)}
+                                        required
+                                        rows={2}
+                                    />
                                     {outcomes.length > 1 && (
-                                        <button type="button" className="btn-icon danger" onClick={() => removeCourseOutcome(co.id)} title="Remove CO">
+                                        <button type="button" className="btn-icon danger sm" onClick={() => removeCourseOutcome(co.id)} title="Remove CO">
                                             <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                         </button>
                                     )}

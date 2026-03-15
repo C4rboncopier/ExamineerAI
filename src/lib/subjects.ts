@@ -3,6 +3,7 @@ import type { Subject } from '../types';
 
 export interface OutcomePayload {
   title: string;
+  description: string;
   modules: { description: string }[];
 }
 
@@ -15,6 +16,7 @@ export interface SubjectWithOutcomes extends Subject {
   course_outcomes: {
     id: string;
     title: string;
+    description: string;
     order_index: number;
     module_outcomes: {
       id: string;
@@ -93,7 +95,7 @@ export async function fetchSubjectWithOutcomes(
 ): Promise<{ data: SubjectWithOutcomes | null; error: string | null }> {
   const { data, error } = await supabase
     .from('subjects')
-    .select('*, course_outcomes(id, title, order_index, module_outcomes(id, description, order_index))')
+    .select('*, course_outcomes(id, title, description, order_index, module_outcomes(id, description, order_index))')
     .eq('id', subjectId)
     .single();
 

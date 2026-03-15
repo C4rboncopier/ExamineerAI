@@ -494,7 +494,7 @@ export function ViewExam() {
         .filter(a => a.status === 'deployed' || a.status === 'done')
         .sort((a, b) => a.attempt_number - b.attempt_number);
 
-    const TAB_LABELS: Record<Tab, string> = { overview: 'Overview', papers: 'Exam Papers', students: 'Students', scan: 'Scan OMR' };
+    const TAB_LABELS: Record<Tab, string> = { overview: 'Overview', papers: 'Exams', students: 'Students', scan: 'Scan OMR' };
 
     return (
         <div className="qb-container create-question-wrapper">
@@ -554,7 +554,7 @@ export function ViewExam() {
                         {deployedAttempts.length === 0 ? (
                             <div className="cs-card" style={{ padding: '48px 24px', textAlign: 'center' }}>
                                 <p style={{ margin: '0 0 6px', fontSize: '0.92rem', color: 'var(--prof-text-muted)' }}>No grades yet.</p>
-                                <p style={{ margin: 0, fontSize: '0.83rem', color: 'var(--prof-text-muted)' }}>Deploy an attempt in the Exam Papers tab, then scan OMR sheets to record grades.</p>
+                                <p style={{ margin: 0, fontSize: '0.83rem', color: 'var(--prof-text-muted)' }}>Deploy an attempt in the Exams tab, then scan OMR sheets to record grades.</p>
                             </div>
                         ) : (
                             <div className="cs-card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -562,7 +562,7 @@ export function ViewExam() {
                                     <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--prof-text-muted)' }}>Student Grades</p>
                                     {isLoadingGrades && (
                                         <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.75rem', color: 'var(--prof-text-muted)' }}>
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
                                             Loading
                                         </span>
                                     )}
@@ -572,8 +572,8 @@ export function ViewExam() {
                                         const rows = gradesData[attempt_number] ?? [];
                                         const isDone = status === 'done';
                                         const statusColor = isDone ? '#2563eb' : '#16a34a';
-                                        const statusBg   = isDone ? '#eff6ff' : '#f0fdf4';
-                                        const statusBdr  = isDone ? '#bfdbfe' : '#bbf7d0';
+                                        const statusBg = isDone ? '#eff6ff' : '#f0fdf4';
+                                        const statusBdr = isDone ? '#bfdbfe' : '#bbf7d0';
                                         const isSelecting = selectModeAttempt === attempt_number;
                                         const submittedRows = rows.filter(r => r.submission != null);
                                         const submittedKeys = submittedRows.map(r => `${attempt_number}-${r.enrollment.student_id}`);
@@ -608,7 +608,7 @@ export function ViewExam() {
                                                                         onClick={() => setIsBulkDeleteOpen(true)}
                                                                         disabled={isBulkDeleting}
                                                                     >
-                                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg>
                                                                         Delete ({selectedCount})
                                                                     </button>
                                                                 )}
@@ -628,7 +628,7 @@ export function ViewExam() {
                                                                         style={{ padding: '4px 10px', fontSize: '0.77rem', height: '26px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                                                                         onClick={() => { setSelectModeAttempt(attempt_number); setSelectedGradeKeys(new Set()); setExpandedGradeKey(null); setEditingGradeKey(null); }}
                                                                     >
-                                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 11 12 14 22 4"/></svg>
+                                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><rect x="3" y="3" width="18" height="18" rx="2" /><polyline points="9 11 12 14 22 4" /></svg>
                                                                         Select
                                                                     </button>
                                                                 )}
@@ -652,182 +652,182 @@ export function ViewExam() {
                                                     <p style={{ color: 'var(--prof-text-muted)', fontSize: '0.82rem', margin: 0, padding: '12px 16px' }}>No students enrolled.</p>
                                                 ) : (
                                                     <>
-                                                    <div style={{ overflowX: 'auto' }}>
-                                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                                                        <thead>
-                                                            <tr>
-                                                                {isSelecting && (
-                                                                    <th style={{ width: '32px', padding: '6px 10px 6px 16px', borderBottom: '1px solid var(--prof-border)' }}>
-                                                                        <input type="checkbox" checked={allSelected} style={{ cursor: 'pointer', width: '14px', height: '14px' }} onChange={() => {
-                                                                            if (allSelected) {
-                                                                                setSelectedGradeKeys(prev => { const n = new Set(prev); submittedKeys.forEach(k => n.delete(k)); return n; });
-                                                                            } else {
-                                                                                setSelectedGradeKeys(prev => { const n = new Set(prev); submittedKeys.forEach(k => n.add(k)); return n; });
-                                                                            }
-                                                                        }} />
-                                                                    </th>
-                                                                )}
-                                                                <th style={{ textAlign: 'left', padding: '6px 10px 6px 16px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Student</th>
-                                                                <th style={{ textAlign: 'left', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ID</th>
-                                                                <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Set</th>
-                                                                <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scanned</th>
-                                                                <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Score</th>
-                                                                <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>%</th>
-                                                                <th style={{ padding: '6px 16px 6px 10px', borderBottom: '1px solid var(--prof-border)' }}></th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {pagedRows.map(({ enrollment, submission }) => {
-                                                                const gradeKey = `${attempt_number}-${enrollment.student_id}`;
-                                                                const isExpanded = expandedGradeKey === gradeKey;
-                                                                const isEditing = editingGradeKey === gradeKey;
-                                                                const isSelected = selectedGradeKeys.has(gradeKey);
-                                                                const cacheKey = submission ? `${attempt_number}-${submission.set_number}` : null;
-                                                                const answerKey = cacheKey ? (answerKeyCache[cacheKey] ?? null) : null;
-                                                                const isLoadingKey = cacheKey ? loadingAnswerKey === cacheKey : false;
-                                                                return (
-                                                                    <Fragment key={enrollment.student_id}>
-                                                                        <tr
-                                                                            style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--prof-border, #eee)', background: isSelected ? '#eff6ff' : undefined, cursor: isSelecting && submission ? 'pointer' : undefined }}
-                                                                            onClick={() => {
-                                                                                if (!isSelecting || !submission) return;
-                                                                                setSelectedGradeKeys(prev => { const n = new Set(prev); if (n.has(gradeKey)) n.delete(gradeKey); else n.add(gradeKey); return n; });
-                                                                            }}
-                                                                        >
-                                                                            {isSelecting && (
-                                                                                <td style={{ padding: '7px 10px 7px 16px', width: '32px' }}>
-                                                                                    {submission && <input type="checkbox" checked={isSelected} onChange={() => {}} style={{ cursor: 'pointer', width: '14px', height: '14px' }} />}
-                                                                                </td>
-                                                                            )}
-                                                                            <td style={{ padding: '7px 10px 7px 16px', fontSize: '0.83rem' }}>{enrollment.student?.full_name ?? '—'}</td>
-                                                                            <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: '0.77rem', color: 'var(--prof-text-muted)' }}>{enrollment.student?.student_id ?? '—'}</td>
-                                                                            <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.83rem' }}>
-                                                                                {submission ? <strong style={{ color: 'var(--prof-text-main)' }}>{setNumberToLetter(submission.set_number)}</strong> : <span style={{ color: '#cbd5e1' }}>—</span>}
-                                                                            </td>
-                                                                            <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.78rem', color: 'var(--prof-text-muted)' }}>
-                                                                                {submission?.submitted_at ? new Date(submission.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : <span style={{ color: '#cbd5e1' }}>—</span>}
-                                                                            </td>
-                                                                            <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.82rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>
-                                                                                {submission?.score != null
-                                                                                    ? `${submission.score} / ${submission.total_items}`
-                                                                                    : <span style={{ color: '#cbd5e1' }}>—</span>}
-                                                                            </td>
-                                                                            <td style={{ padding: '7px 10px', textAlign: 'center' }}>
-                                                                                {submission?.score != null ? (() => {
-                                                                                    const pct = (submission.total_items ?? 0) > 0 ? Math.round((submission.score / submission.total_items!) * 100) : 0;
-                                                                                    const pctColor = pct >= 75 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626';
-                                                                                    const pctBg = pct >= 75 ? '#f0fdf4' : pct >= 50 ? '#fffbeb' : '#fff1f2';
-                                                                                    const pctBdr = pct >= 75 ? '#bbf7d0' : pct >= 50 ? '#fde68a' : '#fecaca';
-                                                                                    return <span style={{ fontSize: '0.78rem', fontWeight: 600, color: pctColor, background: pctBg, border: `1px solid ${pctBdr}`, borderRadius: '8px', padding: '2px 7px' }}>{pct}%</span>;
-                                                                                })() : <span style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>—</span>}
-                                                                            </td>
-                                                                            <td style={{ padding: '7px 16px 7px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                                                                                {submission && !isSelecting && (
-                                                                                    <button onClick={e => { e.stopPropagation(); handleToggleGradeView(gradeKey, attempt_number, submission.set_number); }} style={{ padding: '3px 10px', borderRadius: '6px', border: '1px solid var(--prof-border)', background: isExpanded ? '#eff6ff' : '#fff', color: isExpanded ? '#2563eb' : 'var(--prof-text-main)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500 }}>
-                                                                                        {isExpanded ? 'Hide' : 'View'}
-                                                                                    </button>
-                                                                                )}
-                                                                            </td>
-                                                                        </tr>
-                                                                        {isExpanded && submission && !isSelecting && (
-                                                                            <tr style={{ borderBottom: '1px solid var(--prof-border,#e2e8f0)' }}>
-                                                                                <td colSpan={colCount} style={{ padding: '0', background: '#f8fafc', borderTop: '1px solid var(--prof-border,#e2e8f0)' }}>
-                                                                                    {isLoadingKey ? (
-                                                                                        <div style={{ padding: '18px 16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--prof-text-muted)', fontSize: '0.83rem' }}>
-                                                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                                                                                            Loading answer key…
-                                                                                        </div>
-                                                                                    ) : !answerKey ? (
-                                                                                        <div style={{ padding: '16px', color: '#dc2626', fontSize: '0.83rem' }}>Answer key not available for this set.</div>
-                                                                                    ) : (() => {
-                                                                                        const activeAnswers = isEditing ? editingAnswers : submission.answers;
-                                                                                        let correct = 0, wrong = 0, blank = 0;
-                                                                                        answerKey.questionIds.forEach(qId => {
-                                                                                            const ch = activeAnswers[qId] ?? -1;
-                                                                                            if (ch === -1) { blank++; return; }
-                                                                                            if (answerKey.questions[qId]?.correct_choice === ch) correct++; else wrong++;
-                                                                                        });
-                                                                                        const total = answerKey.questionIds.length;
-                                                                                        const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
-                                                                                        const pctColor = pct >= 75 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626';
-                                                                                        return (
-                                                                                            <>
-                                                                                                {/* ── Header ── */}
-                                                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--prof-border,#e2e8f0)', flexWrap: 'wrap', gap: '8px' }}>
-                                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.82rem', flexWrap: 'wrap' }}>
-                                                                                                        <span style={{ fontWeight: 700, color: '#0f172a' }}>{correct} / {total}</span>
-                                                                                                        <span style={{ fontWeight: 600, color: pctColor }}>{pct}%</span>
-                                                                                                        <span style={{ color: '#15803d' }}>✓ {correct} correct</span>
-                                                                                                        <span style={{ color: '#dc2626' }}>✗ {wrong} wrong</span>
-                                                                                                        {blank > 0 && <span style={{ color: '#94a3b8' }}>— {blank} blank</span>}
-                                                                                                    </div>
-                                                                                                    <div style={{ display: 'flex', gap: '6px' }}>
-                                                                                                        {isEditing ? (
-                                                                                                            <>
-                                                                                                                <button onClick={() => setEditingGradeKey(null)} style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid var(--prof-border,#e2e8f0)', background: '#fff', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500, color: 'var(--prof-text-main)' }}>Cancel</button>
-                                                                                                                <button onClick={() => handleSaveGrade(attempt_number, enrollment.student_id, submission.set_number)} disabled={editingSaving} style={{ padding: '4px 14px', borderRadius: '6px', border: 'none', background: '#16a34a', color: '#fff', cursor: editingSaving ? 'not-allowed' : 'pointer', fontSize: '0.78rem', fontWeight: 600, opacity: editingSaving ? 0.7 : 1 }}>
-                                                                                                                    {editingSaving ? 'Saving…' : 'Save'}
-                                                                                                                </button>
-                                                                                                            </>
-                                                                                                        ) : (
-                                                                                                            <button onClick={() => handleStartEditGrade(gradeKey, submission.answers)} style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid var(--prof-border,#e2e8f0)', background: '#fff', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500, color: 'var(--prof-text-main)' }}>Edit Answers</button>
-                                                                                                        )}
-                                                                                                    </div>
-                                                                                                </div>
-                                                                                                {/* ── Answer grid ── */}
-                                                                                                <div style={{ padding: '12px 16px', overflowX: 'auto' }}>
-                                                                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 36px)', gap: '4px', minWidth: '400px' }}>
-                                                                                                        {answerKey.questionIds.map((qId, qi) => {
-                                                                                                            const rawChoice = isEditing ? (editingAnswers[qId] ?? -1) : (submission.answers[qId] ?? -1);
-                                                                                                            const letter = rawChoice >= 0 ? (GRADE_ANSWER_LETTERS[rawChoice] ?? '') : '';
-                                                                                                            const correctNum = answerKey.questions[qId]?.correct_choice;
-                                                                                                            const correctLetter = correctNum != null ? (GRADE_ANSWER_LETTERS[correctNum] ?? '') : '';
-                                                                                                            const isC = letter !== '' && correctLetter !== '' && letter === correctLetter;
-                                                                                                            const isW = letter !== '' && correctLetter !== '' && letter !== correctLetter;
-                                                                                                            return (
-                                                                                                                <button
-                                                                                                                    key={qId}
-                                                                                                                    onClick={() => isEditing && handleToggleAnswerCell(qId)}
-                                                                                                                    title={`Q${qi + 1}${correctLetter ? ` · Correct: ${correctLetter}` : ''}${isEditing ? ' · Click to change' : ''}`}
-                                                                                                                    style={{
-                                                                                                                        width: '36px', height: '42px',
-                                                                                                                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1px',
-                                                                                                                        border: `1px solid ${isC ? '#86efac' : isW ? '#fca5a5' : '#e2e8f0'}`,
-                                                                                                                        borderRadius: '5px',
-                                                                                                                        background: isC ? '#f0fdf4' : isW ? '#fff1f2' : '#fff',
-                                                                                                                        cursor: isEditing ? 'pointer' : 'default',
-                                                                                                                        outline: 'none',
-                                                                                                                        padding: 0,
-                                                                                                                    }}
-                                                                                                                >
-                                                                                                                    <span style={{ fontSize: '0.52rem', color: '#94a3b8', fontWeight: 600, lineHeight: 1 }}>Q{qi + 1}</span>
-                                                                                                                    <span style={{ fontSize: '0.88rem', fontWeight: 700, color: isC ? '#16a34a' : isW ? '#dc2626' : letter ? '#334155' : '#cbd5e1', lineHeight: 1 }}>{letter || '—'}</span>
-                                                                                                                    <span style={{ fontSize: '0.52rem', lineHeight: 1, color: isW ? '#dc2626' : 'transparent' }}>{isW ? correctLetter : '·'}</span>
-                                                                                                                </button>
-                                                                                                            );
-                                                                                                        })}
-                                                                                                    </div>
-                                                                                                    {isEditing && <p style={{ margin: '8px 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>Click a cell to cycle: A → B → C → D → E → blank</p>}
-                                                                                                </div>
-                                                                                            </>
-                                                                                        );
-                                                                                    })()}
-                                                                                </td>
-                                                                            </tr>
+                                                        <div style={{ overflowX: 'auto' }}>
+                                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                                                <thead>
+                                                                    <tr>
+                                                                        {isSelecting && (
+                                                                            <th style={{ width: '32px', padding: '6px 10px 6px 16px', borderBottom: '1px solid var(--prof-border)' }}>
+                                                                                <input type="checkbox" checked={allSelected} style={{ cursor: 'pointer', width: '14px', height: '14px' }} onChange={() => {
+                                                                                    if (allSelected) {
+                                                                                        setSelectedGradeKeys(prev => { const n = new Set(prev); submittedKeys.forEach(k => n.delete(k)); return n; });
+                                                                                    } else {
+                                                                                        setSelectedGradeKeys(prev => { const n = new Set(prev); submittedKeys.forEach(k => n.add(k)); return n; });
+                                                                                    }
+                                                                                }} />
+                                                                            </th>
                                                                         )}
-                                                                    </Fragment>
-                                                                );
-                                                            })}
-                                                        </tbody>
-                                                    </table>
-                                                    </div>
-                                                    {totalGradePages > 1 && (
-                                                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', padding: '10px 16px', borderTop: '1px solid var(--prof-border)' }}>
-                                                            <button className="btn-secondary" style={{ padding: '5px 14px', fontSize: '0.8rem' }} disabled={page === 0} onClick={() => setGradePageMap(prev => ({ ...prev, [attempt_number]: page - 1 }))}>Prev</button>
-                                                            <span style={{ fontSize: '0.78rem', color: 'var(--prof-text-muted)', minWidth: '60px', textAlign: 'center' }}>{page + 1} / {totalGradePages}</span>
-                                                            <button className="btn-secondary" style={{ padding: '5px 14px', fontSize: '0.8rem' }} disabled={page >= totalGradePages - 1} onClick={() => setGradePageMap(prev => ({ ...prev, [attempt_number]: page + 1 }))}>Next</button>
+                                                                        <th style={{ textAlign: 'left', padding: '6px 10px 6px 16px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Student</th>
+                                                                        <th style={{ textAlign: 'left', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ID</th>
+                                                                        <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Set</th>
+                                                                        <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scanned</th>
+                                                                        <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Score</th>
+                                                                        <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>%</th>
+                                                                        <th style={{ padding: '6px 16px 6px 10px', borderBottom: '1px solid var(--prof-border)' }}></th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {pagedRows.map(({ enrollment, submission }) => {
+                                                                        const gradeKey = `${attempt_number}-${enrollment.student_id}`;
+                                                                        const isExpanded = expandedGradeKey === gradeKey;
+                                                                        const isEditing = editingGradeKey === gradeKey;
+                                                                        const isSelected = selectedGradeKeys.has(gradeKey);
+                                                                        const cacheKey = submission ? `${attempt_number}-${submission.set_number}` : null;
+                                                                        const answerKey = cacheKey ? (answerKeyCache[cacheKey] ?? null) : null;
+                                                                        const isLoadingKey = cacheKey ? loadingAnswerKey === cacheKey : false;
+                                                                        return (
+                                                                            <Fragment key={enrollment.student_id}>
+                                                                                <tr
+                                                                                    style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--prof-border, #eee)', background: isSelected ? '#eff6ff' : undefined, cursor: isSelecting && submission ? 'pointer' : undefined }}
+                                                                                    onClick={() => {
+                                                                                        if (!isSelecting || !submission) return;
+                                                                                        setSelectedGradeKeys(prev => { const n = new Set(prev); if (n.has(gradeKey)) n.delete(gradeKey); else n.add(gradeKey); return n; });
+                                                                                    }}
+                                                                                >
+                                                                                    {isSelecting && (
+                                                                                        <td style={{ padding: '7px 10px 7px 16px', width: '32px' }}>
+                                                                                            {submission && <input type="checkbox" checked={isSelected} onChange={() => { }} style={{ cursor: 'pointer', width: '14px', height: '14px' }} />}
+                                                                                        </td>
+                                                                                    )}
+                                                                                    <td style={{ padding: '7px 10px 7px 16px', fontSize: '0.83rem' }}>{enrollment.student?.full_name ?? '—'}</td>
+                                                                                    <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: '0.77rem', color: 'var(--prof-text-muted)' }}>{enrollment.student?.student_id ?? '—'}</td>
+                                                                                    <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.83rem' }}>
+                                                                                        {submission ? <strong style={{ color: 'var(--prof-text-main)' }}>{setNumberToLetter(submission.set_number)}</strong> : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                                                                    </td>
+                                                                                    <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.78rem', color: 'var(--prof-text-muted)' }}>
+                                                                                        {submission?.submitted_at ? new Date(submission.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                                                                    </td>
+                                                                                    <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.82rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>
+                                                                                        {submission?.score != null
+                                                                                            ? `${submission.score} / ${submission.total_items}`
+                                                                                            : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                                                                    </td>
+                                                                                    <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                                                                                        {submission?.score != null ? (() => {
+                                                                                            const pct = (submission.total_items ?? 0) > 0 ? Math.round((submission.score / submission.total_items!) * 100) : 0;
+                                                                                            const pctColor = pct >= 75 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626';
+                                                                                            const pctBg = pct >= 75 ? '#f0fdf4' : pct >= 50 ? '#fffbeb' : '#fff1f2';
+                                                                                            const pctBdr = pct >= 75 ? '#bbf7d0' : pct >= 50 ? '#fde68a' : '#fecaca';
+                                                                                            return <span style={{ fontSize: '0.78rem', fontWeight: 600, color: pctColor, background: pctBg, border: `1px solid ${pctBdr}`, borderRadius: '8px', padding: '2px 7px' }}>{pct}%</span>;
+                                                                                        })() : <span style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>—</span>}
+                                                                                    </td>
+                                                                                    <td style={{ padding: '7px 16px 7px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                                                                        {submission && !isSelecting && (
+                                                                                            <button onClick={e => { e.stopPropagation(); handleToggleGradeView(gradeKey, attempt_number, submission.set_number); }} style={{ padding: '3px 10px', borderRadius: '6px', border: '1px solid var(--prof-border)', background: isExpanded ? '#eff6ff' : '#fff', color: isExpanded ? '#2563eb' : 'var(--prof-text-main)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500 }}>
+                                                                                                {isExpanded ? 'Hide' : 'View'}
+                                                                                            </button>
+                                                                                        )}
+                                                                                    </td>
+                                                                                </tr>
+                                                                                {isExpanded && submission && !isSelecting && (
+                                                                                    <tr style={{ borderBottom: '1px solid var(--prof-border,#e2e8f0)' }}>
+                                                                                        <td colSpan={colCount} style={{ padding: '0', background: '#f8fafc', borderTop: '1px solid var(--prof-border,#e2e8f0)' }}>
+                                                                                            {isLoadingKey ? (
+                                                                                                <div style={{ padding: '18px 16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--prof-text-muted)', fontSize: '0.83rem' }}>
+                                                                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+                                                                                                    Loading answer key…
+                                                                                                </div>
+                                                                                            ) : !answerKey ? (
+                                                                                                <div style={{ padding: '16px', color: '#dc2626', fontSize: '0.83rem' }}>Answer key not available for this set.</div>
+                                                                                            ) : (() => {
+                                                                                                const activeAnswers = isEditing ? editingAnswers : submission.answers;
+                                                                                                let correct = 0, wrong = 0, blank = 0;
+                                                                                                answerKey.questionIds.forEach(qId => {
+                                                                                                    const ch = activeAnswers[qId] ?? -1;
+                                                                                                    if (ch === -1) { blank++; return; }
+                                                                                                    if (answerKey.questions[qId]?.correct_choice === ch) correct++; else wrong++;
+                                                                                                });
+                                                                                                const total = answerKey.questionIds.length;
+                                                                                                const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
+                                                                                                const pctColor = pct >= 75 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626';
+                                                                                                return (
+                                                                                                    <>
+                                                                                                        {/* ── Header ── */}
+                                                                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--prof-border,#e2e8f0)', flexWrap: 'wrap', gap: '8px' }}>
+                                                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.82rem', flexWrap: 'wrap' }}>
+                                                                                                                <span style={{ fontWeight: 700, color: '#0f172a' }}>{correct} / {total}</span>
+                                                                                                                <span style={{ fontWeight: 600, color: pctColor }}>{pct}%</span>
+                                                                                                                <span style={{ color: '#15803d' }}>✓ {correct} correct</span>
+                                                                                                                <span style={{ color: '#dc2626' }}>✗ {wrong} wrong</span>
+                                                                                                                {blank > 0 && <span style={{ color: '#94a3b8' }}>— {blank} blank</span>}
+                                                                                                            </div>
+                                                                                                            <div style={{ display: 'flex', gap: '6px' }}>
+                                                                                                                {isEditing ? (
+                                                                                                                    <>
+                                                                                                                        <button onClick={() => setEditingGradeKey(null)} style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid var(--prof-border,#e2e8f0)', background: '#fff', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500, color: 'var(--prof-text-main)' }}>Cancel</button>
+                                                                                                                        <button onClick={() => handleSaveGrade(attempt_number, enrollment.student_id, submission.set_number)} disabled={editingSaving} style={{ padding: '4px 14px', borderRadius: '6px', border: 'none', background: '#16a34a', color: '#fff', cursor: editingSaving ? 'not-allowed' : 'pointer', fontSize: '0.78rem', fontWeight: 600, opacity: editingSaving ? 0.7 : 1 }}>
+                                                                                                                            {editingSaving ? 'Saving…' : 'Save'}
+                                                                                                                        </button>
+                                                                                                                    </>
+                                                                                                                ) : (
+                                                                                                                    <button onClick={() => handleStartEditGrade(gradeKey, submission.answers)} style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid var(--prof-border,#e2e8f0)', background: '#fff', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500, color: 'var(--prof-text-main)' }}>Edit Answers</button>
+                                                                                                                )}
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                        {/* ── Answer grid ── */}
+                                                                                                        <div style={{ padding: '12px 16px', overflowX: 'auto' }}>
+                                                                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 36px)', gap: '4px', minWidth: '400px' }}>
+                                                                                                                {answerKey.questionIds.map((qId, qi) => {
+                                                                                                                    const rawChoice = isEditing ? (editingAnswers[qId] ?? -1) : (submission.answers[qId] ?? -1);
+                                                                                                                    const letter = rawChoice >= 0 ? (GRADE_ANSWER_LETTERS[rawChoice] ?? '') : '';
+                                                                                                                    const correctNum = answerKey.questions[qId]?.correct_choice;
+                                                                                                                    const correctLetter = correctNum != null ? (GRADE_ANSWER_LETTERS[correctNum] ?? '') : '';
+                                                                                                                    const isC = letter !== '' && correctLetter !== '' && letter === correctLetter;
+                                                                                                                    const isW = letter !== '' && correctLetter !== '' && letter !== correctLetter;
+                                                                                                                    return (
+                                                                                                                        <button
+                                                                                                                            key={qId}
+                                                                                                                            onClick={() => isEditing && handleToggleAnswerCell(qId)}
+                                                                                                                            title={`Q${qi + 1}${correctLetter ? ` · Correct: ${correctLetter}` : ''}${isEditing ? ' · Click to change' : ''}`}
+                                                                                                                            style={{
+                                                                                                                                width: '36px', height: '42px',
+                                                                                                                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1px',
+                                                                                                                                border: `1px solid ${isC ? '#86efac' : isW ? '#fca5a5' : '#e2e8f0'}`,
+                                                                                                                                borderRadius: '5px',
+                                                                                                                                background: isC ? '#f0fdf4' : isW ? '#fff1f2' : '#fff',
+                                                                                                                                cursor: isEditing ? 'pointer' : 'default',
+                                                                                                                                outline: 'none',
+                                                                                                                                padding: 0,
+                                                                                                                            }}
+                                                                                                                        >
+                                                                                                                            <span style={{ fontSize: '0.52rem', color: '#94a3b8', fontWeight: 600, lineHeight: 1 }}>Q{qi + 1}</span>
+                                                                                                                            <span style={{ fontSize: '0.88rem', fontWeight: 700, color: isC ? '#16a34a' : isW ? '#dc2626' : letter ? '#334155' : '#cbd5e1', lineHeight: 1 }}>{letter || '—'}</span>
+                                                                                                                            <span style={{ fontSize: '0.52rem', lineHeight: 1, color: isW ? '#dc2626' : 'transparent' }}>{isW ? correctLetter : '·'}</span>
+                                                                                                                        </button>
+                                                                                                                    );
+                                                                                                                })}
+                                                                                                            </div>
+                                                                                                            {isEditing && <p style={{ margin: '8px 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>Click a cell to cycle: A → B → C → D → E → blank</p>}
+                                                                                                        </div>
+                                                                                                    </>
+                                                                                                );
+                                                                                            })()}
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                )}
+                                                                            </Fragment>
+                                                                        );
+                                                                    })}
+                                                                </tbody>
+                                                            </table>
                                                         </div>
-                                                    )}
+                                                        {totalGradePages > 1 && (
+                                                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', padding: '10px 16px', borderTop: '1px solid var(--prof-border)' }}>
+                                                                <button className="btn-secondary" style={{ padding: '5px 14px', fontSize: '0.8rem' }} disabled={page === 0} onClick={() => setGradePageMap(prev => ({ ...prev, [attempt_number]: page - 1 }))}>Prev</button>
+                                                                <span style={{ fontSize: '0.78rem', color: 'var(--prof-text-muted)', minWidth: '60px', textAlign: 'center' }}>{page + 1} / {totalGradePages}</span>
+                                                                <button className="btn-secondary" style={{ padding: '5px 14px', fontSize: '0.8rem' }} disabled={page >= totalGradePages - 1} onClick={() => setGradePageMap(prev => ({ ...prev, [attempt_number]: page + 1 }))}>Next</button>
+                                                            </div>
+                                                        )}
                                                     </>
                                                 ))}
                                             </div>
@@ -895,7 +895,7 @@ export function ViewExam() {
                                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', color: '#dc2626', borderColor: '#fca5a5' }}
                                 onClick={() => setIsDeleteConfirmOpen(true)}
                             >
-                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg>
                                 Delete Exam
                             </button>
                         </div>
