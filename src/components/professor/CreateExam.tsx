@@ -112,7 +112,8 @@ export function CreateExam() {
         if (!tpl) return;
         setTitle(tpl.title);
         setCode(tpl.code);
-        setSelectedSubjectIds(tpl.subject_ids);
+        // Filter out subject IDs that no longer exist (deleted subjects leave stale IDs in template)
+        setSelectedSubjectIds(tpl.subject_ids.filter(id => subjects.some(s => s.id === id)));
         setSelectedProgramIds(tpl.program_ids ?? []);
     };
 

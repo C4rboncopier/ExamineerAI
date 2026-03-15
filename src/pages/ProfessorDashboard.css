@@ -539,7 +539,6 @@ select:focus {
     font-size: 0.75rem;
     font-weight: 700;
     white-space: nowrap;
-    margin-top: 8px;
 }
 
 .mo-textarea {
@@ -1035,8 +1034,8 @@ select:focus {
 .ql-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
+    gap: 10px;
+    padding: 8px 14px;
     cursor: pointer;
     transition: background 0.15s;
     user-select: none;
@@ -1053,20 +1052,20 @@ select:focus {
 
 .ql-num {
     flex-shrink: 0;
-    font-weight: 700;
-    color: var(--prof-primary);
-    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--prof-text-muted);
+    font-size: 0.78rem;
     width: 28px;
 }
 
 .ql-text {
     flex: 1;
-    font-size: 0.9rem;
+    font-size: 0.875rem;
     color: var(--prof-text-main);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    line-height: 1.4;
+    line-height: 1.35;
 }
 
 .ql-tags {
@@ -1076,20 +1075,27 @@ select:focus {
 }
 
 .qc-tag {
-    background-color: rgba(15, 37, 84, 0.1);
+    background-color: rgba(15, 37, 84, 0.08);
     color: var(--prof-primary);
-    padding: 3px 7px;
+    padding: 2px 6px;
     border-radius: 4px;
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     font-weight: 700;
     text-transform: uppercase;
+    letter-spacing: 0.03em;
     white-space: nowrap;
 }
 
 .ql-row-actions {
     display: flex;
-    gap: 4px;
+    gap: 2px;
     flex-shrink: 0;
+}
+
+.ql-row-actions .btn-icon {
+    width: 26px;
+    height: 26px;
+    padding: 4px;
 }
 
 .ql-chevron {
@@ -1103,30 +1109,29 @@ select:focus {
 }
 
 .ql-detail {
-    padding: 20px 24px;
+    padding: 14px 20px;
     background: #fafbfc;
 }
 
-
 .qc-text {
-    font-size: 1rem;
+    font-size: 0.9rem;
     font-weight: 500;
     color: var(--prof-text-main);
-    margin: 0 0 16px 0;
-    line-height: 1.6;
+    margin: 0 0 12px 0;
+    line-height: 1.55;
 }
 
 .qc-choices {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 6px;
 }
 
 .qc-choice {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
+    gap: 10px;
+    padding: 7px 12px;
     background-color: #f8fafc;
     border: 1px solid var(--prof-border);
     border-radius: var(--prof-radius-md);
@@ -1150,13 +1155,13 @@ select:focus {
 
 .choice-text {
     flex: 1;
-    font-size: 0.95rem;
+    font-size: 0.855rem;
     color: var(--prof-text-main);
 }
 
 .correct-icon {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
     color: #16a34a;
 }
 

@@ -47,6 +47,12 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
     const [deletePopupOpen, setDeletePopupOpen] = useState(false);
     const [questionToDelete, setQuestionToDelete] = useState<QuestionData | null>(null);
 
+    // ── Select / bulk delete ──
+    const [isSelectMode, setIsSelectMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+    const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
     useEffect(() => {
         if (!subjectId) return;
         fetchSubjectById(subjectId).then(({ data }) => setSubject(data));
@@ -119,6 +125,8 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
     useEffect(() => {
         setCurrentPage(1);
         setExpandedId(null);
+        setIsSelectMode(false);
+        setSelectedIds(new Set());
     }, [searchQuery, selectedCo, selectedMo]);
 
     useEffect(() => {
@@ -171,8 +179,69 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
         setQuestionToDelete(null);
     };
 
+    const handleBulkDelete = async () => {
+        setIsBulkDeleting(true);
+        const toDelete = questions.filter(q => selectedIds.has(q.id));
+        const results = await Promise.all(
+            toDelete.map(q => deleteQuestion(q.id, q.professorId, q.subjectId))
+        );
+        const errorCount = results.filter(r => r.error).length;
+        if (errorCount === 0) {
+            setQuestions(prev => prev.filter(q => !selectedIds.has(q.id)));
+            setToastMessage(`${toDelete.length} question${toDelete.length !== 1 ? 's' : ''} deleted.`);
+        } else {
+            const failedIds = new Set(toDelete.filter((_, i) => results[i].error).map(q => q.id));
+            setQuestions(prev => prev.filter(q => failedIds.has(q.id) || !selectedIds.has(q.id)));
+            setError(`Failed to delete ${errorCount} question(s).`);
+        }
+        if (expandedId && selectedIds.has(expandedId)) setExpandedId(null);
+        setSelectedIds(new Set());
+        setIsSelectMode(false);
+        setBulkDeleteOpen(false);
+        setIsBulkDeleting(false);
+    };
+
     const toggleExpand = (id: string) => {
         setExpandedId(prev => (prev === id ? null : id));
+    };
+
+    const toggleSelectId = (id: string) => {
+        setSelectedIds(prev => {
+            const n = new Set(prev);
+            if (n.has(id)) n.delete(id);
+            else n.add(id);
+            if (n.size === 0) setIsSelectMode(false);
+            return n;
+        });
+    };
+
+    const allOnPageSelected = paginatedQuestions.length > 0 && paginatedQuestions.every(q => selectedIds.has(q.id));
+    const someOnPageSelected = paginatedQuestions.some(q => selectedIds.has(q.id));
+
+    const handleCheckboxActivate = (id: string) => {
+        if (!isSelectMode) {
+            setIsSelectMode(true);
+            setExpandedId(null);
+        }
+        toggleSelectId(id);
+    };
+
+    const exitSelectMode = () => {
+        setIsSelectMode(false);
+        setSelectedIds(new Set());
+    };
+
+    const toggleSelectAllOnPage = () => {
+        setSelectedIds(prev => {
+            const n = new Set(prev);
+            if (allOnPageSelected) {
+                paginatedQuestions.forEach(q => n.delete(q.id));
+            } else {
+                paginatedQuestions.forEach(q => n.add(q.id));
+            }
+            if (n.size === 0) setIsSelectMode(false);
+            return n;
+        });
     };
 
     const hasFilters = !!(searchQuery || selectedCo || selectedMo);
@@ -189,30 +258,6 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
                         <h2>{subject?.course_code ?? '...'} Questions</h2>
                         <p>{subject?.course_title ?? ''}</p>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <button className="btn-secondary" onClick={() => setSummaryOpen(true)} style={{ padding: '14px 28px', fontSize: '1rem', display: 'flex', alignItems: 'center' }}>
-                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" style={{ marginRight: '8px' }}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"></path>
-                            </svg>
-                            Summary
-                        </button>
-                        <button className="btn-primary" onClick={() => navigate(`/professor/subjects/${subjectId}/question-bank/create`)}>
-                            + Add Question
-                        </button>
-                    </div>
-                </div>
-            )}
-            {embedded && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '24px' }}>
-                    <button className="btn-secondary" onClick={() => setSummaryOpen(true)} style={{ padding: '10px 20px', fontSize: '0.9rem', display: 'flex', alignItems: 'center' }}>
-                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16" style={{ marginRight: '6px' }}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"></path>
-                        </svg>
-                        Summary
-                    </button>
-                    <button className="btn-primary" onClick={() => navigate(`/professor/subjects/${subjectId}/question-bank/create`)}>
-                        + Add Question
-                    </button>
                 </div>
             )}
 
@@ -235,9 +280,9 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
                 </div>
             ) : (
                 <>
-                    {/* Search + Filters row */}
-                    <div className="ql-filter-bar" style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap' }}>
-                        <div className="subjects-search" style={{ flex: '1', minWidth: '200px', margin: 0 }}>
+                    {/* Single-row: Search + Filters + Actions */}
+                    <div className="ql-filter-bar" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: isSelectMode ? '8px' : '24px', flexWrap: 'wrap' }}>
+                        <div className="subjects-search" style={{ flex: '1', minWidth: '160px', margin: 0 }}>
                             <svg className="search-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"></path></svg>
                             <input
                                 type="text"
@@ -256,7 +301,7 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
                             className="ql-filter-select"
                             value={selectedCo}
                             onChange={e => handleCoChange(e.target.value)}
-                            style={{ width: '240px', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--prof-border)', backgroundColor: 'var(--prof-surface)', color: 'var(--prof-text-main)', flexShrink: 0 }}
+                            style={{ width: '170px', padding: '12px 10px', borderRadius: '8px', border: '1px solid var(--prof-border)', backgroundColor: 'var(--prof-surface)', color: 'var(--prof-text-main)', flexShrink: 0 }}
                         >
                             <option value="">All Course Outcomes</option>
                             {coOptions.map(co => (
@@ -268,7 +313,7 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
                             value={selectedMo}
                             onChange={e => setSelectedMo(e.target.value)}
                             disabled={moOptions.length === 0}
-                            style={{ width: '240px', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--prof-border)', backgroundColor: 'var(--prof-surface)', color: 'var(--prof-text-main)', flexShrink: 0, opacity: moOptions.length === 0 ? 0.6 : 1 }}
+                            style={{ width: '170px', padding: '12px 10px', borderRadius: '8px', border: '1px solid var(--prof-border)', backgroundColor: 'var(--prof-surface)', color: 'var(--prof-text-main)', flexShrink: 0, opacity: moOptions.length === 0 ? 0.6 : 1 }}
                         >
                             <option value="">All Module Outcomes</option>
                             {moOptions.map(mo => (
@@ -276,10 +321,25 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
                             ))}
                         </select>
                         {hasFilters && (
-                            <button className="ql-filter-clear" onClick={() => { setSearchQuery(''); setSelectedCo(''); setSelectedMo(''); }} style={{ background: 'rgba(236, 31, 40, 0.1)', border: '1px solid rgba(236, 31, 40, 0.2)', color: 'var(--prof-primary)', cursor: 'pointer', fontSize: '14px', padding: '10px 16px', borderRadius: '6px', fontWeight: 600, whiteSpace: 'nowrap', transition: 'all 0.2s' }}>
+                            <button className="ql-filter-clear" onClick={() => { setSearchQuery(''); setSelectedCo(''); setSelectedMo(''); }} style={{ background: 'rgba(236, 31, 40, 0.1)', border: '1px solid rgba(236, 31, 40, 0.2)', color: 'var(--prof-primary)', cursor: 'pointer', fontSize: '13px', padding: '10px 12px', borderRadius: '6px', fontWeight: 600, whiteSpace: 'nowrap', transition: 'all 0.2s', flexShrink: 0 }}>
                                 Clear filters
                             </button>
                         )}
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+                            <button
+                                className="btn-secondary"
+                                onClick={() => setSummaryOpen(true)}
+                                style={{ padding: '10px 14px', fontSize: '0.88rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                            >
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"></path>
+                                </svg>
+                                Summary
+                            </button>
+                            <button className="btn-primary" style={{ padding: '10px 14px', fontSize: '0.88rem' }} onClick={() => navigate(`/professor/subjects/${subjectId}/question-bank/create`)}>
+                                + Add Question
+                            </button>
+                        </div>
                     </div>
 
                     {filteredQuestions.length === 0 ? (
@@ -289,30 +349,97 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
                         </div>
                     ) : (
                         <>
+                            {/* Contextual selection bar — activated by clicking any row checkbox */}
+                            {isSelectMode && (
+                                <div style={{
+                                    display: 'flex', alignItems: 'center',
+                                    marginBottom: '12px',
+                                    border: '1px solid var(--prof-border)',
+                                    borderRadius: '10px', overflow: 'hidden',
+                                    background: 'var(--prof-surface)',
+                                }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 16px', cursor: 'pointer', userSelect: 'none', borderRight: '1px solid var(--prof-border)', flexShrink: 0 }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={allOnPageSelected}
+                                            ref={el => { if (el) el.indeterminate = !allOnPageSelected && someOnPageSelected; }}
+                                            onChange={toggleSelectAllOnPage}
+                                            style={{ width: '14px', height: '14px', cursor: 'pointer', flexShrink: 0 }}
+                                        />
+                                        <span style={{ fontSize: '0.82rem', color: 'var(--prof-text-muted)', whiteSpace: 'nowrap' }}>Select all</span>
+                                    </label>
+                                    <span style={{ flex: 1, padding: '9px 16px', fontSize: '0.83rem', fontWeight: selectedIds.size > 0 ? 600 : 400, color: selectedIds.size > 0 ? '#1d4ed8' : 'var(--prof-text-muted)' }}>
+                                        {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Hover a question to select it'}
+                                    </span>
+                                    <div style={{ display: 'flex', alignItems: 'center', borderLeft: '1px solid var(--prof-border)', padding: '5px 8px', gap: '2px' }}>
+                                        {selectedIds.size > 0 && (
+                                            <button
+                                                onClick={() => setBulkDeleteOpen(true)}
+                                                disabled={isBulkDeleting}
+                                                style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 11px', fontSize: '0.82rem', fontWeight: 600, color: '#dc2626', background: 'transparent', border: 'none', borderRadius: '7px', cursor: 'pointer' }}
+                                            >
+                                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                Delete ({selectedIds.size})
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={exitSelectMode}
+                                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '5px 11px', fontSize: '0.82rem', color: 'var(--prof-text-muted)', background: 'transparent', border: 'none', borderRadius: '7px', cursor: 'pointer' }}
+                                        >
+                                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="ql-list">
                                 {paginatedQuestions.map((q, index) => {
-                                    const isExpanded = expandedId === q.id;
+                                    const isExpanded = !isSelectMode && expandedId === q.id;
+                                    const isSelected = selectedIds.has(q.id);
                                     const globalIndex = (currentPage - 1) * ITEMS_PER_PAGE + index + 1;
                                     return (
-                                        <div key={q.id} className={`ql-item${isExpanded ? ' expanded' : ''}`}>
-                                            <div className="ql-row" onClick={() => toggleExpand(q.id)}>
-                                                <span className="ql-num">{globalIndex}.</span>
+                                        <div
+                                            key={q.id}
+                                            className={`ql-item${isExpanded ? ' expanded' : ''}`}
+                                            style={isSelected ? { background: '#eff6ff', borderColor: '#bfdbfe' } : undefined}
+                                        >
+                                            <div
+                                                className="ql-row"
+                                                style={{ cursor: isSelectMode ? 'pointer' : undefined }}
+                                                onClick={() => isSelectMode ? toggleSelectId(q.id) : toggleExpand(q.id)}
+                                            >
+                                                {/* Checkbox + number */}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexShrink: 0 }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={() => {}}
+                                                        onClick={e => { e.stopPropagation(); handleCheckboxActivate(q.id); }}
+                                                        style={{ cursor: 'pointer', width: '14px', height: '14px', flexShrink: 0 }}
+                                                    />
+                                                    <span className="ql-num">{globalIndex}.</span>
+                                                </div>
                                                 <span className="ql-text"><LatexText text={q.question} /></span>
                                                 <div className="ql-tags">
                                                     {q.coTitle && <span className="qc-tag">{q.coTitle}</span>}
                                                     {q.moDescription && <span className="qc-tag">MO {(q.moOrderIndex ?? 0) + 1}</span>}
                                                 </div>
-                                                <div className="ql-row-actions" onClick={e => e.stopPropagation()}>
-                                                    <button className="btn-icon" onClick={() => navigate(`/professor/subjects/${subjectId}/question-bank/${q.id}/edit`)} title="Edit Question">
-                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"></path></svg>
-                                                    </button>
-                                                    <button className="btn-icon danger" onClick={e => confirmDelete(e, q)} title="Delete Question">
-                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                                    </button>
-                                                </div>
-                                                <svg className={`ql-chevron${isExpanded ? ' open' : ''}`} fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"></path>
-                                                </svg>
+                                                {!isSelectMode && (
+                                                    <div className="ql-row-actions" onClick={e => e.stopPropagation()}>
+                                                        <button className="btn-icon" onClick={() => navigate(`/professor/subjects/${subjectId}/question-bank/${q.id}/edit`)} title="Edit Question">
+                                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"></path></svg>
+                                                        </button>
+                                                        <button className="btn-icon danger" onClick={e => confirmDelete(e, q)} title="Delete Question">
+                                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {!isSelectMode && (
+                                                    <svg className={`ql-chevron${isExpanded ? ' open' : ''}`} fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"></path>
+                                                    </svg>
+                                                )}
                                             </div>
 
                                             {isExpanded && (
@@ -427,6 +554,17 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
                 type="danger"
                 onConfirm={handleDelete}
                 onCancel={() => setDeletePopupOpen(false)}
+                confirmText="Delete"
+                cancelText="Cancel"
+            />
+
+            <Popup
+                isOpen={bulkDeleteOpen}
+                title="Delete Selected Questions"
+                message={`Delete ${selectedIds.size} question${selectedIds.size !== 1 ? 's' : ''}? This action cannot be undone.`}
+                type="danger"
+                onConfirm={handleBulkDelete}
+                onCancel={() => setBulkDeleteOpen(false)}
                 confirmText="Delete"
                 cancelText="Cancel"
             />

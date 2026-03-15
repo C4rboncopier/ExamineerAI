@@ -11,15 +11,28 @@ import { generateQuestionVariations } from '../../lib/gemini';
 import type { GeneratedQuestion } from '../../lib/gemini';
 import { Toast } from '../common/Toast';
 
+function escapeHtml(str: string): string {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 function renderLatex(text: string): string {
     if (!text) return '';
-    return text.replace(/\$\$([^$]+?)\$\$/g, (match, expr) => {
-        try {
-            return katex.renderToString(expr.trim(), { displayMode: false, throwOnError: false });
-        } catch {
-            return match;
+    const parts = text.split(/(\$\$[^$]+?\$\$)/g);
+    return parts.map(part => {
+        const match = part.match(/^\$\$([^$]+?)\$\$$/);
+        if (match) {
+            try {
+                return katex.renderToString(match[1].trim(), { displayMode: false, throwOnError: false });
+            } catch {
+                return escapeHtml(part);
+            }
         }
-    });
+        return escapeHtml(part);
+    }).join('');
 }
 
 function MathPreview({ text }: { text: string }) {
@@ -249,6 +262,7 @@ export function CreateQuestion() {
         } else {
             setToastMessage(`Question added successfully!${varMsg}`);
             resetForm();
+            setAiEnabled(false);
             setGeneratedVariations([]);
             setIncludedVariations(new Set());
             document.querySelector('.prof-content-scroll')?.scrollTo(0, 0);

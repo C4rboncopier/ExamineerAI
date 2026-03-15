@@ -116,32 +116,53 @@ export function ViewSubject() {
                         <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--prof-border)' }}>
                             <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--prof-text-muted)' }}>Syllabus Outcomes</p>
                         </div>
-                        <div style={{ padding: '12px 16px' }}>
-                            {sortedCOs.map((co, coIdx) => (
-                                <div
-                                    key={co.id}
-                                    style={{
-                                        marginBottom: coIdx < sortedCOs.length - 1 ? '16px' : 0,
-                                        paddingBottom: coIdx < sortedCOs.length - 1 ? '16px' : 0,
-                                        borderBottom: coIdx < sortedCOs.length - 1 ? '1px solid var(--prof-border)' : 'none',
-                                    }}
-                                >
-                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginBottom: '8px' }}>
-                                        <span className="co-badge">CO{coIdx + 1}</span>
-                                        <p style={{ margin: 0, flex: 1, fontSize: '0.9rem', color: 'var(--prof-text-main)', lineHeight: '1.5' }}>{co.description}</p>
+                        <div style={{ padding: '20px 24px' }}>
+                            {sortedCOs.map((co, coIdx) => {
+                                const sortedMOs = [...co.module_outcomes].sort((a, b) => a.order_index - b.order_index);
+                                const isLast = coIdx === sortedCOs.length - 1;
+                                return (
+                                    <div key={co.id} style={{ display: 'flex', gap: '0', position: 'relative' }}>
+                                        {/* Left spine */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, width: '32px' }}>
+                                            {/* CO dot */}
+                                            <div style={{ width: '11px', height: '11px', borderRadius: '50%', background: 'var(--prof-primary)', flexShrink: 0, marginTop: '5px', zIndex: 1 }} />
+                                            {/* Vertical line down to next CO (or nothing if last) */}
+                                            {!isLast && (
+                                                <div style={{ width: '2px', flex: 1, background: 'var(--prof-border)', minHeight: '24px' }} />
+                                            )}
+                                        </div>
+                                        {/* CO content */}
+                                        <div style={{ flex: 1, paddingBottom: isLast ? 0 : '28px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: sortedMOs.length > 0 ? '12px' : 0 }}>
+                                                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>CO{coIdx + 1}</span>
+                                                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--prof-text-main)', lineHeight: '1.5', fontWeight: 500 }}>{co.description}</p>
+                                            </div>
+                                            {/* MOs */}
+                                            {sortedMOs.map((mo, moIdx) => {
+                                                const isLastMO = moIdx === sortedMOs.length - 1;
+                                                return (
+                                                    <div key={mo.id} style={{ display: 'flex', gap: '0', position: 'relative' }}>
+                                                        {/* MO spine */}
+                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, width: '28px' }}>
+                                                            <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--prof-border)', border: '1.5px solid var(--prof-primary)', opacity: 0.7, flexShrink: 0, marginTop: '6px', zIndex: 1 }} />
+                                                            {!isLastMO && (
+                                                                <div style={{ width: '1.5px', flex: 1, background: 'var(--prof-border)', minHeight: '8px' }} />
+                                                            )}
+                                                        </div>
+                                                        {/* MO content */}
+                                                        <div style={{ flex: 1, paddingBottom: isLastMO ? 0 : '10px' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                                                                <span style={{ fontSize: '0.67rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>MO{coIdx + 1}{moIdx + 1}</span>
+                                                                <p style={{ margin: 0, fontSize: '0.83rem', color: 'var(--prof-text-muted)', lineHeight: '1.5' }}>{mo.description}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-                                    <div style={{ paddingLeft: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                        {[...co.module_outcomes]
-                                            .sort((a, b) => a.order_index - b.order_index)
-                                            .map((mo, moIdx) => (
-                                                <div key={mo.id} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                                                    <span className="mo-badge">MO{coIdx + 1}{moIdx + 1}</span>
-                                                    <p style={{ margin: 0, flex: 1, fontSize: '0.83rem', color: 'var(--prof-text-muted)', lineHeight: '1.5' }}>{mo.description}</p>
-                                                </div>
-                                            ))}
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
 

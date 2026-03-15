@@ -255,10 +255,14 @@ export async function createExam(
         return { data: null, error: insertError.message };
     }
 
-    if (subjectIds.length > 0) {
+    const uniqueSubjectIds = [...new Set(subjectIds)];
+    if (uniqueSubjectIds.length > 0) {
         const { error: subjError } = await supabase
             .from('exam_subjects')
-            .insert(subjectIds.map(subject_id => ({ exam_id: exam.id, subject_id })));
+            .upsert(
+                uniqueSubjectIds.map(subject_id => ({ exam_id: exam.id, subject_id })),
+                { onConflict: 'exam_id,subject_id', ignoreDuplicates: true }
+            );
         if (subjError) {
             await supabase.from('exams').delete().eq('id', exam.id);
             return { data: null, error: 'Failed to link subjects.' };
@@ -290,12 +294,17 @@ export async function updateExam(
         return { error: updateError.message };
     }
 
-    // Replace subjects (papers remain intact — professor manages them per-attempt)
-    await supabase.from('exam_subjects').delete().eq('exam_id', id);
-    if (subjectIds.length > 0) {
+    // Replace subjects
+    const { error: delError } = await supabase.from('exam_subjects').delete().eq('exam_id', id);
+    if (delError) return { error: 'Failed to remove old subjects.' };
+    const uniqueSubjectIds = [...new Set(subjectIds)];
+    if (uniqueSubjectIds.length > 0) {
         const { error: subjError } = await supabase
             .from('exam_subjects')
-            .insert(subjectIds.map(subject_id => ({ exam_id: id, subject_id })));
+            .upsert(
+                uniqueSubjectIds.map(subject_id => ({ exam_id: id, subject_id })),
+                { onConflict: 'exam_id,subject_id', ignoreDuplicates: true }
+            );
         if (subjError) return { error: 'Failed to update subjects.' };
     }
 
