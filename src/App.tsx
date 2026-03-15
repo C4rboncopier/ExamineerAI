@@ -8,9 +8,9 @@ import { ProfessorDashboard } from './pages/ProfessorDashboard';
 import { StudentDashboard } from './pages/StudentDashboard';
 import { SubjectsList } from './components/professor/SubjectsList';
 import { CreateSubject } from './components/professor/CreateSubject';
-import { QuestionBankSubjects } from './components/professor/QuestionBankSubjects';
 import { QuestionBankList } from './components/professor/QuestionBankList';
 import { CreateQuestion } from './components/professor/CreateQuestion';
+import { ViewSubject } from './components/professor/ViewSubject';
 import { ExamsList } from './components/professor/ExamsList';
 import { CreateExam } from './components/professor/CreateExam';
 import { ViewExam } from './components/professor/ViewExam';
@@ -61,11 +61,10 @@ function App() {
               <Route path="subjects" element={<SubjectsList />} />
               <Route path="subjects/create" element={<CreateSubject />} />
               <Route path="subjects/:subjectId/edit" element={<CreateSubject />} />
-              <Route path="question-bank" element={<QuestionBankSubjects />} />
-              <Route path="question-bank/create" element={<CreateQuestion />} />
-              <Route path="question-bank/:subjectId" element={<QuestionBankList />} />
-              <Route path="question-bank/:subjectId/create" element={<CreateQuestion />} />
-              <Route path="question-bank/:subjectId/:questionId/edit" element={<CreateQuestion />} />
+              <Route path="subjects/:subjectId" element={<Navigate to="overview" replace />} />
+              <Route path="subjects/:subjectId/question-bank/create" element={<CreateQuestion />} />
+              <Route path="subjects/:subjectId/question-bank/:questionId/edit" element={<CreateQuestion />} />
+              <Route path="subjects/:subjectId/:tab" element={<ViewSubject />} />
               <Route path="templates" element={<TemplatesList />} />
               <Route path="templates/create" element={<CreateTemplate />} />
               <Route path="templates/:templateId/edit" element={<CreateTemplate />} />

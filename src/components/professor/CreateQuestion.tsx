@@ -71,9 +71,9 @@ export function CreateQuestion() {
 
     const goBack = () => {
         if (subjectId) {
-            navigate(`/professor/question-bank/${subjectId}`);
+            navigate(`/professor/subjects/${subjectId}/question-bank`);
         } else {
-            navigate('/professor/question-bank');
+            navigate('/professor/subjects');
         }
     };
 
