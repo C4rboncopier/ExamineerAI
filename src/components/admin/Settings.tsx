@@ -15,6 +15,10 @@ import {
     uploadSchoolLogo,
     saveSchoolLogoUrl,
     removeSchoolLogo,
+    fetchPassingRate,
+    savePassingRate,
+    fetchAiDailyLimit,
+    saveAiDailyLimit,
 } from '../../lib/settings';
 import type { Program } from '../../lib/settings';
 
@@ -73,6 +77,18 @@ export function Settings() {
     const [programToDelete, setProgramToDelete] = useState<Program | null>(null);
     const [isDeletingProgram, setIsDeletingProgram] = useState(false);
 
+    // Passing Rate state
+    const [passingRate, setPassingRate] = useState<number>(50);
+    const [isEditingPassingRate, setIsEditingPassingRate] = useState(false);
+    const [tempPassingRate, setTempPassingRate] = useState<number>(50);
+    const [isSavingPassingRate, setIsSavingPassingRate] = useState(false);
+
+    // AI Daily Limit state
+    const [aiDailyLimit, setAiDailyLimit] = useState<number>(50);
+    const [isEditingAiLimit, setIsEditingAiLimit] = useState(false);
+    const [tempAiDailyLimit, setTempAiDailyLimit] = useState<number>(50);
+    const [isSavingAiLimit, setIsSavingAiLimit] = useState(false);
+
     // Toast
     const [toast, setToast] = useState<ToastState>({ open: false, message: '', type: 'success' });
     const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') =>
@@ -81,9 +97,11 @@ export function Settings() {
 
     // Load data on mount
     useEffect(() => {
-        Promise.all([fetchAcademicYear(), fetchSemester()]).then(([ayResult, semResult]) => {
+        Promise.all([fetchAcademicYear(), fetchSemester(), fetchPassingRate(), fetchAiDailyLimit()]).then(([ayResult, semResult, prResult, aiResult]) => {
             if (!ayResult.error && ayResult.value) setAcademicYear(ayResult.value);
             if (!semResult.error && semResult.value) setSemester(semResult.value);
+            if (prResult.value !== null) setPassingRate(prResult.value);
+            if (aiResult.value !== null) setAiDailyLimit(aiResult.value);
             setIsLoadingAY(false);
         });
         fetchPrograms().then(({ data, error }) => {
@@ -195,6 +213,38 @@ export function Settings() {
             showToast('Academic period updated successfully.');
         }
         setIsSavingAY(false);
+    };
+
+    // ── Passing Rate ───────────────────────────────────────
+
+    const handleSavePassingRate = async () => {
+        if (tempPassingRate < 1 || tempPassingRate > 100) return;
+        setIsSavingPassingRate(true);
+        const { error } = await savePassingRate(tempPassingRate);
+        if (error) {
+            showToast(error, 'error');
+        } else {
+            setPassingRate(tempPassingRate);
+            setIsEditingPassingRate(false);
+            showToast('Default passing rate updated.');
+        }
+        setIsSavingPassingRate(false);
+    };
+
+    // ── AI Daily Limit ─────────────────────────────────────
+
+    const handleSaveAiLimit = async () => {
+        if (tempAiDailyLimit < 1) return;
+        setIsSavingAiLimit(true);
+        const { error } = await saveAiDailyLimit(tempAiDailyLimit);
+        if (error) {
+            showToast(error, 'error');
+        } else {
+            setAiDailyLimit(tempAiDailyLimit);
+            setIsEditingAiLimit(false);
+            showToast('AI generation limit updated.');
+        }
+        setIsSavingAiLimit(false);
     };
 
     // ── Programs ───────────────────────────────────────────
@@ -466,6 +516,150 @@ export function Settings() {
                                 <span className="ay-display-value">{semester || '—'}</span>
                             </div>
                             <button className="btn-secondary settings-btn-icon-inline" onClick={handleEditAY}>
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                                </svg>
+                                Change
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* ── Default Passing Rate Card ── */}
+                <div className="cs-card">
+                    <div className="settings-section-heading">
+                        <div className="settings-section-icon">
+                            <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 className="settings-section-title">Default Passing Rate</h3>
+                            <p className="settings-section-desc">Sets the minimum score percentage for a student to pass an exam.</p>
+                        </div>
+                    </div>
+
+                    {isEditingPassingRate ? (
+                        <div className="settings-ay-edit">
+                            <div className="cs-input-field" style={{ marginBottom: '16px' }}>
+                                <label>Passing Rate (%)</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid var(--prof-border)', borderRadius: '8px', overflow: 'hidden', background: '#fff', width: '160px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setTempPassingRate(v => Math.max(1, v - 1))}
+                                            disabled={tempPassingRate <= 1}
+                                            style={{ padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--prof-text-muted)', lineHeight: 1 }}
+                                            onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
+                                            onMouseOut={e => (e.currentTarget.style.background = 'none')}
+                                        >−</button>
+                                        <span style={{ flex: 1, textAlign: 'center', fontWeight: 600, fontSize: '0.95rem', color: 'var(--prof-text-main)', userSelect: 'none' }}>
+                                            {tempPassingRate}%
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setTempPassingRate(v => Math.min(100, v + 1))}
+                                            disabled={tempPassingRate >= 100}
+                                            style={{ padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--prof-text-muted)', lineHeight: 1 }}
+                                            onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
+                                            onMouseOut={e => (e.currentTarget.style.background = 'none')}
+                                        >+</button>
+                                    </div>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={100}
+                                        value={tempPassingRate}
+                                        onChange={e => setTempPassingRate(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
+                                        style={{ width: '72px', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', fontSize: '0.9rem', textAlign: 'center' }}
+                                    />
+                                </div>
+                            </div>
+                            <div className="settings-actions">
+                                <button className="btn-secondary" onClick={() => setIsEditingPassingRate(false)} disabled={isSavingPassingRate}>Cancel</button>
+                                <button className="btn-primary" onClick={handleSavePassingRate} disabled={isSavingPassingRate}>
+                                    {isSavingPassingRate ? 'Saving...' : 'Save Changes'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="settings-ay-view">
+                            <div className="ay-display-block">
+                                <span className="ay-display-label">Passing Score</span>
+                                <span className="ay-display-value">{passingRate}%</span>
+                            </div>
+                            <button className="btn-secondary settings-btn-icon-inline" onClick={() => { setTempPassingRate(passingRate); setIsEditingPassingRate(true); }}>
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                                </svg>
+                                Change
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* ── AI Generation Limit Card ── */}
+                <div className="cs-card">
+                    <div className="settings-section-heading">
+                        <div className="settings-section-icon">
+                            <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423L16.5 15.75l.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 className="settings-section-title">AI Generation Limit</h3>
+                            <p className="settings-section-desc">Maximum number of AI-generated questions a professor can generate per day across all subjects.</p>
+                        </div>
+                    </div>
+
+                    {isEditingAiLimit ? (
+                        <div className="settings-ay-edit">
+                            <div className="cs-input-field" style={{ marginBottom: '16px' }}>
+                                <label>Questions per day (per professor)</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid var(--prof-border)', borderRadius: '8px', overflow: 'hidden', background: '#fff', width: '200px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setTempAiDailyLimit(v => Math.max(1, v - 10))}
+                                            disabled={tempAiDailyLimit <= 1}
+                                            style={{ padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--prof-text-muted)', lineHeight: 1 }}
+                                            onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
+                                            onMouseOut={e => (e.currentTarget.style.background = 'none')}
+                                        >−</button>
+                                        <span style={{ flex: 1, textAlign: 'center', fontWeight: 600, fontSize: '0.95rem', color: 'var(--prof-text-main)', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                                            {tempAiDailyLimit} / day
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setTempAiDailyLimit(v => v + 10)}
+                                            style={{ padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: 'var(--prof-text-muted)', lineHeight: 1 }}
+                                            onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
+                                            onMouseOut={e => (e.currentTarget.style.background = 'none')}
+                                        >+</button>
+                                    </div>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        value={tempAiDailyLimit}
+                                        onChange={e => setTempAiDailyLimit(Math.max(1, parseInt(e.target.value) || 1))}
+                                        style={{ width: '80px', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', fontSize: '0.9rem', textAlign: 'center' }}
+                                    />
+                                </div>
+                            </div>
+                            <div className="settings-actions">
+                                <button className="btn-secondary" onClick={() => setIsEditingAiLimit(false)} disabled={isSavingAiLimit}>Cancel</button>
+                                <button className="btn-primary" onClick={handleSaveAiLimit} disabled={isSavingAiLimit}>
+                                    {isSavingAiLimit ? 'Saving...' : 'Save Changes'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="settings-ay-view">
+                            <div className="ay-display-block">
+                                <span className="ay-display-label">Daily Limit</span>
+                                <span className="ay-display-value">{aiDailyLimit} questions / day</span>
+                            </div>
+                            <button className="btn-secondary settings-btn-icon-inline" onClick={() => { setTempAiDailyLimit(aiDailyLimit); setIsEditingAiLimit(true); }}>
                                 <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
                                 </svg>

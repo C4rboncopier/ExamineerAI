@@ -236,13 +236,13 @@ class OMRProcessor:
 
     def _preprocess(self):
         # CLAHE: normalize uneven lighting (critical for angled / phone photos)
-        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))  # raised from 2.5
         self.equalized = clahe.apply(self.gray)
 
         blurred = cv2.GaussianBlur(self.equalized, (5, 5), 0)
         self.thresh = cv2.adaptiveThreshold(
             blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY_INV, 31, 10,
+            cv2.THRESH_BINARY_INV, 33, 7,  # C lowered 10→7: more permissive dark-pixel detection
         )
 
     # ── Bubble detection ──────────────────────────────────────────────────────
@@ -256,22 +256,25 @@ class OMRProcessor:
         bubbles = []
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area < 200 or area > 900:
+            # Upper bound raised to 1800: a fully-filled bubble (disc) at r≈18px
+            # has area ≈ π*18² ≈ 1018 px², which the old cap of 900 was rejecting.
+            if area < 150 or area > 1800:
                 continue
             peri = cv2.arcLength(cnt, True)
             if peri == 0:
                 continue
             circ = 4 * np.pi * area / (peri * peri)
-            if circ > 0.70:
+            if circ > 0.65:  # slightly relaxed from 0.70 for imperfect fills
                 (cx, cy), radius = cv2.minEnclosingCircle(cnt)
-                if 7 < radius < 20:
+                if 6 < radius < 22:
                     bubbles.append((int(cx), int(cy), int(radius)))
 
-        if len(bubbles) < 50:
-            # Fallback: HoughCircles
+        if len(bubbles) < 80:
+            # Fallback: HoughCircles on CLAHE-equalized image for better contrast
             circles = cv2.HoughCircles(
-                self.gray, cv2.HOUGH_GRADIENT, dp=1.2, minDist=18,
-                param1=50, param2=28, minRadius=7, maxRadius=20,
+                self.equalized, cv2.HOUGH_GRADIENT, dp=1.2, minDist=15,
+                param1=50, param2=22,  # lower param2 = detects more (less strict)
+                minRadius=7, maxRadius=22,
             )
             if circles is not None:
                 bubbles = [(int(c[0]), int(c[1]), int(c[2])) for c in circles[0]]
@@ -439,9 +442,9 @@ class OMRProcessor:
             fills = [self._measure_fill(x, y, r=int(avg_r * 0.85)) for y in y_rows]
             darkest = min(fills)
             darkest_row = fills.index(darkest)
-            avg_others = float(np.mean([f for i, f in enumerate(fills) if i != darkest_row]))
+            median_others = float(np.median([f for i, f in enumerate(fills) if i != darkest_row]))
 
-            if darkest < 90 and (avg_others - darkest) > 70:
+            if darkest < 160 and (median_others - darkest) > 25:
                 digits.append(str(darkest_row))
                 cv2.circle(self.debug_image, (x, y_rows[darkest_row]), avg_r, (0, 200, 255), 2)
             else:
@@ -517,18 +520,18 @@ class OMRProcessor:
                 fills = [self._measure_fill(x, y, r=int(avg_r * 0.85)) for x in x_centers[:5]]
                 darkest = min(fills)
                 darkest_idx = fills.index(darkest)
-                mean_fill = float(np.mean(fills))
-                sorted_fills = sorted(fills)
-                second_darkest = sorted_fills[1] if len(sorted_fills) > 1 else 255
 
-                # Relative threshold: the filled bubble must be meaningfully
-                # darker than both the row average AND the second-darkest bubble.
-                # This remains valid regardless of global brightness/angle.
-                ratio_to_mean   = darkest / mean_fill if mean_fill > 0 else 1.0
-                ratio_to_second = darkest / second_darkest if second_darkest > 0 else 1.0
-                abs_dark_enough = darkest < 160
+                # Use MEDIAN of the other 4 bubbles (not mean of all 5).
+                # mean_fill includes the filled bubble itself, biasing it down and
+                # making ratio_to_mean falsely pass/fail for light marks or smudges.
+                other_fills   = [fills[i] for i in range(len(fills)) if i != darkest_idx]
+                median_others = float(np.median(other_fills)) if other_fills else 255.0
+                abs_diff      = median_others - darkest
+                ratio_to_median = darkest / median_others if median_others > 0 else 1.0
 
-                if abs_dark_enough and ratio_to_mean < 0.72 and ratio_to_second < 0.82:
+                abs_dark_enough = darkest < 185
+
+                if abs_dark_enough and abs_diff > 18 and ratio_to_median < 0.84:
                     letter = CHOICES[darkest_idx]
                     self.answers[q_num - 1] = letter
                     cx = x_centers[darkest_idx]
@@ -648,8 +651,11 @@ class OMRProcessor:
 
     def _measure_fill(self, cx: int, cy: int, r: int = 10) -> float:
         """
-        Mean pixel value inside a circle on the CLAHE-equalized image.
+        Fill metric inside a circle on the CLAHE-equalized image.
         Lower = darker = more filled. Uses equalized for lighting robustness.
+
+        Combines mean with 25th percentile so that partial/light shading
+        (e.g., light pencil marks) is more reliably detected.
         """
         img = getattr(self, "equalized", self.gray)
         h, w = img.shape
@@ -659,7 +665,12 @@ class OMRProcessor:
         mask = np.zeros((h, w), dtype="uint8")
         cv2.circle(mask, (cx, cy), r, 255, -1)
         pixels = img[mask > 0]
-        return float(np.mean(pixels)) if len(pixels) > 0 else 255.0
+        if len(pixels) == 0:
+            return 255.0
+        mean_val = float(np.mean(pixels))
+        p25_val  = float(np.percentile(pixels, 25))
+        # Weight toward the darker quarter of pixels — catches partial shading
+        return 0.55 * mean_val + 0.45 * p25_val
 
     def _build_result(self, error: str | None = None) -> dict:
         _, buf = cv2.imencode(".jpg", self.debug_image)

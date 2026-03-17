@@ -135,6 +135,46 @@ export async function removeSchoolLogo(): Promise<{ error: string | null }> {
   return { error: error?.message ?? null };
 }
 
+// ── Default Passing Rate ────────────────────────────────────
+
+export async function fetchPassingRate(): Promise<{ value: number | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'default_passing_rate')
+    .single();
+
+  if (error) return { value: null, error: null }; // row may not exist yet; treat as no error
+  return { value: parseInt(data.value) || null, error: null };
+}
+
+export async function savePassingRate(value: number): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('settings')
+    .upsert({ key: 'default_passing_rate', value: String(value), updated_at: new Date().toISOString() });
+  return { error: error?.message ?? null };
+}
+
+// ── AI Generation Daily Limit ───────────────────────────────
+
+export async function fetchAiDailyLimit(): Promise<{ value: number | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'ai_generation_daily_limit')
+    .single();
+
+  if (error) return { value: null, error: null }; // row may not exist yet; treat as no error
+  return { value: parseInt(data.value) || null, error: null };
+}
+
+export async function saveAiDailyLimit(value: number): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('settings')
+    .upsert({ key: 'ai_generation_daily_limit', value: String(value), updated_at: new Date().toISOString() });
+  return { error: error?.message ?? null };
+}
+
 // ── Programs ───────────────────────────────────────────────
 
 export async function fetchPrograms(): Promise<{ data: Program[]; error: string | null }> {

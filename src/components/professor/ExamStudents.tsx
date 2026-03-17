@@ -55,6 +55,18 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
 
     const enrolledStudentIds = useMemo(() => new Set(enrollments.map(e => e.student_id)), [enrollments]);
 
+    // Build a map of program_id → program for label display
+    const programMap = useMemo(() => {
+        const map: Record<string, { code: string; name: string }> = {};
+        for (const s of allStudents) {
+            if (s.program_id && s.program) map[s.program_id] = s.program;
+        }
+        return map;
+    }, [allStudents]);
+
+    // Allowed program IDs from exam restrictions (empty = no restriction)
+    const allowedProgramIds = useMemo(() => new Set(exam?.program_ids ?? []), [exam]);
+
     function handleAddSearch() {
         setSubmittedSearch(addSearch.trim());
         setAddPage(1);
@@ -71,6 +83,8 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
         const q = submittedSearch.toLowerCase();
         return allStudents.filter(s => {
             if (enrolledStudentIds.has(s.id)) return false;
+            // Restrict to allowed programs if the exam has program restrictions
+            if (allowedProgramIds.size > 0 && !allowedProgramIds.has(s.program_id ?? '')) return false;
             if (!q) return true;
             return (
                 s.full_name?.toLowerCase().includes(q) ||
@@ -80,7 +94,7 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
                 s.program?.name?.toLowerCase().includes(q)
             );
         });
-    }, [allStudents, enrolledStudentIds, submittedSearch]);
+    }, [allStudents, enrolledStudentIds, submittedSearch, allowedProgramIds]);
 
     // Enrolled students — for search within enrolled list
     const filteredEnrollments = useMemo(() => {
@@ -300,6 +314,16 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
                         <h3 style={{ margin: '0 0 4px', fontSize: '1rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>
                             Add Students
                         </h3>
+                        {allowedProgramIds.size > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.775rem', color: 'var(--prof-text-muted)' }}>Restricted to:</span>
+                                {[...allowedProgramIds].map(pid => (
+                                    <span key={pid} style={{ padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600, background: '#eff6ff', color: '#2563eb', border: '1px solid #93c5fd', whiteSpace: 'nowrap' }}>
+                                        {programMap[pid]?.code ?? pid.slice(0, 8)}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* Search available */}
@@ -311,7 +335,7 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
                             </svg>
                             <input
                                 type="text"
-                                placeholder="Search by name, username, program..."
+                                placeholder={allowedProgramIds.size > 0 ? 'Search by name, username...' : 'Search by name, username, program...'}
                                 value={addSearch}
                                 onChange={e => setAddSearch(e.target.value)}
                                 onKeyDown={e => { if (e.key === 'Enter') handleAddSearch(); }}

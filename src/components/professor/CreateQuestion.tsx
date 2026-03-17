@@ -75,6 +75,7 @@ export function CreateQuestion() {
 
     // AI variation generation
     const [aiEnabled, setAiEnabled] = useState(false);
+    const [aiAdvanced, setAiAdvanced] = useState(false);
     const [aiCount, setAiCount] = useState(3);
     const [isGenerating, setIsGenerating] = useState(false);
     const [generateError, setGenerateError] = useState<string | null>(null);
@@ -129,7 +130,7 @@ export function CreateQuestion() {
                 setCoId(data.course_outcomes[0].id);
             }
         });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedSubjectId]);
 
     // Reset MO when CO changes
@@ -145,7 +146,7 @@ export function CreateQuestion() {
                 setMoId('');
             }
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [coId, subjectDetails]);
 
     // Reset form after successful creation (stay on page for another question)
@@ -297,7 +298,7 @@ export function CreateQuestion() {
         setGenerateError(null);
         setGeneratedVariations([]);
         setIncludedVariations(new Set());
-        const { data, error } = await generateQuestionVariations(questionText, choices, correctChoice, aiCount);
+        const { data, error } = await generateQuestionVariations(questionText, choices, correctChoice, aiCount, aiAdvanced);
         setIsGenerating(false);
         if (error) { setGenerateError(error); return; }
         setGeneratedVariations(data);
@@ -552,6 +553,30 @@ export function CreateQuestion() {
                             <p style={{ fontSize: '0.88rem', color: 'var(--prof-text-muted)', marginBottom: '16px', marginTop: 0 }}>
                                 Generate similar questions based on your original. All variations inherit the same Subject, CO, and MO.
                             </p>
+
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '8px', background: aiAdvanced ? 'rgba(15,37,84,0.04)' : 'var(--prof-bg)', border: `1.5px solid ${aiAdvanced ? 'var(--prof-primary)' : 'var(--prof-border)'}`, marginBottom: '16px', transition: 'border-color 0.2s, background 0.2s' }}>
+                                <div>
+                                    <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 600, color: 'var(--prof-text-main)' }}>Complex Mode</p>
+                                    <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: 'var(--prof-text-muted)' }}>
+                                        {aiAdvanced ? 'Using Gemini 2.5 Flash — better for complex technical questions.' : 'Using Gemini 2.5 Flash Lite — fast and cost-effective for simple questions.'}
+                                    </p>
+                                </div>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none', flexShrink: 0, marginLeft: '16px' }}>
+                                    <span style={{ fontSize: '0.82rem', color: aiAdvanced ? 'var(--prof-primary)' : 'var(--prof-text-muted)', fontWeight: 500 }}>
+                                        {aiAdvanced ? 'On' : 'Off'}
+                                    </span>
+                                    <div style={{ position: 'relative', width: '40px', height: '22px' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={aiAdvanced}
+                                            onChange={e => setAiAdvanced(e.target.checked)}
+                                            style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
+                                        />
+                                        <div style={{ position: 'absolute', inset: 0, borderRadius: '11px', background: aiAdvanced ? 'var(--prof-primary)' : '#cbd5e1', transition: 'background 0.2s' }} />
+                                        <div style={{ position: 'absolute', top: '3px', left: aiAdvanced ? '21px' : '3px', width: '16px', height: '16px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                                    </div>
+                                </label>
+                            </div>
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
                                 <label style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--prof-text-main)', whiteSpace: 'nowrap' }}>

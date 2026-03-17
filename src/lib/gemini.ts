@@ -4,14 +4,21 @@ export interface GeneratedQuestion {
     correct_choice: number; // 0-indexed
 }
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const GEMINI_MODEL_LITE = 'gemini-2.5-flash-lite';
+const GEMINI_MODEL_ADVANCED = 'gemini-2.5-flash';
+const GEMINI_BASE_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+function getEndpoint(useAdvancedModel: boolean) {
+    const model = useAdvancedModel ? GEMINI_MODEL_ADVANCED : GEMINI_MODEL_LITE;
+    return `${GEMINI_BASE_ENDPOINT}/${model}:generateContent`;
+}
 
 export async function generateQuestionVariations(
     originalQuestion: string,
     originalChoices: string[],
     originalCorrectChoice: number,
-    count: number
+    count: number,
+    useAdvancedModel = false
 ): Promise<{ data: GeneratedQuestion[]; error: string | null }> {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
     if (!apiKey) {
@@ -54,7 +61,7 @@ Rules:
 
     let response: Response;
     try {
-        response = await fetch(`${GEMINI_ENDPOINT}?key=${apiKey}`, {
+        response = await fetch(`${getEndpoint(useAdvancedModel)}?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
