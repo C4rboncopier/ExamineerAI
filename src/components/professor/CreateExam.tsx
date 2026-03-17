@@ -45,10 +45,14 @@ export function CreateExam() {
     const [subjectSearch, setSubjectSearch] = useState('');
     const [subjectDropdownOpen, setSubjectDropdownOpen] = useState(false);
 
+    // AI analysis toggle
+    const [aiAnalysisEnabled, setAiAnalysisEnabled] = useState(false);
+
     // Form state
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoadingExam, setIsLoadingExam] = useState(isEditMode);
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const [hasPapers, setHasPapers] = useState(false);
 
     const [toast, setToast] = useState<ToastState>({ open: false, message: '', type: 'success' });
     const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') =>
@@ -98,6 +102,8 @@ export function CreateExam() {
                     setTerm(data.term);
                     setSelectedSubjectIds(data.exam_subjects.map(s => s.subject_id));
                     setSelectedProgramIds(data.program_ids ?? []);
+                    setAiAnalysisEnabled(data.ai_analysis_enabled ?? false);
+                    setHasPapers((data.exam_sets?.length ?? 0) > 0);
                 }
                 setIsLoadingExam(false);
             });
@@ -187,11 +193,11 @@ export function CreateExam() {
         setIsSubmitting(true);
 
         if (isEditMode && examId) {
-            const { error } = await updateExam(examId, title, code, selectedSubjectIds, numSets, maxAttempts, academicYear, term, selectedProgramIds);
+            const { error } = await updateExam(examId, title, code, selectedSubjectIds, numSets, maxAttempts, academicYear, term, selectedProgramIds, aiAnalysisEnabled);
             if (error) { setSubmitError(error); setIsSubmitting(false); return; }
             showToast('Exam updated.');
         } else {
-            const { error } = await createExam(title, code, selectedSubjectIds, numSets, maxAttempts, academicYear, term, selectedProgramIds);
+            const { error } = await createExam(title, code, selectedSubjectIds, numSets, maxAttempts, academicYear, term, selectedProgramIds, aiAnalysisEnabled);
             if (error) { setSubmitError(error); setIsSubmitting(false); return; }
             showToast('Exam created successfully.');
         }
@@ -222,31 +228,44 @@ export function CreateExam() {
                 <p>Only the exam title and code are required to save. Subjects, sets, and question allocation can be configured later by editing the exam.</p>
             </div>
 
+            {isEditMode && hasPapers && (
+                <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#fefce8', border: '1px solid #fde047', borderRadius: '10px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                    <svg fill="none" strokeWidth="2" stroke="#ca8a04" viewBox="0 0 24 24" width="18" height="18" style={{ flexShrink: 0, marginTop: '1px' }}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                    </svg>
+                    <div>
+                        <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: '#92400e' }}>Some fields are locked</p>
+                        <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#a16207' }}>Exam papers have been generated. Template, sets, max attempts, and subjects cannot be changed. Delete exam papers in the Papers tab to unlock these fields.</p>
+                    </div>
+                </div>
+            )}
             <form className="cq-form" onSubmit={handleSubmit}>
                 <div className="cq-form-grid">
                     {/* ── Left Column ── */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {/* ── Card 1: Template (optional) ── */}
-                        <div className="cs-card">
-                            <h3 className="cs-card-title">Use a Template <span style={{ fontWeight: 400, color: 'var(--prof-text-muted)', fontSize: '0.85rem' }}>(optional)</span></h3>
-                            <div className="cs-input-field">
-                                <label>Select Template</label>
-                                <select
-                                    value={selectedTemplateId}
-                                    onChange={e => handleTemplateChange(e.target.value)}
-                                >
-                                    <option value="">— No template —</option>
-                                    {templates.map(t => (
-                                        <option key={t.id} value={t.id}>{t.title} ({t.code})</option>
-                                    ))}
-                                </select>
-                                {selectedTemplateId && (
-                                    <p style={{ marginTop: '6px', fontSize: '0.8rem', color: 'var(--prof-text-muted)' }}>
-                                        Template pre-fills title, code, and subjects. Any changes here won't affect the original template.
-                                    </p>
-                                )}
+                        {/* ── Card 1: Template (optional) — hidden when papers already generated ── */}
+                        {!(isEditMode && hasPapers) && (
+                            <div className="cs-card">
+                                <h3 className="cs-card-title">Use a Template <span style={{ fontWeight: 400, color: 'var(--prof-text-muted)', fontSize: '0.85rem' }}>(optional)</span></h3>
+                                <div className="cs-input-field">
+                                    <label>Select Template</label>
+                                    <select
+                                        value={selectedTemplateId}
+                                        onChange={e => handleTemplateChange(e.target.value)}
+                                    >
+                                        <option value="">— No template —</option>
+                                        {templates.map(t => (
+                                            <option key={t.id} value={t.id}>{t.title} ({t.code})</option>
+                                        ))}
+                                    </select>
+                                    {selectedTemplateId && (
+                                        <p style={{ marginTop: '6px', fontSize: '0.8rem', color: 'var(--prof-text-muted)' }}>
+                                            Template pre-fills title, code, and subjects. Any changes here won't affect the original template.
+                                        </p>
+                                    )}
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* ── Card 2: Exam Details ── */}
                         <div className="cs-card">
@@ -274,12 +293,18 @@ export function CreateExam() {
                                 </div>
                                 <div className="cs-input-field" style={{ minWidth: '120px' }}>
                                     <label>Number of Sets <span style={{ fontWeight: 400, color: 'var(--prof-text-muted)' }}>(optional)</span></label>
-                                    <select value={numSets} onChange={e => setNumSets(Number(e.target.value))}>
-                                        <option value={0}>— Not set —</option>
-                                        {[1, 2, 3, 4, 5].map(n => (
-                                            <option key={n} value={n}>{n} Set{n !== 1 ? 's' : ''}</option>
-                                        ))}
-                                    </select>
+                                    {isEditMode && hasPapers ? (
+                                        <div style={{ padding: '9px 12px', background: '#f1f5f9', border: '1px solid var(--prof-border)', borderRadius: '8px', fontSize: '0.9rem', color: 'var(--prof-text-main)', fontWeight: 600 }}>
+                                            {numSets > 0 ? `${numSets} Set${numSets !== 1 ? 's' : ''}` : '— Not set —'}
+                                        </div>
+                                    ) : (
+                                        <select value={numSets} onChange={e => setNumSets(Number(e.target.value))}>
+                                            <option value={0}>— Not set —</option>
+                                            {[1, 2, 3, 4, 5].map(n => (
+                                                <option key={n} value={n}>{n} Set{n !== 1 ? 's' : ''}</option>
+                                            ))}
+                                        </select>
+                                    )}
                                 </div>
                             </div>
                             <div className="cs-input-group row" style={{ marginTop: '14px' }}>
@@ -297,11 +322,17 @@ export function CreateExam() {
                                 </div>
                                 <div className="cs-input-field" style={{ minWidth: '150px' }}>
                                     <label>Max Attempts</label>
-                                    <select value={maxAttempts} onChange={e => setMaxAttempts(Number(e.target.value))}>
-                                        {[1, 2, 3, 4, 5].map(n => (
-                                            <option key={n} value={n}>{n} attempt{n !== 1 ? 's' : ''}</option>
-                                        ))}
-                                    </select>
+                                    {isEditMode && hasPapers ? (
+                                        <div style={{ padding: '9px 12px', background: '#f1f5f9', border: '1px solid var(--prof-border)', borderRadius: '8px', fontSize: '0.9rem', color: 'var(--prof-text-main)', fontWeight: 600 }}>
+                                            {maxAttempts} attempt{maxAttempts !== 1 ? 's' : ''}
+                                        </div>
+                                    ) : (
+                                        <select value={maxAttempts} onChange={e => setMaxAttempts(Number(e.target.value))}>
+                                            {[1, 2, 3, 4, 5].map(n => (
+                                                <option key={n} value={n}>{n} attempt{n !== 1 ? 's' : ''}</option>
+                                            ))}
+                                        </select>
+                                    )}
                                 </div>
                             </div>
                             {numSets > 1 && (
@@ -309,6 +340,15 @@ export function CreateExam() {
                                     All sets contain the same questions, shuffled in a different order per set (Sets A–{String.fromCharCode(64 + numSets)}).
                                 </p>
                             )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '14px', padding: '12px 14px', background: aiAnalysisEnabled ? '#f0fdf4' : 'var(--prof-surface)', border: `1px solid ${aiAnalysisEnabled ? '#86efac' : 'var(--prof-border)'}`, borderRadius: '8px', cursor: 'pointer' }} onClick={() => setAiAnalysisEnabled(v => !v)}>
+                                <div style={{ width: '36px', height: '20px', borderRadius: '999px', background: aiAnalysisEnabled ? '#16a34a' : '#cbd5e1', flexShrink: 0, position: 'relative', transition: 'background 0.2s' }}>
+                                    <div style={{ position: 'absolute', top: '3px', left: aiAnalysisEnabled ? '19px' : '3px', width: '14px', height: '14px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--prof-text-main)' }}>Enable AI-assisted analysis</div>
+                                    <div style={{ fontSize: '0.78rem', color: 'var(--prof-text-muted)', marginTop: '1px' }}>Students receive AI-generated feedback on their weak topics after each attempt.</div>
+                                </div>
+                            </div>
                             <div className="cs-input-group" style={{ marginTop: '14px' }}>
                                 <div className="cs-input-field">
                                     <label>Restrict to Program <span style={{ fontWeight: 400, color: 'var(--prof-text-muted)' }}>(optional)</span></label>
@@ -403,55 +443,56 @@ export function CreateExam() {
                         {/* ── Card 3: Subjects ── */}
                         <div className="cs-card">
                             <h3 className="cs-card-title">Included Subjects <span style={{ fontWeight: 400, color: 'var(--prof-text-muted)', fontSize: '0.85rem' }}>(optional — can be filled later)</span> {statusPill(subjectsOk)}</h3>
-                            <div className="cs-input-field">
-                                <label>Search and Add Subjects</label>
-                                <div className="cq-subject-search" ref={subjectDropdownRef}>
-                                    <div
-                                        className={`cq-subject-trigger ${subjectDropdownOpen ? 'open' : ''}`}
-                                        onClick={() => setSubjectDropdownOpen(!subjectDropdownOpen)}
-                                    >
-                                        <span className="cq-placeholder">Click to search and select subjects...</span>
-                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"></path>
-                                        </svg>
-                                    </div>
-
-                                    {subjectDropdownOpen && (
-                                        <div className="cq-subject-dropdown">
-                                            <input
-                                                type="text"
-                                                className="cq-subject-search-input"
-                                                placeholder="Search subjects..."
-                                                value={subjectSearch}
-                                                onChange={e => setSubjectSearch(e.target.value)}
-                                                autoFocus
-                                            />
-                                            <div className="cq-subject-options">
-                                                {filteredSubjects.length === 0 ? (
-                                                    <div className="cq-subject-no-results">No subjects found</div>
-                                                ) : (
-                                                    filteredSubjects.map(s => {
-                                                        const isSelected = selectedSubjectIds.includes(s.id);
-                                                        return (
-                                                            <div
-                                                                key={s.id}
-                                                                className={`cq-subject-option ${isSelected ? 'selected' : ''}`}
-                                                                onClick={() => handleSelectSubject(s.id)}
-                                                                style={{ opacity: isSelected ? 0.6 : 1, cursor: isSelected ? 'default' : 'pointer' }}
-                                                            >
-                                                                <span className="cq-subject-option-code">{s.course_code}</span>
-                                                                <span>{s.course_title}</span>
-                                                                {isSelected && <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#16a34a' }}>Added</span>}
-                                                            </div>
-                                                        );
-                                                    })
-                                                )}
-                                            </div>
+                            {!(isEditMode && hasPapers) && (
+                                <div className="cs-input-field">
+                                    <label>Search and Add Subjects</label>
+                                    <div className="cq-subject-search" ref={subjectDropdownRef}>
+                                        <div
+                                            className={`cq-subject-trigger ${subjectDropdownOpen ? 'open' : ''}`}
+                                            onClick={() => setSubjectDropdownOpen(!subjectDropdownOpen)}
+                                        >
+                                            <span className="cq-placeholder">Click to search and select subjects...</span>
+                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"></path>
+                                            </svg>
                                         </div>
-                                    )}
-                                </div>
-                            </div>
 
+                                        {subjectDropdownOpen && (
+                                            <div className="cq-subject-dropdown">
+                                                <input
+                                                    type="text"
+                                                    className="cq-subject-search-input"
+                                                    placeholder="Search subjects..."
+                                                    value={subjectSearch}
+                                                    onChange={e => setSubjectSearch(e.target.value)}
+                                                    autoFocus
+                                                />
+                                                <div className="cq-subject-options">
+                                                    {filteredSubjects.length === 0 ? (
+                                                        <div className="cq-subject-no-results">No subjects found</div>
+                                                    ) : (
+                                                        filteredSubjects.map(s => {
+                                                            const isSelected = selectedSubjectIds.includes(s.id);
+                                                            return (
+                                                                <div
+                                                                    key={s.id}
+                                                                    className={`cq-subject-option ${isSelected ? 'selected' : ''}`}
+                                                                    onClick={() => handleSelectSubject(s.id)}
+                                                                    style={{ opacity: isSelected ? 0.6 : 1, cursor: isSelected ? 'default' : 'pointer' }}
+                                                                >
+                                                                    <span className="cq-subject-option-code">{s.course_code}</span>
+                                                                    <span>{s.course_title}</span>
+                                                                    {isSelected && <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#16a34a' }}>Added</span>}
+                                                                </div>
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
 
                             {selectedSubjectIds.length > 0 && (
                                 <div className="selected-subjects-tags" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '16px' }}>
@@ -463,16 +504,18 @@ export function CreateExam() {
                                                 <span style={{ fontSize: '14px', color: '#334155', marginRight: '8px' }}>
                                                     <strong>{subject.course_code}</strong> – {subject.course_title}
                                                 </span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveSubject(id)}
-                                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
-                                                    title="Remove Subject"
-                                                >
-                                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path>
-                                                    </svg>
-                                                </button>
+                                                {!(isEditMode && hasPapers) && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveSubject(id)}
+                                                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
+                                                        title="Remove Subject"
+                                                    >
+                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path>
+                                                        </svg>
+                                                    </button>
+                                                )}
                                             </div>
                                         );
                                     })}

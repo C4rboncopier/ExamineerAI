@@ -10,6 +10,7 @@ export interface StudentExam {
     max_attempts: number;
     num_sets: number;
     program_ids: string[];
+    ai_analysis_enabled: boolean;
     exam_subjects: {
         subject_id: string;
         subjects: { course_code: string; course_title: string } | null;
@@ -17,6 +18,7 @@ export interface StudentExam {
     exam_attempts: {
         attempt_number: number;
         status: 'draft' | 'deployed' | 'done';
+        grades_released: boolean;
     }[];
 }
 
@@ -47,9 +49,9 @@ export async function fetchEnrolledExams(studentId: string): Promise<{ data: Stu
         .from('exam_enrollments')
         .select(`
             exam:exams(
-                id, title, code, academic_year, term, status, max_attempts, num_sets, program_ids,
+                id, title, code, academic_year, term, status, max_attempts, num_sets, program_ids, ai_analysis_enabled,
                 exam_subjects(subject_id, subjects(course_code, course_title)),
-                exam_attempts(attempt_number, status)
+                exam_attempts(attempt_number, status, grades_released)
             )
         `)
         .eq('student_id', studentId);
@@ -63,9 +65,9 @@ export async function fetchEnrolledExamById(examId: string): Promise<{ data: Stu
     const { data, error } = await supabase
         .from('exams')
         .select(`
-            id, title, code, academic_year, term, status, max_attempts, num_sets, program_ids,
+            id, title, code, academic_year, term, status, max_attempts, num_sets, program_ids, ai_analysis_enabled,
             exam_subjects(subject_id, subjects(course_code, course_title)),
-            exam_attempts(attempt_number, status)
+            exam_attempts(attempt_number, status, grades_released)
         `)
         .eq('id', examId)
         .single();

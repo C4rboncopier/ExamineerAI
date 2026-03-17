@@ -32,6 +32,7 @@ export interface Exam {
     status: 'locked' | 'unlocked';
     program_ids: string[];
     exam_subjects: ExamSubject[];
+    ai_analysis_enabled: boolean;
 }
 
 export interface ExamSetDetail {
@@ -46,6 +47,7 @@ export interface ExamAttemptRecord {
     exam_id: string;
     attempt_number: number;
     status: 'draft' | 'deployed' | 'done';
+    grades_released: boolean;
 }
 
 export interface ExamWithSets extends Exam {
@@ -209,7 +211,7 @@ async function generateAndSaveSets(
 export async function fetchExams(): Promise<{ data: Exam[]; error: string | null }> {
     const { data, error } = await supabase
         .from('exams')
-        .select('id, title, code, num_sets, max_attempts, academic_year, term, question_allocation, created_at, status, program_ids, exam_subjects(subject_id, subjects(course_code, course_title))')
+        .select('id, title, code, num_sets, max_attempts, academic_year, term, question_allocation, created_at, status, program_ids, ai_analysis_enabled, exam_subjects(subject_id, subjects(course_code, course_title))')
         .order('created_at', { ascending: false });
 
     if (error) return { data: [], error: error.message };
@@ -220,10 +222,10 @@ export async function fetchExamById(id: string): Promise<{ data: ExamWithSets | 
     const { data, error } = await supabase
         .from('exams')
         .select(`
-            id, title, code, num_sets, max_attempts, academic_year, term, question_allocation, created_at, status, program_ids,
+            id, title, code, num_sets, max_attempts, academic_year, term, question_allocation, created_at, status, program_ids, ai_analysis_enabled,
             exam_subjects(subject_id, subjects(course_code, course_title)),
             exam_sets(id, set_number, attempt_number, question_ids),
-            exam_attempts(id, exam_id, attempt_number, status)
+            exam_attempts(id, exam_id, attempt_number, status, grades_released)
         `)
         .eq('id', id)
         .single();
@@ -240,13 +242,14 @@ export async function createExam(
     maxAttempts: number,
     academicYear: string,
     term: string,
-    programIds: string[] = []
+    programIds: string[] = [],
+    aiAnalysisEnabled: boolean = false
 ): Promise<{ data: Exam | null; error: string | null }> {
     const { data: { user } } = await supabase.auth.getUser();
 
     const { data: exam, error: insertError } = await supabase
         .from('exams')
-        .insert({ title, code, created_by: user?.id, num_sets: numSets, question_allocation: {}, max_attempts: maxAttempts, academic_year: academicYear, term, program_ids: programIds })
+        .insert({ title, code, created_by: user?.id, num_sets: numSets, question_allocation: {}, max_attempts: maxAttempts, academic_year: academicYear, term, program_ids: programIds, ai_analysis_enabled: aiAnalysisEnabled })
         .select('id')
         .single();
 
@@ -282,11 +285,12 @@ export async function updateExam(
     maxAttempts: number,
     academicYear: string,
     term: string,
-    programIds: string[] = []
+    programIds: string[] = [],
+    aiAnalysisEnabled: boolean = false
 ): Promise<{ error: string | null }> {
     const { error: updateError } = await supabase
         .from('exams')
-        .update({ title, code, num_sets: numSets, max_attempts: maxAttempts, academic_year: academicYear, term, program_ids: programIds, updated_at: new Date().toISOString() })
+        .update({ title, code, num_sets: numSets, max_attempts: maxAttempts, academic_year: academicYear, term, program_ids: programIds, ai_analysis_enabled: aiAnalysisEnabled, updated_at: new Date().toISOString() })
         .eq('id', id);
 
     if (updateError) {
@@ -348,6 +352,16 @@ export async function markAttemptDone(examId: string, attemptNumber: number): Pr
     const { error } = await supabase
         .from('exam_attempts')
         .upsert({ exam_id: examId, attempt_number: attemptNumber, status: 'done' }, { onConflict: 'exam_id,attempt_number' });
+    return { error: error?.message ?? null };
+}
+
+export async function releaseAttemptGrades(attemptId: string): Promise<{ error: string | null }> {
+    const { error } = await supabase.from('exam_attempts').update({ grades_released: true }).eq('id', attemptId);
+    return { error: error?.message ?? null };
+}
+
+export async function hideAttemptGrades(attemptId: string): Promise<{ error: string | null }> {
+    const { error } = await supabase.from('exam_attempts').update({ grades_released: false }).eq('id', attemptId);
     return { error: error?.message ?? null };
 }
 

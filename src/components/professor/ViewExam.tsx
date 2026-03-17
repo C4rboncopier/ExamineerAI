@@ -5,12 +5,13 @@ import {
     fetchExamById, lockExam, unlockExam, deleteExam,
     generateExamPapersForAttempt, deleteAttemptPapers,
     deployAttempt, markAttemptDone,
+    releaseAttemptGrades, hideAttemptGrades,
 } from '../../lib/exams';
 import type { ExamWithSets, ExamSetDetail, AllocationConfig } from '../../lib/exams';
 import { fetchQuestionsByIds, fetchQuestionsBySubject } from '../../lib/questions';
 import type { QuestionSummary, QuestionWithOutcomes } from '../../lib/questions';
 import { printExam } from '../../lib/printExam';
-import { fetchSchoolInfo, fetchAcademicYear, fetchSemester } from '../../lib/settings';
+import { fetchSchoolInfo, fetchAcademicYear, fetchSemester, fetchPassingRate } from '../../lib/settings';
 import { Popup } from '../common/Popup';
 import { LoadingOverlay } from '../common/LoadingOverlay';
 import { ExamStudents } from './ExamStudents';
@@ -52,6 +53,14 @@ const SET_LABELS = ['A', 'B', 'C', 'D', 'E'];
 const CHOICE_LABELS = ['A', 'B', 'C', 'D'];
 const ITEMS_PER_PAGE = 20;
 const GRADES_PER_PAGE = 10;
+
+function getGradeColors(pct: number, passingRate: number) {
+    if (pct < passingRate) return { text: '#b91c1c', bg: '#fee2e2', border: '#fca5a5', solid: '#dc2626' };
+    if (pct < 75) return { text: '#ea580c', bg: '#ffedd5', border: '#fdba74', solid: '#f97316' };
+    if (pct < 85) return { text: '#ca8a04', bg: '#fef9c3', border: '#fde047', solid: '#eab308' };
+    if (pct < 95) return { text: '#15803d', bg: '#dcfce7', border: '#86efac', solid: '#16a34a' };
+    return { text: '#14532d', bg: '#bbf7d0', border: '#4ade80', solid: '#15803d' };
+}
 
 type Tab = 'overview' | 'papers' | 'students' | 'scan';
 
@@ -116,6 +125,12 @@ export function ViewExam() {
     const [schoolAy, setSchoolAy] = useState('');
     const [schoolSem, setSchoolSem] = useState('');
 
+    // ── Passing rate (from admin settings) ──
+    const [passingRate, setPassingRate] = useState(60);
+
+    // ── Grade release ──
+    const [isTogglingRelease, setIsTogglingRelease] = useState<number | null>(null);
+
     // ── Grades ──
     const [gradesData, setGradesData] = useState<Record<number, AttemptGradeRow[]>>({});
     const [isLoadingGrades, setIsLoadingGrades] = useState(false);
@@ -146,6 +161,7 @@ export function ViewExam() {
         });
         fetchAcademicYear().then(({ value }) => { if (value) setSchoolAy(value); });
         fetchSemester().then(({ value }) => { if (value) setSchoolSem(value); });
+        fetchPassingRate().then(({ value }) => { if (value !== null) setPassingRate(value); });
     }, []);
 
     const loadExam = useCallback(async () => {
@@ -210,6 +226,14 @@ export function ViewExam() {
         if (!exam) return {} as Record<number, 'draft' | 'deployed' | 'done'>;
         const map: Record<number, 'draft' | 'deployed' | 'done'> = {};
         exam.exam_attempts.forEach(a => { map[a.attempt_number] = a.status; });
+        return map;
+    }, [exam]);
+
+    // ── Attempt grades-released map ──
+    const attemptGradesReleasedMap = useMemo(() => {
+        if (!exam) return {} as Record<number, { released: boolean; id: string }>;
+        const map: Record<number, { released: boolean; id: string }> = {};
+        exam.exam_attempts.forEach(a => { map[a.attempt_number] = { released: a.grades_released, id: a.id }; });
         return map;
     }, [exam]);
 
@@ -296,6 +320,28 @@ export function ViewExam() {
         if (error) { alert(`Failed: ${error}`); return; }
         setExam(prev => prev ? { ...prev, status: 'locked' as const } : prev);
         setIsLockConfirmOpen(false);
+    };
+
+    const handleToggleGradeRelease = async (attemptNumber: number) => {
+        const info = attemptGradesReleasedMap[attemptNumber];
+        if (!info) return;
+        setIsTogglingRelease(attemptNumber);
+        const { error } = info.released
+            ? await hideAttemptGrades(info.id)
+            : await releaseAttemptGrades(info.id);
+        setIsTogglingRelease(null);
+        if (error) { alert(`Failed: ${error}`); return; }
+        setExam(prev => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                exam_attempts: prev.exam_attempts.map(a =>
+                    a.attempt_number === attemptNumber
+                        ? { ...a, grades_released: !a.grades_released }
+                        : a
+                ),
+            };
+        });
     };
 
     const handleDeployAttempt = async (attemptNumber: number) => {
@@ -657,6 +703,27 @@ export function ViewExam() {
                                                                 </svg>
                                                                 Scan
                                                             </button>
+                                                            {(() => {
+                                                                const releaseInfo = attemptGradesReleasedMap[attempt_number];
+                                                                const isReleased = releaseInfo?.released ?? false;
+                                                                const isToggling = isTogglingRelease === attempt_number;
+                                                                return (
+                                                                    <button
+                                                                        className="btn-secondary"
+                                                                        disabled={isToggling}
+                                                                        onClick={() => handleToggleGradeRelease(attempt_number)}
+                                                                        style={{ padding: '4px 10px', fontSize: '0.77rem', height: '26px', display: 'inline-flex', alignItems: 'center', gap: '4px', color: isReleased ? '#15803d' : 'var(--prof-text-main)', borderColor: isReleased ? '#86efac' : undefined, background: isReleased ? '#f0fdf4' : undefined, opacity: isToggling ? 0.6 : 1 }}
+                                                                        title={isReleased ? 'Grades are visible to students — click to hide' : 'Grades are hidden from students — click to release'}
+                                                                    >
+                                                                        {isReleased ? (
+                                                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                                                        ) : (
+                                                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
+                                                                        )}
+                                                                        {isToggling ? '...' : isReleased ? 'Grades Released' : 'Release Grades'}
+                                                                    </button>
+                                                                );
+                                                            })()}
                                                         </>
                                                     )}
                                                 </div>
@@ -729,10 +796,8 @@ export function ViewExam() {
                                                                                 <td style={{ padding: '7px 10px', textAlign: 'center' }}>
                                                                                     {submission?.score != null ? (() => {
                                                                                         const pct = (submission.total_items ?? 0) > 0 ? Math.round((submission.score / submission.total_items!) * 100) : 0;
-                                                                                        const pctColor = pct >= 75 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626';
-                                                                                        const pctBg = pct >= 75 ? '#f0fdf4' : pct >= 50 ? '#fffbeb' : '#fff1f2';
-                                                                                        const pctBdr = pct >= 75 ? '#bbf7d0' : pct >= 50 ? '#fde68a' : '#fecaca';
-                                                                                        return <span style={{ fontSize: '0.78rem', fontWeight: 600, color: pctColor, background: pctBg, border: `1px solid ${pctBdr}`, borderRadius: '8px', padding: '2px 7px' }}>{pct}%</span>;
+                                                                                        const gc = getGradeColors(pct, passingRate);
+                                                                                        return <span style={{ fontSize: '0.78rem', fontWeight: 600, color: gc.text, background: gc.bg, border: `1px solid ${gc.border}`, borderRadius: '8px', padding: '2px 7px' }}>{pct}%</span>;
                                                                                     })() : <span style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>—</span>}
                                                                                 </td>
                                                                                 <td style={{ padding: '7px 16px 7px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -763,7 +828,7 @@ export function ViewExam() {
                                                                                                 });
                                                                                                 const total = answerKey.questionIds.length;
                                                                                                 const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
-                                                                                                const pctColor = pct >= 75 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626';
+                                                                                                const pctColor = getGradeColors(pct, passingRate).text;
                                                                                                 return (
                                                                                                     <>
                                                                                                         {/* ── Header ── */}
@@ -877,8 +942,7 @@ export function ViewExam() {
                         {/* Action buttons */}
                         <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '6px', borderBottom: '1px solid var(--prof-border)' }}>
                             <button
-                                className="btn-secondary"
-                                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start' }}
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', fontWeight: 600, borderRadius: '7px', border: '1px solid #93c5fd', background: '#dbeafe', color: '#1e40af', cursor: 'pointer' }}
                                 onClick={() => navigate(`/professor/exams/${exam.id}/edit`)}
                             >
                                 <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>
@@ -886,8 +950,7 @@ export function ViewExam() {
                             </button>
                             {exam.status === 'locked' ? (
                                 <button
-                                    className="btn-secondary"
-                                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', color: '#16a34a', borderColor: '#86efac' }}
+                                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', fontWeight: 600, borderRadius: '7px', border: '1px solid #86efac', background: '#dcfce7', color: '#166534', cursor: 'pointer' }}
                                     onClick={() => setIsUnlockConfirmOpen(true)}
                                 >
                                     <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
@@ -895,8 +958,7 @@ export function ViewExam() {
                                 </button>
                             ) : (
                                 <button
-                                    className="btn-secondary"
-                                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', color: '#b45309', borderColor: '#fcd34d' }}
+                                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', fontWeight: 600, borderRadius: '7px', border: '1px solid #fcd34d', background: '#fef3c7', color: '#92400e', cursor: 'pointer' }}
                                     onClick={() => setIsLockConfirmOpen(true)}
                                 >
                                     <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
@@ -904,8 +966,7 @@ export function ViewExam() {
                                 </button>
                             )}
                             <button
-                                className="btn-secondary"
-                                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', color: '#dc2626', borderColor: '#fca5a5' }}
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', fontWeight: 600, borderRadius: '7px', border: '1px solid #fca5a5', background: '#fee2e2', color: '#991b1b', cursor: 'pointer' }}
                                 onClick={() => setIsDeleteConfirmOpen(true)}
                             >
                                 <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg>
@@ -1687,6 +1748,7 @@ export function ViewExam() {
                         <OMRScanner
                             examId={exam.id}
                             attemptNumber={effectiveAttempt}
+                            numSets={exam.num_sets}
                             enrollments={(gradesData[effectiveAttempt] ?? []).map(r => r.enrollment)}
                             existingGrades={gradesData[effectiveAttempt] ?? []}
                             onComplete={loadGradesOnly}

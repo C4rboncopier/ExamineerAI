@@ -10,6 +10,9 @@ import { createQuestion, updateQuestion, fetchQuestionById } from '../../lib/que
 import { generateQuestionVariations } from '../../lib/gemini';
 import type { GeneratedQuestion } from '../../lib/gemini';
 import { Toast } from '../common/Toast';
+import { useAuth } from '../../contexts/AuthContext';
+import { fetchAiDailyLimit } from '../../lib/settings';
+import { fetchTodayAiUsage, logAiGeneration } from '../../lib/aiUsage';
 
 function escapeHtml(str: string): string {
     return str
@@ -49,6 +52,7 @@ function MathPreview({ text }: { text: string }) {
 export function CreateQuestion() {
     const { subjectId, questionId } = useParams<{ subjectId?: string; questionId?: string }>();
     const navigate = useNavigate();
+    const { user } = useAuth();
 
     const [isLoadingQuestion, setIsLoadingQuestion] = useState(false);
     const [initialData, setInitialData] = useState<QuestionData | null>(null);
@@ -83,6 +87,10 @@ export function CreateQuestion() {
     const [includedVariations, setIncludedVariations] = useState<Set<number>>(new Set());
     const [showAiDisableConfirm, setShowAiDisableConfirm] = useState(false);
 
+    // AI daily limit
+    const [aiDailyLimit, setAiDailyLimit] = useState<number | null>(null);
+    const [aiUsedToday, setAiUsedToday] = useState(0);
+
     const goBack = () => {
         if (subjectId) {
             navigate(`/professor/subjects/${subjectId}/question-bank`);
@@ -112,6 +120,15 @@ export function CreateQuestion() {
             setIsLoadingQuestion(false);
         });
     }, [questionId]);
+
+    // Fetch AI daily limit and today's usage
+    useEffect(() => {
+        if (!user) return;
+        Promise.all([fetchAiDailyLimit(), fetchTodayAiUsage(user.id)]).then(([limitRes, usageRes]) => {
+            setAiDailyLimit(limitRes.value);
+            setAiUsedToday(usageRes.used);
+        });
+    }, [user]);
 
     // Fetch subjects for dropdown
     useEffect(() => {
@@ -293,7 +310,11 @@ export function CreateQuestion() {
         setGenerateError(null);
     };
 
+    const aiRemaining = aiDailyLimit !== null ? Math.max(0, aiDailyLimit - aiUsedToday) : null;
+    const isOverLimit = aiRemaining !== null && aiCount > aiRemaining;
+
     const handleGenerateVariations = async () => {
+        if (isOverLimit) return;
         setIsGenerating(true);
         setGenerateError(null);
         setGeneratedVariations([]);
@@ -303,6 +324,11 @@ export function CreateQuestion() {
         if (error) { setGenerateError(error); return; }
         setGeneratedVariations(data);
         setIncludedVariations(new Set(data.map((_, i) => i)));
+        // Log usage
+        if (user) {
+            logAiGeneration(user.id, aiCount);
+            setAiUsedToday(prev => prev + aiCount);
+        }
     };
 
     if (isLoadingQuestion) {
@@ -578,7 +604,7 @@ export function CreateQuestion() {
                                 </label>
                             </div>
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
                                 <label style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--prof-text-main)', whiteSpace: 'nowrap' }}>
                                     Number of variations
                                 </label>
@@ -594,7 +620,7 @@ export function CreateQuestion() {
                                     type="button"
                                     className="btn-primary"
                                     onClick={handleGenerateVariations}
-                                    disabled={!canGenerate || isGenerating}
+                                    disabled={!canGenerate || isGenerating || isOverLimit}
                                     style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                                 >
                                     {isGenerating ? (
@@ -606,11 +632,27 @@ export function CreateQuestion() {
                                         </>
                                     ) : 'Generate Variations'}
                                 </button>
+                                {aiRemaining !== null && (
+                                    <span style={{
+                                        fontSize: '0.8rem', fontWeight: 600, padding: '4px 10px', borderRadius: '999px',
+                                        background: aiRemaining === 0 ? '#fee2e2' : aiRemaining <= 5 ? '#fef3c7' : '#f0fdf4',
+                                        color: aiRemaining === 0 ? '#b91c1c' : aiRemaining <= 5 ? '#92400e' : '#15803d',
+                                        border: `1px solid ${aiRemaining === 0 ? '#fca5a5' : aiRemaining <= 5 ? '#fde68a' : '#bbf7d0'}`,
+                                        whiteSpace: 'nowrap',
+                                    }}>
+                                        {aiRemaining} / {aiDailyLimit} remaining today
+                                    </span>
+                                )}
                             </div>
 
                             {!canGenerate && (
-                                <p style={{ fontSize: '0.8rem', color: 'var(--prof-text-muted)', marginBottom: '12px', marginTop: '-8px' }}>
+                                <p style={{ fontSize: '0.8rem', color: 'var(--prof-text-muted)', marginBottom: '12px', marginTop: '4px' }}>
                                     Fill in all required fields above before generating.
+                                </p>
+                            )}
+                            {isOverLimit && (
+                                <p style={{ fontSize: '0.8rem', color: '#b91c1c', marginBottom: '12px', marginTop: '4px' }}>
+                                    Daily limit reached. You can generate at most {aiRemaining} more question{aiRemaining !== 1 ? 's' : ''} today.
                                 </p>
                             )}
 

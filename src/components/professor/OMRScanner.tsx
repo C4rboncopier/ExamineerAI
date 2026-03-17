@@ -15,7 +15,7 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type ScanMode = 'camera' | 'image' | 'zip';
+type ScanMode = 'camera' | 'image' | 'zip' | 'manual';
 type GradeDecision = 'partial' | 'verified';
 type GradeStatus = 'verified' | 'partial' | 'no_match' | 'no_set' | 'server_error' | 'omr_error';
 
@@ -55,6 +55,7 @@ interface ScanRow {
 interface Props {
     examId: string;
     attemptNumber: number;
+    numSets: number;
     enrollments: EnrolledStudentFull[];
     existingGrades?: AttemptGradeRow[];   // already-saved submissions for duplicate detection
     onComplete: () => void;
@@ -66,7 +67,7 @@ const ANSWER_LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function OMRScanner({ examId, attemptNumber, enrollments, existingGrades, onComplete }: Props) {
+export default function OMRScanner({ examId, attemptNumber, numSets, enrollments, existingGrades, onComplete }: Props) {
     const [mode, setMode] = useState<ScanMode>('camera');
     const serverUrl = '/omr';
 
@@ -96,6 +97,17 @@ export default function OMRScanner({ examId, attemptNumber, enrollments, existin
 
     // ── ZIP ───────────────────────────────────────────────────────────────────
     const [zipFile, setZipFile] = useState<File | null>(null);
+
+    // ── Manual input ──────────────────────────────────────────────────────────
+    const [manualStudentSearch, setManualStudentSearch] = useState('');
+    const [manualStudentId, setManualStudentId] = useState<string>('');
+    const [manualSetNumber, setManualSetNumber] = useState(1);
+    const [manualAnswerKey, setManualAnswerKey] = useState<SetAnswerKey | null>(null);
+    const [manualAnswers, setManualAnswers] = useState<string[]>([]);
+    const [isLoadingManualKey, setIsLoadingManualKey] = useState(false);
+    const [manualKeyError, setManualKeyError] = useState<string | null>(null);
+    const [isSavingManual, setIsSavingManual] = useState(false);
+    const [manualSaveError, setManualSaveError] = useState<string | null>(null);
 
     // ── Responsive ────────────────────────────────────────────────────────────
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
@@ -604,6 +616,62 @@ export default function OMRScanner({ examId, attemptNumber, enrollments, existin
         }
     }
 
+    // ── Manual input handlers ─────────────────────────────────────────────────
+
+    async function handleLoadManualKey() {
+        setIsLoadingManualKey(true);
+        setManualKeyError(null);
+        setManualAnswerKey(null);
+        setManualAnswers([]);
+        const { data: answerKey, error } = await fetchSetAnswerKey(examId, attemptNumber, manualSetNumber);
+        if (error || !answerKey) {
+            setManualKeyError(error ?? 'Set not found');
+            setIsLoadingManualKey(false);
+            return;
+        }
+        setManualAnswerKey(answerKey);
+        setManualAnswers(Array(answerKey.questionIds.length).fill(''));
+        setIsLoadingManualKey(false);
+    }
+
+    async function handleManualSubmit() {
+        if (!manualAnswerKey || !manualStudentId || isSavingManual) return;
+        setIsSavingManual(true);
+        setManualSaveError(null);
+        const student = enrollments.find(e => e.student_id === manualStudentId) ?? null;
+        const { score, totalItems, answers } = gradeOMR(manualAnswerKey.questionIds, manualAnswers, manualAnswerKey.questions);
+        const { error: saveError } = await saveOMRSubmission({
+            examId,
+            studentId: manualStudentId,
+            attemptNumber,
+            setNumber: manualSetNumber,
+            answers,
+            score,
+            totalItems,
+        });
+        if (saveError) {
+            setManualSaveError(saveError);
+            setIsSavingManual(false);
+            return;
+        }
+        const setLetter = ANSWER_LETTERS[manualSetNumber - 1] ?? 'A';
+        const row: ScanRow = {
+            omrResult: { roll_number: student?.student?.student_id ?? '', exam_set: setLetter, answers: manualAnswers },
+            student,
+            gradeStatus: 'verified',
+            score,
+            totalItems,
+            examSet: setLetter,
+            decision: 'verified',
+        };
+        setResults(prev => [...prev, row]);
+        onComplete();
+        setManualStudentId('');
+        setManualStudentSearch('');
+        setManualAnswers(Array(manualAnswerKey.questionIds.length).fill(''));
+        setIsSavingManual(false);
+    }
+
     // ── Styles ────────────────────────────────────────────────────────────────
 
     function statusBadge(status: GradeStatus) {
@@ -950,8 +1018,8 @@ export default function OMRScanner({ examId, attemptNumber, enrollments, existin
                         )}
                         <button
                             onClick={() => handleDecision('verified')}
-                            disabled={isSaving || !!currentPending.isComputing}
-                            style={{ ...btnPrimary, background: '#16a34a', ...(isSaving || currentPending.isComputing ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+                            disabled={isSaving || !!currentPending.isComputing || !currentPending.computed?.student}
+                            style={{ ...btnPrimary, background: '#16a34a', ...(isSaving || currentPending.isComputing || !currentPending.computed?.student ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
                         >
                             {isSaving ? 'Saving…' : '✓ Check'}
                         </button>
@@ -990,6 +1058,14 @@ export default function OMRScanner({ examId, attemptNumber, enrollments, existin
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
                                 </svg>
                                 Batch ZIP
+                            </span>
+                        </button>
+                        <button style={modeTabStyle(mode === 'manual')} onClick={() => setMode('manual')}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                                </svg>
+                                Manual Input
                             </span>
                         </button>
                     </div>
@@ -1135,6 +1211,195 @@ export default function OMRScanner({ examId, attemptNumber, enrollments, existin
                                 </svg>
                                 {isProcessing ? 'Processing…' : 'Process All Sheets'}
                             </button>
+                        </div>
+                    )}
+
+                    {/* ── Manual input mode ── */}
+                    {mode === 'manual' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            {/* Student search */}
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--prof-text-muted, #64748b)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px' }}>
+                                    Search Student
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="Search by name or student ID..."
+                                    value={manualStudentSearch}
+                                    onChange={e => { setManualStudentSearch(e.target.value); setManualStudentId(''); }}
+                                    style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--prof-border, #e2e8f0)', borderRadius: '6px', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                                />
+                                {manualStudentSearch.trim() && !manualStudentId && (() => {
+                                    const q = manualStudentSearch.toLowerCase();
+                                    const matches = enrollments.filter(e =>
+                                        e.student?.full_name?.toLowerCase().includes(q) ||
+                                        e.student?.student_id?.toLowerCase().includes(q)
+                                    ).slice(0, 8);
+                                    if (matches.length === 0) return (
+                                        <div style={{ padding: '8px 10px', fontSize: '0.85rem', color: 'var(--prof-text-muted, #64748b)', border: '1px solid var(--prof-border, #e2e8f0)', borderTop: 'none', borderRadius: '0 0 6px 6px' }}>No students found</div>
+                                    );
+                                    return (
+                                        <div style={{ border: '1px solid var(--prof-border, #e2e8f0)', borderTop: 'none', borderRadius: '0 0 6px 6px', background: '#fff', maxHeight: '200px', overflowY: 'auto' }}>
+                                            {matches.map(e => (
+                                                <button
+                                                    key={e.student_id}
+                                                    onClick={() => { setManualStudentId(e.student_id); setManualStudentSearch(e.student?.full_name ?? e.student_id); }}
+                                                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', background: 'none', border: 'none', borderBottom: '1px solid var(--prof-border, #e2e8f0)', cursor: 'pointer', fontSize: '0.85rem' }}
+                                                >
+                                                    <span style={{ fontWeight: 600 }}>{e.student?.full_name ?? '—'}</span>
+                                                    <span style={{ marginLeft: '8px', fontSize: '0.78rem', color: 'var(--prof-text-muted, #64748b)', fontFamily: 'monospace' }}>{e.student?.student_id}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    );
+                                })()}
+                                {manualStudentId && (
+                                    <div style={{ marginTop: '4px', fontSize: '0.8rem', color: '#16a34a', fontWeight: 500 }}>
+                                        ✓ Student selected
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Set selector + Load button */}
+                            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--prof-text-muted, #64748b)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px' }}>
+                                        Exam Set
+                                    </label>
+                                    <select
+                                        value={manualSetNumber}
+                                        onChange={e => { setManualSetNumber(Number(e.target.value)); setManualAnswerKey(null); setManualAnswers([]); setManualKeyError(null); }}
+                                        style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--prof-border, #e2e8f0)', borderRadius: '6px', fontSize: '0.9rem' }}
+                                    >
+                                        {Array.from({ length: numSets }, (_, i) => (
+                                            <option key={i + 1} value={i + 1}>Set {ANSWER_LETTERS[i] ?? String(i + 1)}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <button
+                                    onClick={handleLoadManualKey}
+                                    disabled={isLoadingManualKey}
+                                    style={{ ...btnPrimary, ...(isLoadingManualKey ? { opacity: 0.5, cursor: 'not-allowed' } : {}), whiteSpace: 'nowrap' }}
+                                >
+                                    {isLoadingManualKey ? 'Loading…' : 'Load Answer Sheet'}
+                                </button>
+                            </div>
+
+                            {manualKeyError && (
+                                <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', color: '#dc2626', fontSize: '0.85rem' }}>
+                                    {manualKeyError}
+                                </div>
+                            )}
+
+                            {/* Answer grid + submit */}
+                            {manualAnswerKey && (
+                                <>
+                                    {/* Duplicate warning */}
+                                    {manualStudentId && existingGrades?.find(g => g.enrollment.student_id === manualStudentId && g.submission != null) && (
+                                        <div style={{ padding: '10px 14px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '8px', color: '#92400e', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                                            This student already has a saved grade. Submitting will overwrite it.
+                                        </div>
+                                    )}
+
+                                    <div style={{ padding: '14px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid var(--prof-border, #e2e8f0)', overflow: 'hidden' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                                            <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--prof-text-muted, #64748b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                                Answer Grid — click to cycle (A→B→C→D→E→blank)
+                                            </span>
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>
+                                                Score: {manualAnswers.filter((a, i) => {
+                                                    const qId = manualAnswerKey.questionIds[i];
+                                                    const correct = qId != null ? ANSWER_LETTERS[manualAnswerKey.questions[qId]?.correct_choice ?? -1] : '';
+                                                    return a !== '' && a === correct;
+                                                }).length} / {manualAnswerKey.questionIds.length}
+                                            </span>
+                                        </div>
+                                        <div style={{ overflowX: 'auto' }}>
+                                            <table style={{ borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ padding: '4px 8px', color: 'var(--prof-text-muted, #94a3b8)', fontWeight: 500, fontSize: '0.72rem' }}>Base</th>
+                                                        {Array.from({ length: 10 }, (_, i) => (
+                                                            <th key={i} style={{ padding: '4px 4px', color: 'var(--prof-text-muted, #94a3b8)', fontWeight: 500, textAlign: 'center', minWidth: '34px', fontSize: '0.72rem' }}>+{i + 1}</th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {Array.from({ length: Math.ceil(manualAnswerKey.questionIds.length / 10) }, (_, row) => (
+                                                        <tr key={row}>
+                                                            <td style={{ padding: '3px 8px', color: 'var(--prof-text-muted, #94a3b8)', fontWeight: 500, fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                                                                Q{row * 10}
+                                                            </td>
+                                                            {Array.from({ length: 10 }, (_, col) => {
+                                                                const idx = row * 10 + col;
+                                                                if (idx >= manualAnswerKey.questionIds.length) return <td key={col} />;
+                                                                const letter = manualAnswers[idx] ?? '';
+                                                                const qId = manualAnswerKey.questionIds[idx];
+                                                                const correctNum = qId != null ? manualAnswerKey.questions[qId]?.correct_choice : undefined;
+                                                                const correctLetter = correctNum != null ? ANSWER_LETTERS[correctNum] : '';
+                                                                const isCorrect = letter !== '' && correctLetter !== '' && letter === correctLetter;
+                                                                const isWrong = letter !== '' && correctLetter !== '' && letter !== correctLetter;
+                                                                const bg = isCorrect ? '#dcfce7' : isWrong ? '#fee2e2' : letter ? '#f1f5f9' : '#fff';
+                                                                const borderColor = isCorrect ? '#86efac' : isWrong ? '#fca5a5' : 'var(--prof-border, #e2e8f0)';
+                                                                const textColor = isCorrect ? '#15803d' : isWrong ? '#dc2626' : letter ? '#1e293b' : '#cbd5e1';
+                                                                return (
+                                                                    <td key={col} style={{ padding: '2px 3px', textAlign: 'center' }}>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                const pos = ANSWER_LETTERS.indexOf(letter);
+                                                                                const next = pos >= ANSWER_LETTERS.length - 1 ? '' : (ANSWER_LETTERS[pos + 1] ?? ANSWER_LETTERS[0]);
+                                                                                const newAnswers = [...manualAnswers];
+                                                                                newAnswers[idx] = next;
+                                                                                setManualAnswers(newAnswers);
+                                                                            }}
+                                                                            title={`Q${idx + 1}${correctLetter ? ` — Correct: ${correctLetter}` : ''}`}
+                                                                            style={{
+                                                                                width: '30px', height: '34px',
+                                                                                border: `1px solid ${borderColor}`,
+                                                                                borderRadius: '4px',
+                                                                                background: bg,
+                                                                                cursor: 'pointer',
+                                                                                fontWeight: letter ? 700 : 400,
+                                                                                fontSize: '0.75rem',
+                                                                                color: textColor,
+                                                                                display: 'flex', flexDirection: 'column',
+                                                                                alignItems: 'center', justifyContent: 'center',
+                                                                                padding: '1px',
+                                                                            }}
+                                                                        >
+                                                                            <span>{letter || '—'}</span>
+                                                                            {correctLetter && (
+                                                                                <span style={{ fontSize: '0.55rem', lineHeight: 1, color: isCorrect ? '#15803d' : '#dc2626' }}>
+                                                                                    {isCorrect ? '✓' : correctLetter}
+                                                                                </span>
+                                                                            )}
+                                                                        </button>
+                                                                    </td>
+                                                                );
+                                                            })}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    {manualSaveError && (
+                                        <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', color: '#dc2626', fontSize: '0.85rem' }}>
+                                            {manualSaveError}
+                                        </div>
+                                    )}
+
+                                    <button
+                                        onClick={handleManualSubmit}
+                                        disabled={!manualStudentId || isSavingManual}
+                                        style={{ ...btnPrimary, ...(!manualStudentId || isSavingManual ? { opacity: 0.5, cursor: 'not-allowed' } : {}), alignSelf: 'flex-start' }}
+                                    >
+                                        {isSavingManual ? 'Saving…' : 'Submit Grade'}
+                                    </button>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>

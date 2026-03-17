@@ -81,7 +81,8 @@ function App() {
             <Route path="/student" element={<StudentDashboard />}>
               <Route index element={<Navigate to="exams" replace />} />
               <Route path="exams" element={<StudentExamsList />} />
-              <Route path="exams/:examId" element={<StudentViewExam />} />
+              <Route path="exams/:examId" element={<Navigate to="gradebook" replace />} />
+              <Route path="exams/:examId/:tab" element={<StudentViewExam />} />
               <Route path="grades" element={<StudentGradesList />} />
               <Route path="settings" element={<StudentSettings />} />
             </Route>

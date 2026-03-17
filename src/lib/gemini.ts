@@ -1,3 +1,8 @@
+export interface AnalysisFeedback {
+    summary: string;
+    recommendations: string[];
+}
+
 export interface GeneratedQuestion {
     question_text: string;
     choices: string[];
@@ -99,6 +104,96 @@ Rules:
 
     if (!Array.isArray(parsed)) {
         return { data: [], error: 'Gemini returned unexpected data format.' };
+    }
+
+    return { data: parsed, error: null };
+}
+
+export async function generateStudentAnalysis(
+    examTitle: string,
+    weakAreas: { coTitle: string; moDescription: string; pctCorrect: number; incorrectCount: number; totalCount: number }[],
+    attemptsSummary: { attemptNumber: number; score: number; total: number }[],
+    isOverall: boolean
+): Promise<{ data: AnalysisFeedback | null; error: string | null }> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+    if (!apiKey) {
+        return { data: null, error: 'Gemini API key not configured.' };
+    }
+
+    const attemptsText = attemptsSummary
+        .map(a => `Attempt ${a.attemptNumber}: ${a.score}/${a.total} (${((a.score / a.total) * 100).toFixed(0)}%)`)
+        .join('\n');
+    const weakAreasText = weakAreas.length > 0
+        ? weakAreas.map(w => `- ${w.coTitle} > ${w.moDescription}: ${w.incorrectCount}/${w.totalCount} incorrect (${(100 - w.pctCorrect).toFixed(0)}% error rate)`).join('\n')
+        : 'None identified.';
+
+    const scope = isOverall ? 'all attempts combined' : 'this attempt';
+    const prompt = `You are an educational assistant analyzing a student's exam performance.
+
+Exam: "${examTitle}"
+Scope: ${scope}
+
+${isOverall ? 'Attempts:\n' + attemptsText : 'Score: ' + attemptsText}
+
+Weak areas (topics with incorrect answers):
+${weakAreasText}
+
+Provide:
+1. A brief summary (2-3 sentences) of the student's main areas of struggle based on the weak areas above.
+2. Exactly 3 to 5 specific, actionable study recommendations to improve performance.
+
+Keep the tone constructive and encouraging. Focus only on the identified weak areas.`;
+
+    const body = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: 'object',
+                properties: {
+                    summary: { type: 'string' },
+                    recommendations: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 5 },
+                },
+                required: ['summary', 'recommendations'],
+            },
+        },
+    };
+
+    let response: Response;
+    try {
+        response = await fetch(`${GEMINI_BASE_ENDPOINT}/${GEMINI_MODEL_LITE}:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+    } catch {
+        return { data: null, error: 'Network error: could not reach Gemini API.' };
+    }
+
+    if (!response.ok) {
+        const text = await response.text().catch(() => response.statusText);
+        return { data: null, error: `Gemini API error (${response.status}): ${text}` };
+    }
+
+    let json: unknown;
+    try {
+        json = await response.json();
+    } catch {
+        return { data: null, error: 'Failed to parse Gemini API response.' };
+    }
+
+    const candidate = (json as { candidates?: { content?: { parts?: { text?: string }[] } }[] })
+        ?.candidates?.[0];
+    const rawText = candidate?.content?.parts?.[0]?.text;
+    if (!rawText) {
+        return { data: null, error: 'Gemini returned an empty response.' };
+    }
+
+    let parsed: AnalysisFeedback;
+    try {
+        parsed = JSON.parse(rawText) as AnalysisFeedback;
+    } catch {
+        return { data: null, error: 'Gemini returned malformed JSON.' };
     }
 
     return { data: parsed, error: null };

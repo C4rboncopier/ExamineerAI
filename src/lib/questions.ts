@@ -294,3 +294,15 @@ export async function deleteQuestion(
 
   return { error: null };
 }
+
+export async function fetchQuestionsWithOutcomesByIds(
+  ids: string[]
+): Promise<{ data: QuestionWithOutcomes[]; error: string | null }> {
+  if (ids.length === 0) return { data: [], error: null };
+  const { data, error } = await supabase
+    .from('questions')
+    .select('id, subject_id, correct_choice, course_outcome_id, module_outcome_id, course_outcomes(id, title, order_index), module_outcomes(id, description, order_index)')
+    .in('id', ids);
+  if (error) return { data: [], error: error.message };
+  return { data: data as unknown as QuestionWithOutcomes[], error: null };
+}

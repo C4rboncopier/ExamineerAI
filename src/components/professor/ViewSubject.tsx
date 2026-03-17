@@ -96,7 +96,7 @@ export function ViewSubject() {
                                 borderBottom: `2px solid ${isActive ? 'var(--prof-primary)' : 'transparent'}`,
                                 marginBottom: '-2px',
                                 color: isActive ? 'var(--prof-primary)' : 'var(--prof-text-muted)',
-                                fontWeight: isActive ? 700 : 500,
+                                fontWeight: 600,
                                 fontSize: '0.9rem',
                                 transition: 'all 0.15s',
                             }}
