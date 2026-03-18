@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { fetchEnrolledExamById, fetchStudentSubmissions, saveSubmissionAiAnalysis, getStudentExamStatus } from '../../lib/studentExams';
-import type { StudentExam, StudentSubmission } from '../../lib/studentExams';
+import { fetchEnrolledExamById, fetchStudentSubmissions, saveSubmissionAiAnalysis, getStudentExamStatus, fetchExamRoster } from '../../lib/studentExams';
+import type { StudentExam, StudentSubmission, ExamRosterEntry } from '../../lib/studentExams';
 import { fetchPassingRate } from '../../lib/settings';
 import { fetchQuestionsWithOutcomesByIds } from '../../lib/questions';
 import { generateStudentAnalysis } from '../../lib/gemini';
@@ -315,6 +315,13 @@ export function ViewExam() {
     const activeTab: Tab = (tab === 'analytics' ? 'analytics' : 'gradebook');
     const [passingRate, setPassingRate] = useState(60);
 
+    // Roster state
+    const [isRosterOpen, setIsRosterOpen] = useState(false);
+    const [rosterStudents, setRosterStudents] = useState<ExamRosterEntry[]>([]);
+    const [rosterSearch, setRosterSearch] = useState('');
+    const [rosterPage, setRosterPage] = useState(1);
+    const [rosterLoading, setRosterLoading] = useState(false);
+
     // Analytics state
     const [attemptAnalyses, setAttemptAnalyses] = useState<Record<number, AttemptAnalysis>>({});
     const [analyticsView, setAnalyticsView] = useState<'chart' | 'breakdown'>('chart');
@@ -343,6 +350,17 @@ export function ViewExam() {
     useEffect(() => {
         fetchPassingRate().then(({ value }) => { if (value !== null) setPassingRate(value); });
     }, []);
+
+    const handleOpenRoster = useCallback(async () => {
+        if (!examId) return;
+        setIsRosterOpen(true);
+        setRosterLoading(true);
+        setRosterSearch('');
+        setRosterPage(1);
+        const { data } = await fetchExamRoster(examId);
+        setRosterStudents(data);
+        setRosterLoading(false);
+    }, [examId]);
 
     // Compute CO/MO weak areas when analytics tab is opened
     const computeAnalysis = useCallback(async (
@@ -430,11 +448,13 @@ export function ViewExam() {
         if (!analysis || analysis.isLoadingAI || analysis.aiFeedback) return;
         setAttemptAnalyses(prev => ({ ...prev, [attemptNumber]: { ...prev[attemptNumber], isLoadingAI: true, aiError: null } }));
         const sub = submissions.find(s => s.attempt_number === attemptNumber);
+        const subPct = sub && sub.total_items ? ((sub.score ?? 0) / sub.total_items) * 100 : 0;
+        const subPassed = subPct >= passingRate;
         const examSubjects = exam.exam_subjects
             .map(es => {
                 const coMap: Record<string, { coTitle: string; incorrectCount: number; totalCount: number; mos: { moDescription: string; incorrectCount: number; totalCount: number }[] }> = {};
                 analysis.topics
-                    .filter(t => t.subjectId === es.subject_id && t.incorrectCount > 0)
+                    .filter(t => t.subjectId === es.subject_id && (subPassed ? t.pctCorrect <= 50 : t.incorrectCount > 0))
                     .forEach(t => {
                         if (!coMap[t.coId]) coMap[t.coId] = { coTitle: t.coTitle, incorrectCount: 0, totalCount: 0, mos: [] };
                         coMap[t.coId].incorrectCount += t.incorrectCount;
@@ -530,8 +550,19 @@ export function ViewExam() {
     const bestScore = scores.length > 0 ? Math.max(...scores) : null;
     const latestScore = gradedSubs.length > 0 ? scores[scores.length - 1] : null;
     const hasPassed = scores.some(pct => pct >= passingRate);
+    const passingAttemptNum = hasPassed
+        ? (gradedSubs.find(s => (s.score! / s.total_items!) * 100 >= passingRate)?.attempt_number ?? null)
+        : null;
     const allAttemptsDone = exam.exam_attempts.length > 0 && exam.exam_attempts.every(a => a.status === 'done');
-    const showGrade = hasPassed || (allAttemptsDone && gradedSubs.length > 0);
+    const lastAttemptSub = submissionByAttempt[exam.max_attempts];
+    const lastAttemptGradesReleased = attemptGradesReleasedMap[exam.max_attempts] ?? false;
+    const failedLastAttempt = !hasPassed
+        && !!lastAttemptSub
+        && lastAttemptSub.score !== null
+        && lastAttemptSub.total_items !== null
+        && lastAttemptGradesReleased
+        && ((lastAttemptSub.score / lastAttemptSub.total_items) * 100) < passingRate;
+    const showGrade = hasPassed || (allAttemptsDone && gradedSubs.length > 0) || failedLastAttempt;
 
     const statusStyleMap: Record<string, { color: string; bg: string; label: string }> = {
         available: { color: '#15803d', bg: '#dcfce7', label: 'Available' },
@@ -594,6 +625,45 @@ export function ViewExam() {
                     </div>
                 </>
             )}
+
+            {/* Faculty */}
+            <div style={{ borderTop: '1px solid var(--prof-border)', margin: '12px 0' }} />
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Faculty</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                {/* Main professor */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem' }}>
+                    <span style={{ flex: 1, color: 'var(--prof-text-main)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {exam.created_by_profile?.full_name ?? exam.created_by_profile?.email ?? 'Professor'}
+                    </span>
+                    <span style={{ flexShrink: 0, background: '#dbeafe', color: '#1e40af', fontSize: '0.68rem', fontWeight: 700, borderRadius: '5px', padding: '1px 6px' }}>Main</span>
+                </div>
+                {/* Accepted co-handlers */}
+                {exam.exam_faculty.filter(f => f.status === 'accepted').map(f => (
+                    <div key={f.id} style={{ display: 'flex', alignItems: 'center', fontSize: '0.82rem', color: 'var(--prof-text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {f.professor?.full_name ?? f.professor?.email ?? '—'}
+                    </div>
+                ))}
+            </div>
+
+            {/* View Roster */}
+            <div style={{ borderTop: '1px solid var(--prof-border)', margin: '12px 0' }} />
+            <button
+                onClick={handleOpenRoster}
+                style={{
+                    width: '100%', padding: '7px 12px', fontSize: '0.82rem', fontWeight: 600,
+                    background: 'var(--prof-surface)', color: 'var(--prof-text-main)',
+                    border: '1px solid var(--prof-border)', borderRadius: '8px',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                    transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'var(--prof-surface)')}
+            >
+                <svg fill="none" strokeWidth="1.75" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                </svg>
+                View Roster
+            </button>
         </div>
     );
 
@@ -693,13 +763,14 @@ export function ViewExam() {
 
                                     let rowStatus = 'Not available';
                                     let rowStatusColor = '#94a3b8';
-                                    if (attemptStatus === 'deployed' && !isSubmitted) { rowStatus = 'Open'; rowStatusColor = '#16a34a'; }
+                                    if (hasPassed && passingAttemptNum !== null && attemptNum > passingAttemptNum && !isSubmitted) { rowStatus = 'N/A'; rowStatusColor = '#94a3b8'; }
+                                    else if (attemptStatus === 'deployed' && !isSubmitted) { rowStatus = 'Open'; rowStatusColor = '#16a34a'; }
                                     else if (isSubmitted && isGraded && gradesReleased) { rowStatus = 'Graded'; rowStatusColor = '#2563eb'; }
                                     else if (isSubmitted && isGraded && !gradesReleased) { rowStatus = 'Pending'; rowStatusColor = '#9333ea'; }
                                     else if (isSubmitted) { rowStatus = 'Submitted'; rowStatusColor = '#f59e0b'; }
                                     else if (attemptStatus === 'done') { rowStatus = 'Closed'; rowStatusColor = '#475569'; }
 
-                                    const itemName = `Attempt ${attemptNum} — ${exam.academic_year.replace('-', '/').slice(-5)} ${exam.term.slice(0, 2).toUpperCase()}`;
+                                    const itemName = `Attempt ${attemptNum}`;
                                     const setLabel = sub ? (SET_LABELS[sub.set_number - 1] ?? String(sub.set_number)) : null;
 
                                     return (
@@ -818,7 +889,8 @@ export function ViewExam() {
                                         const activeSub = gradedSubs.find(s => s.attempt_number === activeAttemptNum);
                                         const pct = activeSub ? ((activeSub.score ?? 0) / (activeSub.total_items ?? 1)) * 100 : 0;
                                         const gc = getGradeColors(pct, passingRate);
-                                        const hasWeakTopics = analysis ? analysis.topics.some(t => t.incorrectCount > 0) : false;
+                                        const passed = pct >= passingRate;
+                                        const hasWeakTopics = analysis ? analysis.topics.some(t => passed ? t.pctCorrect <= 50 : t.incorrectCount > 0) : false;
                                         return (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                                                 {/* ── Main analysis card ── */}
@@ -926,6 +998,194 @@ export function ViewExam() {
                     <ExamDetailsPanel />
                 </div>
             </div>
+
+            {/* ── Roster Modal ── */}
+            {isRosterOpen && (() => {
+                const ITEMS_PER_PAGE = 10;
+                const filtered = rosterStudents.filter(s => {
+                    if (!rosterSearch.trim()) return true;
+                    const q = rosterSearch.toLowerCase();
+                    const name = (s.profile?.full_name ?? '').toLowerCase();
+                    const program = (s.profile?.program?.name ?? s.profile?.program?.code ?? '').toLowerCase();
+                    return name.includes(q) || program.includes(q);
+                });
+                const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+                const safePage = Math.min(rosterPage, totalPages);
+                const pageItems = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+                const startIdx = (safePage - 1) * ITEMS_PER_PAGE + 1;
+                const endIdx = Math.min(safePage * ITEMS_PER_PAGE, filtered.length);
+                return (
+                    <div
+                        style={{
+                            position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)',
+                            backdropFilter: 'blur(3px)', zIndex: 200,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            padding: '20px',
+                        }}
+                        onClick={e => { if (e.target === e.currentTarget) { setIsRosterOpen(false); setRosterSearch(''); setRosterPage(1); } }}
+                    >
+                        <div style={{
+                            background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '520px',
+                            maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+                            boxShadow: '0 24px 48px -8px rgba(0,0,0,0.22), 0 8px 16px -4px rgba(0,0,0,0.1)',
+                            border: '1px solid #e2e8f0',
+                        }}>
+                            {/* Header */}
+                            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    <svg fill="none" strokeWidth="1.75" stroke="#3b82f6" viewBox="0 0 24 24" width="17" height="17">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                                    </svg>
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>Exam Roster</p>
+                                    <p style={{ margin: '1px 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+                                        {rosterLoading ? 'Loading…' : `${rosterStudents.length} student${rosterStudents.length !== 1 ? 's' : ''} enrolled`}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => { setIsRosterOpen(false); setRosterSearch(''); setRosterPage(1); }}
+                                    style={{ background: '#f8fafc', border: '1px solid #e2e8f0', cursor: 'pointer', padding: '5px', color: '#64748b', borderRadius: '7px', display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                                >
+                                    <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                </button>
+                            </div>
+
+                            {/* Search */}
+                            <div style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
+                                <div style={{ position: 'relative' }}>
+                                    <svg fill="none" strokeWidth="2" stroke="#94a3b8" viewBox="0 0 24 24" width="14" height="14"
+                                        style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                                    </svg>
+                                    <input
+                                        type="text"
+                                        placeholder="Search by name or program…"
+                                        value={rosterSearch}
+                                        onChange={e => { setRosterSearch(e.target.value); setRosterPage(1); }}
+                                        style={{
+                                            width: '100%', padding: '6px 10px 6px 30px', fontSize: '0.82rem',
+                                            border: '1px solid #e2e8f0', borderRadius: '7px',
+                                            outline: 'none', background: '#f8fafc',
+                                            color: '#0f172a', boxSizing: 'border-box',
+                                            transition: 'border-color 0.15s',
+                                        }}
+                                        onFocus={e => (e.currentTarget.style.borderColor = '#93c5fd')}
+                                        onBlur={e => (e.currentTarget.style.borderColor = '#e2e8f0')}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Column headers */}
+                            {!rosterLoading && filtered.length > 0 && (
+                                <div style={{ display: 'grid', gridTemplateColumns: '36px 1fr 90px', padding: '6px 16px', background: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
+                                    <span style={{ fontSize: '0.67rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>#</span>
+                                    <span style={{ fontSize: '0.67rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Name</span>
+                                    <span style={{ fontSize: '0.67rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right' }}>Program</span>
+                                </div>
+                            )}
+
+                            {/* List */}
+                            <div style={{ flex: 1, overflowY: 'auto' }}>
+                                {rosterLoading ? (
+                                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '52px 0' }}>
+                                        <span style={{ display: 'inline-block', width: '24px', height: '24px', border: '2.5px solid #e2e8f0', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                                    </div>
+                                ) : filtered.length === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                                        <svg fill="none" strokeWidth="1.5" stroke="#cbd5e1" viewBox="0 0 24 24" width="32" height="32" style={{ margin: '0 auto 10px', display: 'block' }}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                                        </svg>
+                                        <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 600, color: '#64748b' }}>
+                                            {rosterSearch ? 'No results found' : 'No students enrolled'}
+                                        </p>
+                                        {rosterSearch && (
+                                            <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>Try a different name or program</p>
+                                        )}
+                                    </div>
+                                ) : (
+                                    pageItems.map((s, i) => {
+                                        const globalIdx = (safePage - 1) * ITEMS_PER_PAGE + i + 1;
+                                        const name = s.profile?.full_name ?? s.profile?.email ?? '—';
+                                        const programCode = s.profile?.program?.code;
+                                        return (
+                                            <div
+                                                key={s.student_id}
+                                                style={{
+                                                    display: 'grid', gridTemplateColumns: '36px 1fr 90px',
+                                                    padding: '8px 16px', borderBottom: '1px solid #f8fafc',
+                                                    alignItems: 'center',
+                                                    background: i % 2 === 0 ? '#fff' : '#fafbfd',
+                                                }}
+                                            >
+                                                <span style={{ fontSize: '0.72rem', color: '#cbd5e1', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{globalIdx}</span>
+                                                <span style={{ fontSize: '0.83rem', color: '#0f172a', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '8px' }}>{name}</span>
+                                                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                                    {programCode ? (
+                                                        <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#1e40af', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '5px', padding: '2px 7px', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>
+                                                            {programCode}
+                                                        </span>
+                                                    ) : (
+                                                        <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>—</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+
+                            {/* Footer: count + pagination */}
+                            {!rosterLoading && filtered.length > 0 && (
+                                <div style={{ padding: '9px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafbfd', borderRadius: '0 0 14px 14px' }}>
+                                    <span style={{ fontSize: '0.73rem', color: '#94a3b8' }}>
+                                        {filtered.length <= ITEMS_PER_PAGE
+                                            ? `${filtered.length} student${filtered.length !== 1 ? 's' : ''}`
+                                            : `${startIdx}–${endIdx} of ${filtered.length}`}
+                                    </span>
+                                    {totalPages > 1 && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <button
+                                                onClick={() => setRosterPage(p => Math.max(1, p - 1))}
+                                                disabled={safePage === 1}
+                                                style={{ width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700, border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', cursor: safePage === 1 ? 'default' : 'pointer', opacity: safePage === 1 ? 0.35 : 1, color: '#334155' }}
+                                            >
+                                                ‹
+                                            </button>
+                                            {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                                .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                                                .reduce<(number | '…')[]>((acc, p, i, arr) => {
+                                                    if (i > 0 && p - (arr[i - 1] as number) > 1) acc.push('…');
+                                                    acc.push(p);
+                                                    return acc;
+                                                }, [])
+                                                .map((p, i) => p === '…' ? (
+                                                    <span key={`ellipsis-${i}`} style={{ fontSize: '0.75rem', color: '#94a3b8', padding: '0 2px' }}>…</span>
+                                                ) : (
+                                                    <button
+                                                        key={p}
+                                                        onClick={() => setRosterPage(p as number)}
+                                                        style={{ width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, border: '1px solid', borderColor: safePage === p ? '#3b82f6' : '#e2e8f0', borderRadius: '6px', background: safePage === p ? '#3b82f6' : '#fff', cursor: 'pointer', color: safePage === p ? '#fff' : '#334155', transition: 'all 0.1s' }}
+                                                    >
+                                                        {p}
+                                                    </button>
+                                                ))
+                                            }
+                                            <button
+                                                onClick={() => setRosterPage(p => Math.min(totalPages, p + 1))}
+                                                disabled={safePage === totalPages}
+                                                style={{ width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700, border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', cursor: safePage === totalPages ? 'default' : 'pointer', opacity: safePage === totalPages ? 0.35 : 1, color: '#334155' }}
+                                            >
+                                                ›
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 }

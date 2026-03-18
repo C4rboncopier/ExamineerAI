@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useNotifications } from '../../contexts/NotificationsContext';
 
 interface SidebarProps {
     isOpen: boolean;
@@ -8,6 +9,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     const location = useLocation();
     const navigate = useNavigate();
+    const { unreadCount } = useNotifications();
 
     const isActive = (path: string) => location.pathname.startsWith(path);
 
@@ -41,7 +43,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                         <svg className="nav-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
                         Subjects
                     </button>
-<button
+                    <button
                         className={`prof-nav-btn ${isActive('/professor/templates') ? 'active' : ''}`}
                         onClick={() => handleNavigate('/professor/templates')}
                     >
@@ -54,6 +56,23 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                     >
                         <svg className="nav-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                         Exams
+                    </button>
+                    <button
+                        className={`prof-nav-btn ${isActive('/professor/notifications') ? 'active' : ''}`}
+                        onClick={() => handleNavigate('/professor/notifications')}
+                        style={{ justifyContent: 'space-between' }}
+                    >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <svg className="nav-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                            </svg>
+                            Notifications
+                        </span>
+                        {unreadCount > 0 && (
+                            <span style={{ background: '#ef4444', color: 'white', borderRadius: '10px', fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px', minWidth: '18px', textAlign: 'center' }}>
+                                {unreadCount > 9 ? '9+' : unreadCount}
+                            </span>
+                        )}
                     </button>
                 </div>
 

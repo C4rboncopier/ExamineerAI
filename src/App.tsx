@@ -17,6 +17,7 @@ import { ViewExam } from './components/professor/ViewExam';
 import { TemplatesList } from './components/professor/TemplatesList';
 import { CreateTemplate } from './components/professor/CreateTemplate';
 import { ProfessorSettings } from './components/professor/ProfessorSettings';
+import { Notifications } from './components/professor/Notifications';
 
 import { ProfessorsList } from './components/admin/ProfessorsList';
 import { AddProfessor } from './components/admin/AddProfessor';
@@ -74,6 +75,7 @@ function App() {
               <Route path="exams/:examId/:tab" element={<ViewExam />} />
               <Route path="exams/:examId/edit" element={<CreateExam />} />
               <Route path="settings" element={<ProfessorSettings />} />
+              <Route path="notifications" element={<Notifications />} />
             </Route>
           </Route>
 

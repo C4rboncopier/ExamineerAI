@@ -59,15 +59,29 @@ interface Props {
     enrollments: EnrolledStudentFull[];
     existingGrades?: AttemptGradeRow[];   // already-saved submissions for duplicate detection
     onComplete: () => void;
+    onBusyChange?: (busy: boolean) => void;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const ANSWER_LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
+/** Returns the set of 0-based question indices that have more than one shaded bubble. */
+function getMultiBubbleQuestions(omrResult: OMRResult): Set<number> {
+    const counts: Record<number, number> = {};
+    for (const b of omrResult.bubble_positions ?? []) {
+        counts[b.q_idx] = (counts[b.q_idx] ?? 0) + 1;
+    }
+    const result = new Set<number>();
+    for (const [qIdx, count] of Object.entries(counts)) {
+        if (count > 1) result.add(Number(qIdx));
+    }
+    return result;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function OMRScanner({ examId, attemptNumber, numSets, enrollments, existingGrades, onComplete }: Props) {
+export default function OMRScanner({ examId, attemptNumber, numSets, enrollments, existingGrades, onComplete, onBusyChange }: Props) {
     const [mode, setMode] = useState<ScanMode>('camera');
     const serverUrl = '/omr';
 
@@ -108,6 +122,11 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
     const [manualKeyError, setManualKeyError] = useState<string | null>(null);
     const [isSavingManual, setIsSavingManual] = useState(false);
     const [manualSaveError, setManualSaveError] = useState<string | null>(null);
+
+    // ── Busy state ────────────────────────────────────────────────────────────
+    useEffect(() => {
+        onBusyChange?.(cameraActive || isProcessing || reviewQueue.length > 0);
+    }, [cameraActive, isProcessing, reviewQueue.length, onBusyChange]);
 
     // ── Responsive ────────────────────────────────────────────────────────────
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
@@ -257,12 +276,15 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
 
         if (!bubbles?.length) return;
 
+        const multiBubbleQs = pending ? getMultiBubbleQuestions(pending.omrResult) : new Set<number>();
         for (const bubble of bubbles) {
             const studentAnswer = pending?.editAnswers[bubble.q_idx] ?? '';
             const computed = pending?.computed;
             let strokeColor = '#94a3b8'; // gray: detected, grade not yet computed
 
-            if (computed?.answerKey) {
+            if (multiBubbleQs.has(bubble.q_idx)) {
+                strokeColor = '#eab308'; // yellow: multiple bubbles shaded
+            } else if (computed?.answerKey) {
                 const qId = computed.answerKey.questionIds[bubble.q_idx];
                 const correctNum = qId != null ? computed.answerKey.questions[qId]?.correct_choice : undefined;
                 const correctLetter = correctNum != null ? ANSWER_LETTERS[correctNum] : '';
@@ -419,11 +441,16 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
     // ── Review entry ──────────────────────────────────────────────────────────
 
     async function enterReview(omrResult: OMRResult, source: ScanMode, filename?: string) {
+        const multiBubbleQs = getMultiBubbleQuestions(omrResult);
+        const editAnswers = [...(omrResult.answers ?? [])];
+        for (const qIdx of multiBubbleQs) {
+            if (qIdx < editAnswers.length) editAnswers[qIdx] = '';
+        }
         const pending: PendingReview = {
             omrResult,
             editRollNumber: omrResult.roll_number ?? '',
             editExamSet: omrResult.exam_set ?? '',
-            editAnswers: [...(omrResult.answers ?? [])],
+            editAnswers,
             filename,
             source,
         };
@@ -594,14 +621,21 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                 return;
             }
             setZipProgress({ phase: 'Building review queue…', done: omrResults.length, total: omrResults.length });
-            const queue: PendingReview[] = omrResults.map(r => ({
-                omrResult: r,
-                editRollNumber: r.roll_number ?? '',
-                editExamSet: r.exam_set ?? '',
-                editAnswers: [...(r.answers ?? [])],
-                filename: r.filename,
-                source: 'zip' as const,
-            }));
+            const queue: PendingReview[] = omrResults.map(r => {
+                const mqs = getMultiBubbleQuestions(r);
+                const editAnswers = [...(r.answers ?? [])];
+                for (const qIdx of mqs) {
+                    if (qIdx < editAnswers.length) editAnswers[qIdx] = '';
+                }
+                return {
+                    omrResult: r,
+                    editRollNumber: r.roll_number ?? '',
+                    editExamSet: r.exam_set ?? '',
+                    editAnswers,
+                    filename: r.filename,
+                    source: 'zip' as const,
+                };
+            });
             setReviewQueue(queue);
             setReviewIndex(0);
             setShowAnswerEditor(false);
@@ -656,7 +690,7 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
         }
         const setLetter = ANSWER_LETTERS[manualSetNumber - 1] ?? 'A';
         const row: ScanRow = {
-            omrResult: { roll_number: student?.student?.student_id ?? '', exam_set: setLetter, answers: manualAnswers },
+            omrResult: { roll_number: student?.student?.student_id ?? '', exam_set: setLetter, answers: manualAnswers, error: null },
             student,
             gradeStatus: 'verified',
             score,
@@ -850,7 +884,7 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                                     style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--prof-border, #e2e8f0)', borderRadius: '6px', fontSize: '0.9rem' }}
                                 >
                                     <option value="">— Unknown —</option>
-                                    {ANSWER_LETTERS.map(l => <option key={l} value={l}>{l}</option>)}
+                                    {ANSWER_LETTERS.slice(0, numSets).map(l => <option key={l} value={l}>{l}</option>)}
                                 </select>
                             </div>
 
@@ -992,6 +1026,24 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                                 </table>
                             </div>
                                 </div>
+                                );
+                            })()}
+
+                            {/* Multi-bubble warning */}
+                            {(() => {
+                                const mqs = getMultiBubbleQuestions(currentPending.omrResult);
+                                if (mqs.size === 0) return null;
+                                const qNums = Array.from(mqs).sort((a, b) => a - b).map(i => i + 1);
+                                return (
+                                    <div style={{ padding: '10px 14px', background: '#fefce8', border: '1px solid #fde047', borderRadius: '8px', color: '#854d0e', fontSize: '0.85rem', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16" style={{ flexShrink: 0, marginTop: '1px' }}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                        </svg>
+                                        <span>
+                                            <strong>Multiple bubbles shaded</strong> in {qNums.length === 1 ? 'question' : 'questions'} {qNums.join(', ')}.
+                                            {' '}{qNums.length === 1 ? 'This question has' : 'These questions have'} been marked blank in the answer grid.
+                                        </span>
+                                    </div>
                                 );
                             })()}
                         </div>{/* end right column */}

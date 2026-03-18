@@ -157,7 +157,7 @@ export async function generateStudentAnalysis(
         return `[${subj.courseCode} — ${subj.courseTitle}]\n${topicsText}`;
     }).join('\n\n');
 
-    const prompt = `You are an educational assistant providing detailed, personalized feedback on a student's exam performance.
+    const prompt = `You are a personal academic coach giving direct, personalized feedback to a student about their own exam performance. Always address the student as "you" — never refer to them in the third person (never say "the student").
 
 Exam: "${examTitle}" (multiple choice)
 Passing rate: ${passingRate}%
@@ -169,18 +169,18 @@ ${subjectsText}
 
 Provide a thorough, detailed analysis structured as follows:
 
-1. summary: A 2-3 sentence overview of the student's overall performance, highlighting the main areas of struggle.
+1. summary: A 2-3 sentence overview directly addressing the student (e.g. "You scored...", "You passed/failed..."), highlighting the main areas of struggle.
 
 2. For EACH subject listed above, provide:
    - courseCode: the subject code exactly as listed
    - courseTitle: the subject title exactly as listed
-   - overallComment: 1-2 sentences summarizing the student's performance in this subject and what it suggests about their understanding
+   - overallComment: 1-2 sentences directly addressing the student about their performance in this subject (e.g. "Your performance in...", "You struggled with...")
    - weakTopics: for EACH weak CO listed under this subject:
      - coTitle: the CO title exactly as listed
-     - insight: 2-3 sentences explaining what concept this CO covers, why it is important, and what specific gaps the MO-level breakdown reveals
-     - studyTips: exactly 1-2 specific, actionable study suggestions tailored to this particular CO (e.g., practice exercises, key concepts to review, common mistakes to avoid)
+     - insight: 2-3 sentences explaining what this CO covers and directly addressing what gaps the MO-level breakdown reveals about the student's understanding (use "you/your")
+     - studyTips: exactly 1-2 specific, actionable study suggestions addressed directly to the student (e.g. "Try practicing...", "Review your...")
 
-Be specific, substantive, and constructive. Avoid generic advice. Use an encouraging tone.`;
+Be specific, substantive, and constructive. Avoid generic advice. Use an encouraging, second-person tone throughout.`;
 
     const body = {
         contents: [{ parts: [{ text: prompt }] }],

@@ -33,6 +33,7 @@ export interface Exam {
     program_ids: string[];
     exam_subjects: ExamSubject[];
     ai_analysis_enabled: boolean;
+    created_by: string;
 }
 
 export interface ExamSetDetail {
@@ -222,7 +223,7 @@ export async function fetchExamById(id: string): Promise<{ data: ExamWithSets | 
     const { data, error } = await supabase
         .from('exams')
         .select(`
-            id, title, code, num_sets, max_attempts, academic_year, term, question_allocation, created_at, status, program_ids, ai_analysis_enabled,
+            id, title, code, num_sets, max_attempts, academic_year, term, question_allocation, created_at, status, program_ids, ai_analysis_enabled, created_by,
             exam_subjects(subject_id, subjects(course_code, course_title)),
             exam_sets(id, set_number, attempt_number, question_ids),
             exam_attempts(id, exam_id, attempt_number, status, grades_released)
@@ -286,7 +287,8 @@ export async function updateExam(
     academicYear: string,
     term: string,
     programIds: string[] = [],
-    aiAnalysisEnabled: boolean = false
+    aiAnalysisEnabled: boolean = false,
+    skipSubjectUpdate: boolean = false
 ): Promise<{ error: string | null }> {
     const { error: updateError } = await supabase
         .from('exams')
@@ -298,18 +300,20 @@ export async function updateExam(
         return { error: updateError.message };
     }
 
-    // Replace subjects
-    const { error: delError } = await supabase.from('exam_subjects').delete().eq('exam_id', id);
-    if (delError) return { error: 'Failed to remove old subjects.' };
-    const uniqueSubjectIds = [...new Set(subjectIds)];
-    if (uniqueSubjectIds.length > 0) {
-        const { error: subjError } = await supabase
-            .from('exam_subjects')
-            .upsert(
-                uniqueSubjectIds.map(subject_id => ({ exam_id: id, subject_id })),
-                { onConflict: 'exam_id,subject_id', ignoreDuplicates: true }
-            );
-        if (subjError) return { error: 'Failed to update subjects.' };
+    if (!skipSubjectUpdate) {
+        // Replace subjects
+        const { error: delError } = await supabase.from('exam_subjects').delete().eq('exam_id', id);
+        if (delError) return { error: 'Failed to remove old subjects.' };
+        const uniqueSubjectIds = [...new Set(subjectIds)];
+        if (uniqueSubjectIds.length > 0) {
+            const { error: subjError } = await supabase
+                .from('exam_subjects')
+                .upsert(
+                    uniqueSubjectIds.map(subject_id => ({ exam_id: id, subject_id })),
+                    { onConflict: 'exam_id,subject_id', ignoreDuplicates: true }
+                );
+            if (subjError) return { error: 'Failed to update subjects.' };
+        }
     }
 
     return { error: null };
@@ -324,6 +328,11 @@ export async function generateExamPapersForAttempt(
 ): Promise<{ error: string | null }> {
     await supabase.from('exam_sets').delete().eq('exam_id', examId).eq('attempt_number', attemptNumber);
     return generateAndSaveSets(examId, subjectIds, allocationConfig, numSets, attemptNumber);
+}
+
+export async function updateExamSetOrder(setId: string, questionIds: string[]): Promise<{ error: string | null }> {
+    const { error } = await supabase.from('exam_sets').update({ question_ids: questionIds }).eq('id', setId);
+    return { error: error?.message ?? null };
 }
 
 export async function deleteAttemptPapers(examId: string, attemptNumber: number): Promise<{ error: string | null }> {

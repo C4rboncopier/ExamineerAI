@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { fetchSubjects } from '../../lib/subjects';
 import type { SubjectWithCounts } from '../../lib/subjects';
 import { fetchPrograms } from '../../lib/settings';
@@ -19,7 +20,10 @@ interface ToastState {
 export function CreateExam() {
     const { examId } = useParams<{ examId?: string }>();
     const navigate = useNavigate();
+    const { user } = useAuth();
     const isEditMode = !!examId;
+    const [examCreatedBy, setExamCreatedBy] = useState<string>('');
+    const isCoHandler = isEditMode && examCreatedBy !== '' && examCreatedBy !== user?.id;
 
     // Template
     const [templates, setTemplates] = useState<Template[]>([]);
@@ -104,6 +108,7 @@ export function CreateExam() {
                     setSelectedProgramIds(data.program_ids ?? []);
                     setAiAnalysisEnabled(data.ai_analysis_enabled ?? false);
                     setHasPapers((data.exam_sets?.length ?? 0) > 0);
+                    setExamCreatedBy(data.created_by);
                 }
                 setIsLoadingExam(false);
             });
@@ -193,7 +198,7 @@ export function CreateExam() {
         setIsSubmitting(true);
 
         if (isEditMode && examId) {
-            const { error } = await updateExam(examId, title, code, selectedSubjectIds, numSets, maxAttempts, academicYear, term, selectedProgramIds, aiAnalysisEnabled);
+            const { error } = await updateExam(examId, title, code, selectedSubjectIds, numSets, maxAttempts, academicYear, term, selectedProgramIds, aiAnalysisEnabled, isCoHandler);
             if (error) { setSubmitError(error); setIsSubmitting(false); return; }
             showToast('Exam updated.');
         } else {
@@ -203,7 +208,7 @@ export function CreateExam() {
         }
 
         setIsSubmitting(false);
-        setTimeout(() => navigate('/professor/exams'), 600);
+        setTimeout(() => navigate(isEditMode && examId ? `/professor/exams/${examId}/overview` : '/professor/exams'), 600);
     };
 
     if (isLoadingExam) {
@@ -216,11 +221,11 @@ export function CreateExam() {
 
     return (
         <div className="qb-container create-question-wrapper">
-            <button type="button" className="btn-back" onClick={() => navigate('/professor/exams')}>
+            <button type="button" className="btn-back" onClick={() => navigate(isEditMode && examId ? `/professor/exams/${examId}/overview` : '/professor/exams')}>
                 <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"></path>
                 </svg>
-                Back to Exams
+                {isEditMode ? 'Back to Exam' : 'Back to Exams'}
             </button>
 
             <div className="cs-header">
@@ -293,7 +298,7 @@ export function CreateExam() {
                                 </div>
                                 <div className="cs-input-field" style={{ minWidth: '120px' }}>
                                     <label>Number of Sets <span style={{ fontWeight: 400, color: 'var(--prof-text-muted)' }}>(optional)</span></label>
-                                    {isEditMode && hasPapers ? (
+                                    {(isEditMode && hasPapers) || isCoHandler ? (
                                         <div style={{ padding: '9px 12px', background: '#f1f5f9', border: '1px solid var(--prof-border)', borderRadius: '8px', fontSize: '0.9rem', color: 'var(--prof-text-main)', fontWeight: 600 }}>
                                             {numSets > 0 ? `${numSets} Set${numSets !== 1 ? 's' : ''}` : '— Not set —'}
                                         </div>
@@ -322,7 +327,7 @@ export function CreateExam() {
                                 </div>
                                 <div className="cs-input-field" style={{ minWidth: '150px' }}>
                                     <label>Max Attempts</label>
-                                    {isEditMode && hasPapers ? (
+                                    {(isEditMode && hasPapers) || isCoHandler ? (
                                         <div style={{ padding: '9px 12px', background: '#f1f5f9', border: '1px solid var(--prof-border)', borderRadius: '8px', fontSize: '0.9rem', color: 'var(--prof-text-main)', fontWeight: 600 }}>
                                             {maxAttempts} attempt{maxAttempts !== 1 ? 's' : ''}
                                         </div>
@@ -355,7 +360,8 @@ export function CreateExam() {
                                     <div className="cq-subject-search" ref={programDropdownRef}>
                                         <div
                                             className={`cq-subject-trigger ${programDropdownOpen ? 'open' : ''}`}
-                                            onClick={() => setProgramDropdownOpen(!programDropdownOpen)}
+                                            onClick={isCoHandler ? undefined : () => setProgramDropdownOpen(!programDropdownOpen)}
+                                            style={{ cursor: isCoHandler ? 'not-allowed' : undefined, opacity: isCoHandler ? 0.6 : 1 }}
                                         >
                                             <span className="cq-placeholder">
                                                 {selectedProgramIds.length > 0
@@ -413,16 +419,18 @@ export function CreateExam() {
                                                         <span style={{ fontSize: '14px', color: '#334155', marginRight: '8px' }}>
                                                             {program.code}
                                                         </span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setSelectedProgramIds(prev => prev.filter(pid => pid !== id))}
-                                                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
-                                                            title="Remove Program"
-                                                        >
-                                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path>
-                                                            </svg>
-                                                        </button>
+                                                        {!isCoHandler && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setSelectedProgramIds(prev => prev.filter(pid => pid !== id))}
+                                                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
+                                                                title="Remove Program"
+                                                            >
+                                                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path>
+                                                                </svg>
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 );
                                             })}
@@ -443,7 +451,7 @@ export function CreateExam() {
                         {/* ── Card 3: Subjects ── */}
                         <div className="cs-card">
                             <h3 className="cs-card-title">Included Subjects <span style={{ fontWeight: 400, color: 'var(--prof-text-muted)', fontSize: '0.85rem' }}>(optional — can be filled later)</span> {statusPill(subjectsOk)}</h3>
-                            {!(isEditMode && hasPapers) && (
+                            {!(isEditMode && hasPapers) && !isCoHandler && (
                                 <div className="cs-input-field">
                                     <label>Search and Add Subjects</label>
                                     <div className="cq-subject-search" ref={subjectDropdownRef}>
@@ -504,7 +512,7 @@ export function CreateExam() {
                                                 <span style={{ fontSize: '14px', color: '#334155', marginRight: '8px' }}>
                                                     <strong>{subject.course_code}</strong> – {subject.course_title}
                                                 </span>
-                                                {!(isEditMode && hasPapers) && (
+                                                {!(isEditMode && hasPapers) && !isCoHandler && (
                                                     <button
                                                         type="button"
                                                         onClick={() => handleRemoveSubject(id)}
@@ -547,7 +555,7 @@ export function CreateExam() {
                 </div>
 
                 <div className="cs-actions" style={{ marginTop: '24px' }}>
-                    <button type="button" className="btn-secondary" onClick={() => navigate('/professor/exams')}>
+                    <button type="button" className="btn-secondary" onClick={() => navigate(isEditMode && examId ? `/professor/exams/${examId}/overview` : '/professor/exams')}>
                         Cancel
                     </button>
                     <button

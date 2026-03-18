@@ -239,6 +239,19 @@ class OMRProcessor:
         clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))  # raised from 2.5
         self.equalized = clahe.apply(self.gray)
 
+        # Shadow-robust channel via morphological background subtraction.
+        # A large dilation estimates the "paper + shadow" background by taking
+        # the local maximum within a 51×51 window — this skips over small dark
+        # circles (filled bubbles, ~24 px diameter) and returns the surrounding
+        # brightness.  Subtracting the equalized image from this background
+        # isolates only genuine dark marks: shadows darken both the pixel and
+        # its surrounding background equally, so they subtract to near-zero and
+        # are ignored.  Inverted so convention matches equalized: low = dark = filled.
+        bg_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (51, 51))
+        bg = cv2.dilate(self.equalized, bg_kernel)
+        dark_marks = cv2.subtract(bg, self.equalized)   # 0 where shadow, >0 where real fill
+        self.shadow_robust = cv2.bitwise_not(dark_marks) # invert: filled → low value
+
         blurred = cv2.GaussianBlur(self.equalized, (5, 5), 0)
         self.thresh = cv2.adaptiveThreshold(
             blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
@@ -375,7 +388,7 @@ class OMRProcessor:
         fills_sorted = sorted(fills)
         second = fills_sorted[1] if len(fills_sorted) > 1 else 255
 
-        if darkest < 130 and (second - darkest) > 20:
+        if darkest < 175 and (second - darkest) > 20:
             self.exam_set = CHOICES[darkest_idx] if darkest_idx < len(CHOICES) else ""
             cx_det = int(xs_5[darkest_idx])
             cv2.circle(self.debug_image, (cx_det, row_y), avg_r + 4, (255, 0, 255), 2)
@@ -444,7 +457,7 @@ class OMRProcessor:
             darkest_row = fills.index(darkest)
             median_others = float(np.median([f for i, f in enumerate(fills) if i != darkest_row]))
 
-            if darkest < 160 and (median_others - darkest) > 25:
+            if darkest < 200 and (median_others - darkest) > 25:
                 digits.append(str(darkest_row))
                 cv2.circle(self.debug_image, (x, y_rows[darkest_row]), avg_r, (0, 200, 255), 2)
             else:
@@ -518,31 +531,54 @@ class OMRProcessor:
                     continue
 
                 fills = [self._measure_fill(x, y, r=int(avg_r * 0.85)) for x in x_centers[:5]]
-                darkest = min(fills)
-                darkest_idx = fills.index(darkest)
 
-                # Use MEDIAN of the other 4 bubbles (not mean of all 5).
-                # mean_fill includes the filled bubble itself, biasing it down and
-                # making ratio_to_mean falsely pass/fail for light marks or smudges.
-                other_fills   = [fills[i] for i in range(len(fills)) if i != darkest_idx]
-                median_others = float(np.median(other_fills)) if other_fills else 255.0
-                abs_diff      = median_others - darkest
-                ratio_to_median = darkest / median_others if median_others > 0 else 1.0
+                # Determine all filled bubbles (multi-bubble detection).
+                # Sort indices darkest-first; iteratively check each against the
+                # median of all bubbles not yet confirmed filled.
+                # The 2nd+ bubble uses stricter thresholds to avoid false positives
+                # from erased pencil marks (which leave faint residue).
+                sorted_idxs = sorted(range(len(fills)), key=lambda i: fills[i])
+                filled_idxs: list[int] = []
+                for rank, idx in enumerate(sorted_idxs):
+                    ref_idxs = [i for i in range(len(fills)) if i != idx and i not in filled_idxs]
+                    if not ref_idxs:
+                        break
+                    ref_median = float(np.median([fills[i] for i in ref_idxs]))
+                    abs_diff = ref_median - fills[idx]
+                    ratio = fills[idx] / ref_median if ref_median > 0 else 1.0
+                    # First bubble: normal thresholds. Subsequent: stricter to reject erasure residue.
+                    # Thresholds calibrated for shadow_robust image (inverted background-subtraction):
+                    # filled bubble ≈ 125–210, unfilled/shadow ≈ 245–255.
+                    if rank == 0:
+                        is_filled = fills[idx] < 215 and abs_diff > 18 and ratio < 0.84
+                    else:
+                        is_filled = fills[idx] < 175 and abs_diff > 35 and ratio < 0.72
+                    if is_filled:
+                        filled_idxs.append(idx)
+                    else:
+                        break  # lighter bubbles won't pass either
 
-                abs_dark_enough = darkest < 185
-
-                if abs_dark_enough and abs_diff > 18 and ratio_to_median < 0.84:
-                    letter = CHOICES[darkest_idx]
+                if len(filled_idxs) == 1:
+                    # Normal single answer
+                    letter = CHOICES[filled_idxs[0]]
                     self.answers[q_num - 1] = letter
-                    cx = x_centers[darkest_idx]
-                    # Store position for browser-side coloring (green=correct, red=incorrect)
                     self.answer_bubble_data.append({
                         "q_idx": q_num - 1,
-                        "x": int(cx),
+                        "x": int(x_centers[filled_idxs[0]]),
                         "y": int(y),
                         "r": int(avg_r),
                         "answer": letter,
                     })
+                elif len(filled_idxs) >= 2:
+                    # Multi-bubble: record all filled bubbles; answer stays "" (blank)
+                    for idx in filled_idxs:
+                        self.answer_bubble_data.append({
+                            "q_idx": q_num - 1,
+                            "x": int(x_centers[idx]),
+                            "y": int(y),
+                            "r": int(avg_r),
+                            "answer": CHOICES[idx],
+                        })
 
                 q_num += 1
 
@@ -651,13 +687,15 @@ class OMRProcessor:
 
     def _measure_fill(self, cx: int, cy: int, r: int = 10) -> float:
         """
-        Fill metric inside a circle on the CLAHE-equalized image.
-        Lower = darker = more filled. Uses equalized for lighting robustness.
+        Fill metric inside a circle on the shadow-robust image.
+        Lower = darker = more filled.
 
-        Combines mean with 25th percentile so that partial/light shading
-        (e.g., light pencil marks) is more reliably detected.
+        Uses morphological background-subtracted image (shadow_robust) so that
+        hand shadows — which darken both the bubble and its surrounding paper
+        equally — cancel out and are not mistaken for filled bubbles.
+        Combines mean with 25th percentile so partial/light shading is detected.
         """
-        img = getattr(self, "equalized", self.gray)
+        img = getattr(self, "shadow_robust", getattr(self, "equalized", self.gray))
         h, w = img.shape
         cx, cy = int(cx), int(cy)
         if cx - r < 0 or cx + r >= w or cy - r < 0 or cy + r >= h:

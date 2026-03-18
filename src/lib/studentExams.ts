@@ -12,6 +12,8 @@ export interface StudentExam {
     num_sets: number;
     program_ids: string[];
     ai_analysis_enabled: boolean;
+    created_by: string;
+    created_by_profile: { id: string; full_name: string | null; email: string | null } | null;
     exam_subjects: {
         subject_id: string;
         subjects: { course_code: string; course_title: string } | null;
@@ -21,6 +23,21 @@ export interface StudentExam {
         status: 'draft' | 'deployed' | 'done';
         grades_released: boolean;
     }[];
+    exam_faculty: {
+        id: string;
+        professor_id: string;
+        status: 'pending' | 'accepted' | 'declined';
+        professor: { id: string; full_name: string | null; email: string | null } | null;
+    }[];
+}
+
+export interface ExamRosterEntry {
+    student_id: string;
+    profile: {
+        full_name: string | null;
+        email: string | null;
+        program: { code: string; name: string } | null;
+    } | null;
 }
 
 export interface StudentSubmission {
@@ -68,14 +85,30 @@ export async function fetchEnrolledExamById(examId: string): Promise<{ data: Stu
         .from('exams')
         .select(`
             id, title, code, academic_year, term, status, max_attempts, num_sets, program_ids, ai_analysis_enabled,
+            created_by,
             exam_subjects(subject_id, subjects(course_code, course_title)),
-            exam_attempts(attempt_number, status, grades_released)
+            exam_attempts(attempt_number, status, grades_released),
+            exam_faculty(id, professor_id, status, professor:profiles!exam_faculty_professor_id_fkey(id, full_name, email))
         `)
         .eq('id', examId)
         .single();
 
     if (error) return { data: null, error: error.message };
-    return { data: data as unknown as StudentExam, error: null };
+
+    // Fetch creator profile separately (exams.created_by FK points to auth.users, not profiles)
+    const exam = data as any;
+    if (exam?.created_by) {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('id, full_name, email')
+            .eq('id', exam.created_by)
+            .single();
+        exam.created_by_profile = profile ?? null;
+    } else {
+        exam.created_by_profile = null;
+    }
+
+    return { data: exam as StudentExam, error: null };
 }
 
 export async function fetchStudentSubmissions(
@@ -91,6 +124,32 @@ export async function fetchStudentSubmissions(
 
     if (error) return { data: [], error: error.message };
     return { data: data as StudentSubmission[], error: null };
+}
+
+export async function fetchAllStudentSubmissions(
+    studentId: string
+): Promise<{ data: StudentSubmission[]; error: string | null }> {
+    const { data, error } = await supabase
+        .from('student_submissions')
+        .select('id, exam_id, student_id, attempt_number, set_number, score, total_items, submitted_at, created_at')
+        .eq('student_id', studentId)
+        .order('attempt_number', { ascending: true });
+
+    if (error) return { data: [], error: error.message };
+    return { data: data as StudentSubmission[], error: null };
+}
+
+export async function fetchExamRoster(
+    examId: string
+): Promise<{ data: ExamRosterEntry[]; error: string | null }> {
+    const { data, error } = await supabase
+        .from('exam_enrollments')
+        .select('student_id, profile:profiles(full_name, email, program:programs(code, name))')
+        .eq('exam_id', examId)
+        .order('created_at', { ascending: true });
+
+    if (error) return { data: [], error: error.message };
+    return { data: data as unknown as ExamRosterEntry[], error: null };
 }
 
 export async function saveSubmissionAiAnalysis(

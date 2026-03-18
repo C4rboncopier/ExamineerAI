@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useMemo, useCallback } from 'react';
+import { Fragment, useState, useEffect, useMemo, useCallback, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import katex from 'katex';
 import {
@@ -6,8 +6,13 @@ import {
     generateExamPapersForAttempt, deleteAttemptPapers,
     deployAttempt, markAttemptDone,
     releaseAttemptGrades, hideAttemptGrades,
+    updateExamSetOrder,
 } from '../../lib/exams';
 import type { ExamWithSets, ExamSetDetail, AllocationConfig } from '../../lib/exams';
+import { fetchExamFaculty, addExamFaculty, removeExamFaculty, type ExamFacultyMember } from '../../lib/examFaculty';
+import { createExamInviteNotification, deleteNotificationByFacultyId } from '../../lib/notifications';
+import { fetchProfessors, type Professor } from '../../lib/professors';
+import { useAuth } from '../../contexts/AuthContext';
 import { fetchQuestionsByIds, fetchQuestionsBySubject } from '../../lib/questions';
 import type { QuestionSummary, QuestionWithOutcomes } from '../../lib/questions';
 import { printExam } from '../../lib/printExam';
@@ -116,57 +121,124 @@ function MiniSubjectPieChart({ subjects, questionIds, questionMap, answers, pass
     const overallPct = totalItems > 0 ? (totalCorrect / totalItems) * 100 : 0;
     const gc = getGradeColors(overallPct, passingRate);
 
+    // CO/MO breakdown per subject
+    const breakdown = subjects.map((subj, si) => {
+        const qs = questionIds.filter(id => questionMap[id]?.subject_id === subj.subject_id);
+        const coMap: Record<number, Record<number, { correct: number; total: number }>> = {};
+        for (const id of qs) {
+            const q = questionMap[id];
+            if (!q?.course_outcomes || !q?.module_outcomes) continue;
+            const ci = q.course_outcomes.order_index;
+            const mi = q.module_outcomes.order_index;
+            if (!coMap[ci]) coMap[ci] = {};
+            if (!coMap[ci][mi]) coMap[ci][mi] = { correct: 0, total: 0 };
+            coMap[ci][mi].total++;
+            if ((answers[id] ?? -1) === q.correct_choice) coMap[ci][mi].correct++;
+        }
+        const cos = Object.entries(coMap)
+            .sort(([a], [b]) => Number(a) - Number(b))
+            .map(([ciStr, moMap]) => {
+                const ci = Number(ciStr);
+                const mos = Object.entries(moMap)
+                    .sort(([a], [b]) => Number(a) - Number(b))
+                    .map(([miStr, d]) => ({ label: `MO${ci + 1}${Number(miStr) + 1}`, ...d }));
+                const correct = mos.reduce((sum, m) => sum + m.correct, 0);
+                const total = mos.reduce((sum, m) => sum + m.total, 0);
+                return { label: `CO${ci + 1}`, mos, correct, total };
+            });
+        return { ...subj, cos, color: PIE_COLORS_MINI[si % PIE_COLORS_MINI.length] };
+    }).filter(s => s.cos.length > 0);
+
     return (
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', width: '100%' }}>
-            <svg viewBox="0 0 180 180" width="180" height="180"
-                style={{ flexShrink: 0, filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.12))', transform: 'perspective(600px) rotateX(12deg)', animation: 'pieIn 0.45s ease', transformOrigin: 'center' }}>
-                {allSlices.map(s => {
-                    const isHov = hoveredId === s.id;
-                    const dx = isHov ? 5 * Math.cos(s.midAngle * Math.PI / 180) : 0;
-                    const dy = isHov ? 5 * Math.sin(s.midAngle * Math.PI / 180) : 0;
-                    return (
-                        <path key={s.id} d={donutPath(outerR, innerR, s.start, s.end)} fill={s.color}
-                            transform={isHov ? `translate(${dx}, ${dy})` : undefined}
-                            style={{ transition: 'transform 0.2s ease', cursor: 'default', filter: isHov ? 'brightness(1.1)' : undefined }}
-                            onMouseEnter={() => setHoveredId(s.id)}
-                            onMouseLeave={() => setHoveredId(null)} />
-                    );
-                })}
-                <circle cx={cx} cy={cy} r={innerR} fill="white" />
-                <text x={cx} y={cy - 7} textAnchor="middle" fontSize="17" fontWeight="700" fill={gc.text}>{overallPct.toFixed(0)}%</text>
-                <text x={cx} y={cy + 10} textAnchor="middle" fontSize="9" fill="#94a3b8" fontWeight="600">OVERALL</text>
-            </svg>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minWidth: '150px' }}>
-                {data.map((d, i) => {
-                    const isHov = hoveredId === d.subject_id;
-                    const sliceColor = PIE_COLORS_MINI[i % PIE_COLORS_MINI.length];
-                    return (
-                        <div key={d.subject_id}
-                            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 6px', borderRadius: '6px', background: isHov ? `${sliceColor}1a` : 'transparent', transition: 'background 0.15s', cursor: 'default' }}
-                            onMouseEnter={() => setHoveredId(d.subject_id)}
-                            onMouseLeave={() => setHoveredId(null)}>
-                            <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: sliceColor, flexShrink: 0, transform: isHov ? 'scale(1.2)' : 'scale(1)', transition: 'transform 0.15s' }} />
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--prof-text-main)' }}>{d.course_code}</div>
-                                <div style={{ fontSize: '0.7rem', color: 'var(--prof-text-muted)', lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.course_title}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+            {/* Pie + legend row */}
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                <svg viewBox="0 0 180 180" width="180" height="180"
+                    style={{ flexShrink: 0, filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.12))', transform: 'perspective(600px) rotateX(12deg)', animation: 'pieIn 0.45s ease', transformOrigin: 'center' }}>
+                    {allSlices.map(s => {
+                        const isHov = hoveredId === s.id;
+                        const dx = isHov ? 5 * Math.cos(s.midAngle * Math.PI / 180) : 0;
+                        const dy = isHov ? 5 * Math.sin(s.midAngle * Math.PI / 180) : 0;
+                        return (
+                            <path key={s.id} d={donutPath(outerR, innerR, s.start, s.end)} fill={s.color}
+                                transform={isHov ? `translate(${dx}, ${dy})` : undefined}
+                                style={{ transition: 'transform 0.2s ease', cursor: 'default', filter: isHov ? 'brightness(1.1)' : undefined }}
+                                onMouseEnter={() => setHoveredId(s.id)}
+                                onMouseLeave={() => setHoveredId(null)} />
+                        );
+                    })}
+                    <circle cx={cx} cy={cy} r={innerR} fill="white" />
+                    <text x={cx} y={cy - 7} textAnchor="middle" fontSize="17" fontWeight="700" fill={gc.text}>{overallPct.toFixed(0)}%</text>
+                    <text x={cx} y={cy + 10} textAnchor="middle" fontSize="9" fill="#94a3b8" fontWeight="600">OVERALL</text>
+                </svg>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minWidth: '150px' }}>
+                    {data.map((d, i) => {
+                        const isHov = hoveredId === d.subject_id;
+                        const sliceColor = PIE_COLORS_MINI[i % PIE_COLORS_MINI.length];
+                        return (
+                            <div key={d.subject_id}
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 6px', borderRadius: '6px', background: isHov ? `${sliceColor}1a` : 'transparent', transition: 'background 0.15s', cursor: 'default' }}
+                                onMouseEnter={() => setHoveredId(d.subject_id)}
+                                onMouseLeave={() => setHoveredId(null)}>
+                                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: sliceColor, flexShrink: 0, transform: isHov ? 'scale(1.2)' : 'scale(1)', transition: 'transform 0.15s' }} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--prof-text-main)' }}>{d.course_code}</div>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--prof-text-muted)', lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.course_title}</div>
+                                </div>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', flexShrink: 0 }}>
+                                    {d.correct} correct
+                                </span>
                             </div>
-                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', flexShrink: 0 }}>
-                                {d.correct} correct
-                            </span>
+                        );
+                    })}
+                    {totalWrong > 0 && (
+                        <div
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '6px', borderTop: '1px solid #f1f5f9', padding: '6px', borderRadius: '6px', background: hoveredId === '__wrong__' ? '#fff1f2' : 'transparent', transition: 'background 0.15s', cursor: 'default' }}
+                            onMouseEnter={() => setHoveredId('__wrong__')}
+                            onMouseLeave={() => setHoveredId(null)}>
+                            <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#fca5a5', flexShrink: 0, transform: hoveredId === '__wrong__' ? 'scale(1.2)' : 'scale(1)', transition: 'transform 0.15s' }} />
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#b91c1c', flex: 1 }}>Mistakes</span>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b91c1c', flexShrink: 0 }}>{totalWrong} wrong</span>
                         </div>
-                    );
-                })}
-                {totalWrong > 0 && (
-                    <div
-                        style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '6px', borderTop: '1px solid #f1f5f9', padding: '6px', borderRadius: '6px', background: hoveredId === '__wrong__' ? '#fff1f2' : 'transparent', transition: 'background 0.15s', cursor: 'default' }}
-                        onMouseEnter={() => setHoveredId('__wrong__')}
-                        onMouseLeave={() => setHoveredId(null)}>
-                        <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#fca5a5', flexShrink: 0, transform: hoveredId === '__wrong__' ? 'scale(1.2)' : 'scale(1)', transition: 'transform 0.15s' }} />
-                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#b91c1c', flex: 1 }}>Mistakes</span>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b91c1c', flexShrink: 0 }}>{totalWrong} wrong</span>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
+
+            {/* CO/MO breakdown */}
+            {breakdown.length > 0 && (
+                <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '10px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    {breakdown.map(subj => (
+                        <div key={subj.subject_id} style={{ flex: 1, minWidth: '130px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '1px', background: subj.color, flexShrink: 0 }} />
+                                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: subj.color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{subj.course_code}</span>
+                            </div>
+                            {subj.cos.map(co => {
+                                const coPct = co.total > 0 ? (co.correct / co.total) * 100 : 0;
+                                const coGc = getGradeColors(coPct, passingRate);
+                                return (
+                                    <div key={co.label} style={{ marginBottom: '5px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0' }}>
+                                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', minWidth: '30px' }}>{co.label}</span>
+                                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: coGc.text }}>{co.correct}/{co.total}</span>
+                                        </div>
+                                        {co.mos.map(mo => {
+                                            const moPct = mo.total > 0 ? (mo.correct / mo.total) * 100 : 0;
+                                            const moGc = getGradeColors(moPct, passingRate);
+                                            return (
+                                                <div key={mo.label} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '1px 0 1px 10px' }}>
+                                                    <span style={{ fontSize: '0.67rem', fontWeight: 600, color: '#94a3b8', minWidth: '30px' }}>{mo.label}</span>
+                                                    <span style={{ fontSize: '0.67rem', color: moGc.text }}>{mo.correct}/{mo.total}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
@@ -174,6 +246,7 @@ function MiniSubjectPieChart({ subjects, questionIds, questionMap, answers, pass
 export function ViewExam() {
     const { examId, tab } = useParams<{ examId: string; tab?: string }>();
     const navigate = useNavigate();
+    const { user } = useAuth();
 
     // ── Core exam state ──
     const [exam, setExam] = useState<ExamWithSets | null>(null);
@@ -253,6 +326,20 @@ export function ViewExam() {
 
     // ── Grade attempt filter ──
     const [gradesAttemptFilter, setGradesAttemptFilter] = useState<number | null>(null);
+    const [gradesSummaryMode, setGradesSummaryMode] = useState(false);
+
+    // ── Exam Faculty ──
+    const [faculty, setFaculty] = useState<ExamFacultyMember[]>([]);
+    const [isInviteOpen, setIsInviteOpen] = useState(false);
+    const [professorQuery, setProfessorQuery] = useState('');
+    const [allProfessors, setAllProfessors] = useState<Professor[]>([]);
+    const [inviteLoading, setInviteLoading] = useState<string | null>(null);
+    const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
+    const [invitePage, setInvitePage] = useState(0);
+
+    // ── OMR scanner busy guard ──
+    const [isScannerBusy, setIsScannerBusy] = useState(false);
+    const [pendingTab, setPendingTab] = useState<string | null>(null);
 
     // ── Grade select / bulk delete ──
     const [selectModeAttempt, setSelectModeAttempt] = useState<number | null>(null);
@@ -273,9 +360,15 @@ export function ViewExam() {
 
     const loadExam = useCallback(async () => {
         if (!examId) return;
-        const { data, error } = await fetchExamById(examId);
+        const [{ data, error }, { data: fac }, { data: profs }] = await Promise.all([
+            fetchExamById(examId),
+            fetchExamFaculty(examId),
+            fetchProfessors(),
+        ]);
         if (error || !data) { setError('Failed to load exam.'); setIsLoading(false); return; }
         setExam(data);
+        setFaculty(fac ?? []);
+        setAllProfessors(profs ?? []);
         const allIds = [...new Set(data.exam_sets.flatMap(s => s.question_ids))];
         if (allIds.length === 0) { setIsLoading(false); return; }
         const { data: questions } = await fetchQuestionsByIds(allIds);
@@ -380,7 +473,7 @@ export function ViewExam() {
     const canGeneratePapers = exam.num_sets > 0 && exam.exam_subjects.length > 0;
     const prevAttemptDone = activeAttempt === 1 || attemptStatusMap[activeAttempt - 1] === 'done';
 
-    const handleRearrange = () => {
+    const handleRearrange = async () => {
         if (!currentSet) return;
         const ids = [...(shuffledMap[shuffleKey] ?? currentSet.question_ids)];
         for (let i = ids.length - 1; i > 0; i--) {
@@ -390,6 +483,7 @@ export function ViewExam() {
         setShuffledMap(prev => ({ ...prev, [shuffleKey]: ids }));
         setCurrentPage(0);
         setExpandedId(null);
+        await updateExamSetOrder(currentSet.id, ids);
     };
 
     const handlePrint = () => {
@@ -681,7 +775,13 @@ export function ViewExam() {
                     return (
                         <button
                             key={t}
-                            onClick={() => navigate(`/professor/exams/${examId}/${t}`)}
+                            onClick={() => {
+                                if (activeTab === 'scan' && isScannerBusy && t !== activeTab) {
+                                    setPendingTab(t);
+                                } else {
+                                    navigate(`/professor/exams/${examId}/${t}`);
+                                }
+                            }}
                             style={{
                                 padding: '11px 20px',
                                 border: 'none',
@@ -759,16 +859,24 @@ export function ViewExam() {
                                                             <button
                                                                 key={n}
                                                                 disabled={!isDeployed}
-                                                                onClick={() => { setGradesAttemptFilter(n); setSelectModeAttempt(null); setSelectedGradeKeys(new Set()); setExpandedGradeKey(null); setEditingGradeKey(null); }}
-                                                                style={{ padding: '3px 11px', borderRadius: '9px', border: `1px solid ${isActive ? '#2563eb' : 'var(--prof-border)'}`, background: isActive ? '#2563eb' : '#fff', color: isActive ? '#fff' : isDeployed ? 'var(--prof-text-main)' : '#94a3b8', cursor: isDeployed ? 'pointer' : 'not-allowed', fontSize: '0.77rem', fontWeight: 600, opacity: !isDeployed ? 0.5 : 1 }}
+                                                                onClick={() => { setGradesAttemptFilter(n); setGradesSummaryMode(false); setSelectModeAttempt(null); setSelectedGradeKeys(new Set()); setExpandedGradeKey(null); setEditingGradeKey(null); }}
+                                                                style={{ padding: '3px 11px', borderRadius: '9px', border: `1px solid ${isActive && !gradesSummaryMode ? '#2563eb' : 'var(--prof-border)'}`, background: isActive && !gradesSummaryMode ? '#2563eb' : '#fff', color: isActive && !gradesSummaryMode ? '#fff' : isDeployed ? 'var(--prof-text-main)' : '#94a3b8', cursor: isDeployed ? 'pointer' : 'not-allowed', fontSize: '0.77rem', fontWeight: 600, opacity: !isDeployed ? 0.5 : 1 }}
                                                             >
                                                                 Attempt {n}
                                                             </button>
                                                         );
                                                     })}
-                                                    <span style={{ fontSize: '0.7rem', fontWeight: 600, color: statusColor, background: statusBg, padding: '1px 7px', borderRadius: '9px', border: `1px solid ${statusBdr}` }}>
-                                                        {isDone ? 'Closed' : 'Open'}
-                                                    </span>
+                                                    <button
+                                                        onClick={() => { setGradesSummaryMode(v => !v); setSelectModeAttempt(null); setSelectedGradeKeys(new Set()); setExpandedGradeKey(null); setEditingGradeKey(null); }}
+                                                        style={{ padding: '3px 11px', borderRadius: '9px', border: `1px solid ${gradesSummaryMode ? '#7c3aed' : 'var(--prof-border)'}`, background: gradesSummaryMode ? '#7c3aed' : '#fff', color: gradesSummaryMode ? '#fff' : 'var(--prof-text-main)', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 600 }}
+                                                    >
+                                                        Summary
+                                                    </button>
+                                                    {!gradesSummaryMode && (
+                                                        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: statusColor, background: statusBg, padding: '1px 7px', borderRadius: '9px', border: `1px solid ${statusBdr}` }}>
+                                                            {isDone ? 'Closed' : 'Open'}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                                                     {isSelecting ? (
@@ -841,7 +949,73 @@ export function ViewExam() {
                                                 </div>
                                             </div>
                                             {/* ── Table ── */}
-                                            {rows.length === 0 && !isLoadingGrades ? (
+                                            {gradesSummaryMode ? (() => {
+                                                const studentMap: Record<string, AttemptGradeRow['enrollment']> = {};
+                                                const subMap: Record<string, Record<number, AttemptGradeRow['submission']>> = {};
+                                                for (const [attemptKey, attemptRows] of Object.entries(gradesData)) {
+                                                    const aNum = Number(attemptKey);
+                                                    for (const { enrollment, submission } of attemptRows) {
+                                                        if (!studentMap[enrollment.student_id]) studentMap[enrollment.student_id] = enrollment;
+                                                        if (!subMap[enrollment.student_id]) subMap[enrollment.student_id] = {};
+                                                        subMap[enrollment.student_id][aNum] = submission;
+                                                    }
+                                                }
+                                                const allStudents = Object.values(studentMap).sort((a, b) =>
+                                                    (a.student?.full_name ?? '').localeCompare(b.student?.full_name ?? '')
+                                                );
+                                                const thStyle: CSSProperties = { textAlign: 'left', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--prof-surface)' };
+                                                if (allStudents.length === 0 && !isLoadingGrades) {
+                                                    return <p style={{ color: 'var(--prof-text-muted)', fontSize: '0.82rem', margin: 0, padding: '12px 16px' }}>No students enrolled.</p>;
+                                                }
+                                                return (
+                                                    <div style={{ overflowX: 'auto' }}>
+                                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                                            <thead>
+                                                                <tr>
+                                                                    <th style={{ ...thStyle, padding: '6px 10px 6px 16px' }}>Student</th>
+                                                                    <th style={thStyle}>ID</th>
+                                                                    {deployedAttempts.map(a => (
+                                                                        <th key={a.attempt_number} style={{ ...thStyle, textAlign: 'center' }}>Attempt {a.attempt_number}</th>
+                                                                    ))}
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {allStudents.map(enrollment => (
+                                                                    <tr key={enrollment.student_id} style={{ borderBottom: '1px solid var(--prof-border)' }}>
+                                                                        <td style={{ padding: '7px 10px 7px 16px', fontSize: '0.83rem', color: 'var(--prof-text-main)' }}>{enrollment.student?.full_name ?? '—'}</td>
+                                                                        <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: '0.77rem', color: 'var(--prof-text-muted)' }}>{enrollment.student?.student_id ?? '—'}</td>
+                                                                        {deployedAttempts.map(a => {
+                                                                            const sub = subMap[enrollment.student_id]?.[a.attempt_number];
+                                                                            const isDone = a.status === 'done';
+                                                                            if (!sub) {
+                                                                                return (
+                                                                                    <td key={a.attempt_number} style={{ padding: '7px 10px', textAlign: 'center' }}>
+                                                                                        {isDone
+                                                                                            ? <span style={{ fontSize: '0.74rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '2px 7px' }}>DNT</span>
+                                                                                            : <span style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>—</span>}
+                                                                                    </td>
+                                                                                );
+                                                                            }
+                                                                            if (sub.score == null || !sub.total_items) {
+                                                                                return <td key={a.attempt_number} style={{ padding: '7px 10px', textAlign: 'center' }}><span style={{ color: '#cbd5e1' }}>—</span></td>;
+                                                                            }
+                                                                            const pct = Math.round((sub.score / sub.total_items) * 100);
+                                                                            const gc = getGradeColors(pct, passingRate);
+                                                                            return (
+                                                                                <td key={a.attempt_number} style={{ padding: '7px 10px', textAlign: 'center' }}>
+                                                                                    <span style={{ fontSize: '0.78rem', fontWeight: 600, color: gc.text, background: gc.bg, border: `1px solid ${gc.border}`, borderRadius: '8px', padding: '2px 7px' }}>
+                                                                                        {sub.score}/{sub.total_items}
+                                                                                    </span>
+                                                                                </td>
+                                                                            );
+                                                                        })}
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                );
+                                            })() : rows.length === 0 && !isLoadingGrades ? (
                                                 <p style={{ color: 'var(--prof-text-muted)', fontSize: '0.82rem', margin: 0, padding: '12px 16px' }}>No students enrolled.</p>
                                             ) : (
                                                 <>
@@ -1005,7 +1179,7 @@ export function ViewExam() {
                                                                                                             </div>
                                                                                                             {isEditing && <p style={{ margin: '8px 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>Click a cell to cycle: A → B → C → D → E → blank</p>}
                                                                                                         </div>
-                                                                                                        <div style={{ flex: 1, minWidth: 0, padding: '0 8px', display: 'flex', alignItems: 'center' }}>
+                                                                                                        <div style={{ flex: 1, minWidth: 0, padding: '0 8px', display: 'flex', alignItems: 'flex-start' }}>
                                                                                                             <MiniSubjectPieChart
                                                                                                                 subjects={exam.exam_subjects.filter(es => es.subjects).map(es => ({ subject_id: es.subject_id, course_code: es.subjects!.course_code, course_title: es.subjects!.course_title }))}
                                                                                                                 questionIds={answerKey.questionIds}
@@ -1092,13 +1266,15 @@ export function ViewExam() {
                                     Lock Exam
                                 </button>
                             )}
-                            <button
-                                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', fontWeight: 600, borderRadius: '7px', border: '1px solid #fca5a5', background: '#fee2e2', color: '#991b1b', cursor: 'pointer' }}
-                                onClick={() => setIsDeleteConfirmOpen(true)}
-                            >
-                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg>
-                                Delete Exam
-                            </button>
+                            {exam.created_by === user?.id && (
+                                <button
+                                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', fontWeight: 600, borderRadius: '7px', border: '1px solid #fca5a5', background: '#fee2e2', color: '#991b1b', cursor: 'pointer' }}
+                                    onClick={() => setIsDeleteConfirmOpen(true)}
+                                >
+                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg>
+                                    Delete Exam
+                                </button>
+                            )}
                         </div>
 
                         {/* Exam details list */}
@@ -1133,6 +1309,248 @@ export function ViewExam() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* ── Faculty section ── */}
+                        {(() => {
+                            const isMain = exam.created_by === user?.id;
+                            const creatorProfile = allProfessors.find(p => p.id === exam.created_by);
+
+                            const statusBadge = (status: ExamFacultyMember['status']) => {
+                                if (status === 'accepted') return <span style={{ fontSize: '0.67rem', fontWeight: 600, background: '#dcfce7', color: '#15803d', border: '1px solid #86efac', borderRadius: '8px', padding: '1px 6px' }}>Accepted</span>;
+                                if (status === 'declined') return <span style={{ fontSize: '0.67rem', fontWeight: 600, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: '8px', padding: '1px 6px' }}>Declined</span>;
+                                return <span style={{ fontSize: '0.67rem', fontWeight: 600, background: '#fef9c3', color: '#854d0e', border: '1px solid #fde047', borderRadius: '8px', padding: '1px 6px' }}>Pending</span>;
+                            };
+
+                            const avatarColor = (name: string) => {
+                                const palette = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#0ea5e9'];
+                                return palette[(name.charCodeAt(0) + (name.charCodeAt(1) || 0)) % palette.length];
+                            };
+                            const initials = (name: string) =>
+                                name.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+
+                            return (
+                                <div style={{ padding: '12px 16px', borderTop: '1px solid var(--prof-border)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                        <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--prof-text-muted)' }}>Faculty</p>
+                                        {isMain && (
+                                            <button
+                                                onClick={() => { setIsInviteOpen(true); setProfessorQuery(''); setInvitePage(0); }}
+                                                style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600, background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '3px 9px', cursor: 'pointer', transition: 'background 0.15s' }}
+                                            >
+                                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="11" height="11"><path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
+                                                Invite
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Main professor */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 0' }}>
+                                        <div style={{ flexShrink: 0, width: '26px', height: '26px', borderRadius: '50%', background: avatarColor(creatorProfile?.full_name ?? creatorProfile?.email ?? 'U'), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', letterSpacing: '0.02em' }}>
+                                            {initials(creatorProfile?.full_name ?? creatorProfile?.email ?? 'U')}
+                                        </div>
+                                        <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: 500, color: 'var(--prof-text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {creatorProfile?.full_name ?? creatorProfile?.email ?? 'Unknown'}
+                                            {exam.created_by === user?.id && <span style={{ color: 'var(--prof-text-muted)', fontWeight: 400 }}> (You)</span>}
+                                        </span>
+                                        <span style={{ fontSize: '0.67rem', fontWeight: 600, background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd', borderRadius: '8px', padding: '1px 7px', flexShrink: 0 }}>Main</span>
+                                    </div>
+
+                                    {/* Co-handlers */}
+                                    {faculty.map(f => {
+                                        const fName = f.professor?.full_name ?? f.professor?.email ?? 'Unknown';
+                                        return (
+                                            <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 0', borderTop: '1px solid var(--prof-border)' }}>
+                                                <div style={{ flexShrink: 0, width: '26px', height: '26px', borderRadius: '50%', background: avatarColor(fName), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', letterSpacing: '0.02em' }}>
+                                                    {initials(fName)}
+                                                </div>
+                                                <span style={{ flex: 1, fontSize: '0.82rem', color: 'var(--prof-text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fName}</span>
+                                                {statusBadge(f.status)}
+                                                {isMain && (
+                                                    <button
+                                                        onClick={() => setRemoveTarget({ id: f.id, name: fName })}
+                                                        title="Remove co-handler"
+                                                        style={{ flexShrink: 0, width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: '1px solid transparent', borderRadius: '5px', cursor: 'pointer', color: '#94a3b8', transition: 'all 0.15s' }}
+                                                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fee2e2'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#fca5a5'; (e.currentTarget as HTMLButtonElement).style.color = '#b91c1c'; }}
+                                                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = '#94a3b8'; }}
+                                                    >
+                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="12" height="12"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+
+                                    {faculty.length === 0 && (
+                                        <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: 'var(--prof-text-muted)', fontStyle: 'italic' }}>No co-handlers invited yet.</p>
+                                    )}
+                                </div>
+                            );
+                        })()}
+
+                        {/* ── Invite Modal ── */}
+                        {isInviteOpen && (() => {
+                            const invitedIds = new Set(faculty.map(f => f.professor_id));
+                            const filtered = allProfessors.filter(p =>
+                                p.id !== exam.created_by &&
+                                !invitedIds.has(p.id) &&
+                                (professorQuery === '' ||
+                                    (p.full_name ?? '').toLowerCase().includes(professorQuery.toLowerCase()) ||
+                                    (p.email ?? '').toLowerCase().includes(professorQuery.toLowerCase()))
+                            );
+                            const avatarColor = (name: string) => {
+                                const palette = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#0ea5e9'];
+                                return palette[(name.charCodeAt(0) + (name.charCodeAt(1) || 0)) % palette.length];
+                            };
+                            const initials = (name: string) =>
+                                name.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+                            const handleInvite = async (prof: Professor) => {
+                                if (!exam) return;
+                                setInviteLoading(prof.id);
+                                const { data: newFac, error: facErr } = await addExamFaculty(exam.id, prof.id);
+                                if (facErr || !newFac) { setInviteLoading(null); return; }
+                                await createExamInviteNotification({
+                                    recipientId: prof.id,
+                                    senderId: user!.id,
+                                    examId: exam.id,
+                                    examTitle: exam.title,
+                                    facultyId: newFac.id,
+                                });
+                                setFaculty(prev => [...prev, newFac]);
+                                setInviteLoading(null);
+                            };
+                            return (
+                                <div
+                                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(2px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', animation: 'fadeIn 0.2s ease-out' }}
+                                    onClick={() => setIsInviteOpen(false)}
+                                >
+                                    <div
+                                        style={{ background: '#fff', borderRadius: '16px', width: '100%', maxWidth: '500px', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)', animation: 'slideUp 0.3s cubic-bezier(0.16,1,0.3,1)' }}
+                                        onClick={e => e.stopPropagation()}
+                                    >
+                                        {/* Header */}
+                                        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9' }}>
+                                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                        <svg fill="none" strokeWidth="1.75" stroke="#2563eb" viewBox="0 0 24 24" width="20" height="20"><path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
+                                                    </div>
+                                                    <div>
+                                                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>Invite Co-Handler</h3>
+                                                        <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: '#64748b' }}>Search and invite a professor to co-handle this exam.</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => setIsInviteOpen(false)}
+                                                    style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '7px', cursor: 'pointer', color: '#64748b', flexShrink: 0 }}
+                                                >
+                                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Search bar */}
+                                        <div style={{ padding: '14px 24px', borderBottom: '1px solid #f1f5f9' }}>
+                                            <div style={{ position: 'relative' }}>
+                                                <svg style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} fill="none" strokeWidth="2" stroke="#94a3b8" viewBox="0 0 24 24" width="15" height="15"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                                                <input
+                                                    className="cs-input-field"
+                                                    placeholder="Search by name or email…"
+                                                    value={professorQuery}
+                                                    onChange={e => { setProfessorQuery(e.target.value); setInvitePage(0); }}
+                                                    autoFocus
+                                                    style={{ width: '100%', boxSizing: 'border-box', paddingLeft: '34px' }}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* List */}
+                                        {(() => {
+                                            const PAGE_SIZE = 5;
+                                            const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+                                            const safePage = Math.min(invitePage, totalPages - 1);
+                                            const paged = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+                                            return (
+                                                <>
+                                                    <div style={{ minHeight: '260px' }}>
+                                                        {filtered.length === 0 ? (
+                                                            <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+                                                                <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+                                                                    <svg fill="none" strokeWidth="1.5" stroke="#94a3b8" viewBox="0 0 24 24" width="22" height="22"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
+                                                                </div>
+                                                                <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 600, color: '#475569' }}>
+                                                                    {professorQuery ? 'No professors found' : 'All professors invited'}
+                                                                </p>
+                                                                <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>
+                                                                    {professorQuery ? 'Try a different name or email.' : 'Every professor has already been invited.'}
+                                                                </p>
+                                                            </div>
+                                                        ) : (
+                                                            paged.map((p, idx) => {
+                                                                const name = p.full_name ?? p.email ?? 'Unknown';
+                                                                const isLoading = inviteLoading === p.id;
+                                                                return (
+                                                                    <div
+                                                                        key={p.id}
+                                                                        style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 24px', borderBottom: idx < paged.length - 1 ? '1px solid #f1f5f9' : 'none' }}
+                                                                    >
+                                                                        <div style={{ flexShrink: 0, width: '36px', height: '36px', borderRadius: '50%', background: avatarColor(name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, color: '#fff', letterSpacing: '0.03em' }}>
+                                                                            {initials(name)}
+                                                                        </div>
+                                                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                                                            <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                                                                            <div style={{ fontSize: '0.75rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.email ?? ''}{p.program ? <span style={{ marginLeft: '6px', background: '#f1f5f9', borderRadius: '4px', padding: '0 5px', fontSize: '0.68rem', color: '#475569' }}>{p.program.code}</span> : null}</div>
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => handleInvite(p)}
+                                                                            disabled={isLoading}
+                                                                            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 14px', fontSize: '0.8rem', fontWeight: 600, background: isLoading ? '#f1f5f9' : '#2563eb', color: isLoading ? '#94a3b8' : '#fff', border: 'none', borderRadius: '7px', cursor: isLoading ? 'default' : 'pointer', transition: 'background 0.15s' }}
+                                                                        >
+                                                                            {isLoading ? (
+                                                                                <span style={{ display: 'inline-block', width: '13px', height: '13px', border: '2px solid #cbd5e1', borderTopColor: '#94a3b8', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                                                                            ) : (
+                                                                                <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                                                                            )}
+                                                                            {isLoading ? 'Inviting…' : 'Invite'}
+                                                                        </button>
+                                                                    </div>
+                                                                );
+                                                            })
+                                                        )}
+                                                    </div>
+
+                                                    {/* Footer: pagination */}
+                                                    {filtered.length > 0 && (
+                                                        <div style={{ padding: '12px 24px', borderTop: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            <button
+                                                                onClick={() => setInvitePage(p => Math.max(0, p - 1))}
+                                                                disabled={safePage === 0}
+                                                                style={{ width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: safePage === 0 ? 'default' : 'pointer', color: safePage === 0 ? '#cbd5e1' : '#475569' }}
+                                                            >
+                                                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                                                            </button>
+                                                            <span style={{ fontSize: '0.78rem', color: '#64748b', minWidth: '72px', textAlign: 'center' }}>
+                                                                Page {safePage + 1} of {totalPages}
+                                                            </span>
+                                                            <button
+                                                                onClick={() => setInvitePage(p => Math.min(totalPages - 1, p + 1))}
+                                                                disabled={safePage >= totalPages - 1}
+                                                                style={{ width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: safePage >= totalPages - 1 ? 'default' : 'pointer', color: safePage >= totalPages - 1 ? '#cbd5e1' : '#475569' }}
+                                                            >
+                                                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                                                            </button>
+                                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: '4px' }}>
+                                                                {filtered.length} professor{filtered.length !== 1 ? 's' : ''}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
                     </div>
                 </div>
             )}
@@ -1884,6 +2302,7 @@ export function ViewExam() {
                             enrollments={(gradesData[effectiveAttempt] ?? []).map(r => r.enrollment)}
                             existingGrades={gradesData[effectiveAttempt] ?? []}
                             onComplete={loadGradesOnly}
+                            onBusyChange={setIsScannerBusy}
                         />
                     </div>
                 );
@@ -1897,6 +2316,38 @@ export function ViewExam() {
             />
 
             {/* ── Modals ── */}
+            <Popup
+                isOpen={removeTarget !== null}
+                title="Remove Co-Handler"
+                message={`Remove ${removeTarget?.name ?? 'this professor'} from the exam? They will lose access and their invitation will be cancelled.`}
+                type="danger"
+                onConfirm={async () => {
+                    if (!removeTarget) return;
+                    await Promise.all([
+                        removeExamFaculty(removeTarget.id),
+                        deleteNotificationByFacultyId(removeTarget.id),
+                    ]);
+                    setFaculty(prev => prev.filter(f => f.id !== removeTarget.id));
+                    setRemoveTarget(null);
+                }}
+                onCancel={() => setRemoveTarget(null)}
+                confirmText="Remove"
+                cancelText="Cancel"
+            />
+            <Popup
+                isOpen={pendingTab !== null}
+                title="Scanning in Progress"
+                message="You have ongoing scanning activity. Leaving this tab may cause unsaved work to be lost. Are you sure you want to continue?"
+                type="warning"
+                onConfirm={() => {
+                    const dest = pendingTab!;
+                    setPendingTab(null);
+                    navigate(`/professor/exams/${examId}/${dest}`);
+                }}
+                onCancel={() => setPendingTab(null)}
+                confirmText="Leave Tab"
+                cancelText="Stay"
+            />
             <Popup
                 isOpen={isRegenerateConfirmOpen}
                 title="Regenerate Papers"
