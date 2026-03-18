@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { fetchEnrolledExamById, fetchStudentSubmissions, getStudentExamStatus } from '../../lib/studentExams';
+import { fetchEnrolledExamById, fetchStudentSubmissions, saveSubmissionAiAnalysis, getStudentExamStatus } from '../../lib/studentExams';
 import type { StudentExam, StudentSubmission } from '../../lib/studentExams';
 import { fetchPassingRate } from '../../lib/settings';
 import { fetchQuestionsWithOutcomesByIds } from '../../lib/questions';
@@ -146,6 +146,7 @@ function SubjectPieChart({ subjects, topics, passingRate }: {
     topics: TopicStat[];
     passingRate: number;
 }) {
+    const [hoveredId, setHoveredId] = useState<string | null>(null);
     const cx = 90, cy = 90, outerR = 72, innerR = 44;
 
     const data = subjects
@@ -164,17 +165,17 @@ function SubjectPieChart({ subjects, topics, passingRate }: {
     const gc = getGradeColors(overallPct, passingRate);
 
     // Slices: correct per subject + one combined wrong slice
-    type Slice = { id: string; value: number; color: string; start: number; end: number };
+    type Slice = { id: string; value: number; color: string; start: number; end: number; midAngle: number };
     const allSlices: Slice[] = [];
     let angle = -90;
     data.forEach((d, i) => {
         const sweep = totalItems > 0 ? (d.correct / totalItems) * 360 : 0;
-        allSlices.push({ id: d.id, value: d.correct, color: PIE_COLORS[i % PIE_COLORS.length], start: angle, end: angle + sweep });
+        allSlices.push({ id: d.id, value: d.correct, color: PIE_COLORS[i % PIE_COLORS.length], start: angle, end: angle + sweep, midAngle: angle + sweep / 2 });
         angle += sweep;
     });
     if (totalWrong > 0) {
         const sweep = totalItems > 0 ? (totalWrong / totalItems) * 360 : 0;
-        allSlices.push({ id: '__wrong__', value: totalWrong, color: '#fca5a5', start: angle, end: angle + sweep });
+        allSlices.push({ id: '__wrong__', value: totalWrong, color: '#fca5a5', start: angle, end: angle + sweep, midAngle: angle + sweep / 2 });
         angle += sweep;
     }
 
@@ -194,30 +195,65 @@ function SubjectPieChart({ subjects, topics, passingRate }: {
 
     return (
         <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <svg viewBox="0 0 180 180" width="180" height="180" style={{ flexShrink: 0 }}>
-                {allSlices.map(s => (
-                    <path key={s.id} d={donutPath(outerR, innerR, s.start, s.end)} fill={s.color} />
-                ))}
+            <svg
+                viewBox="0 0 180 180" width="180" height="180"
+                style={{
+                    flexShrink: 0,
+                    filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.12))',
+                    transform: 'perspective(600px) rotateX(12deg)',
+                    animation: 'pieIn 0.45s ease',
+                    transformOrigin: 'center',
+                }}
+            >
+                {allSlices.map(s => {
+                    const isHov = hoveredId === s.id;
+                    const dx = isHov ? 5 * Math.cos(s.midAngle * Math.PI / 180) : 0;
+                    const dy = isHov ? 5 * Math.sin(s.midAngle * Math.PI / 180) : 0;
+                    return (
+                        <path
+                            key={s.id}
+                            d={donutPath(outerR, innerR, s.start, s.end)}
+                            fill={s.color}
+                            transform={isHov ? `translate(${dx}, ${dy})` : undefined}
+                            style={{ transition: 'transform 0.2s ease', cursor: 'default', filter: isHov ? 'brightness(1.1)' : undefined }}
+                            onMouseEnter={() => setHoveredId(s.id)}
+                            onMouseLeave={() => setHoveredId(null)}
+                        />
+                    );
+                })}
                 <circle cx={cx} cy={cy} r={innerR} fill="white" />
                 <text x={cx} y={cy - 7} textAnchor="middle" fontSize="17" fontWeight="700" fill={gc.text}>{overallPct.toFixed(0)}%</text>
                 <text x={cx} y={cy + 10} textAnchor="middle" fontSize="9" fill="#94a3b8" fontWeight="600">OVERALL</text>
             </svg>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minWidth: '150px' }}>
-                {data.map((d, i) => (
-                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--prof-text-main)' }}>{d.courseCode}</div>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--prof-text-muted)', lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.courseTitle}</div>
+                {data.map((d, i) => {
+                    const isHov = hoveredId === d.id;
+                    const sliceColor = PIE_COLORS[i % PIE_COLORS.length];
+                    return (
+                        <div
+                            key={d.id}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 6px', borderRadius: '6px', background: isHov ? `${sliceColor}1a` : 'transparent', transition: 'background 0.15s', cursor: 'default' }}
+                            onMouseEnter={() => setHoveredId(d.id)}
+                            onMouseLeave={() => setHoveredId(null)}
+                        >
+                            <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: sliceColor, flexShrink: 0, transform: isHov ? 'scale(1.2)' : 'scale(1)', transition: 'transform 0.15s' }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--prof-text-main)' }}>{d.courseCode}</div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--prof-text-muted)', lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.courseTitle}</div>
+                            </div>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', flexShrink: 0 }}>
+                                {d.correct} correct
+                            </span>
                         </div>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: getGradeColors(d.pct, passingRate).text, flexShrink: 0 }}>
-                            {d.correct} correct
-                        </span>
-                    </div>
-                ))}
+                    );
+                })}
                 {totalWrong > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '6px', borderTop: '1px solid #f1f5f9' }}>
-                        <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#fca5a5', flexShrink: 0 }} />
+                    <div
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '6px', borderTop: '1px solid #f1f5f9', padding: '6px', borderRadius: '6px', background: hoveredId === '__wrong__' ? '#fff1f2' : 'transparent', transition: 'background 0.15s', cursor: 'default' }}
+                        onMouseEnter={() => setHoveredId('__wrong__')}
+                        onMouseLeave={() => setHoveredId(null)}
+                    >
+                        <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#fca5a5', flexShrink: 0, transform: hoveredId === '__wrong__' ? 'scale(1.2)' : 'scale(1)', transition: 'transform 0.15s' }} />
                         <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#b91c1c', flex: 1 }}>Mistakes</span>
                         <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b91c1c', flexShrink: 0 }}>{totalWrong} wrong</span>
                     </div>
@@ -227,24 +263,42 @@ function SubjectPieChart({ subjects, topics, passingRate }: {
     );
 }
 
-function AIFeedbackBlock({ feedback, error }: { feedback: AnalysisFeedback; error: string | null }) {
-    if (error) return <p style={{ fontSize: '0.82rem', color: '#b91c1c', margin: 0 }}>{error}</p>;
+function AIAnalysisCard({ feedback }: { feedback: AnalysisFeedback }) {
     return (
-        <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
-                <svg fill="none" strokeWidth="2" stroke="#16a34a" viewBox="0 0 24 24" width="14" height="14">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                </svg>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.04em' }}>AI Analysis</span>
-            </div>
-            <p style={{ fontSize: '0.85rem', color: '#166534', margin: 0, lineHeight: '1.5' }}>{feedback.summary}</p>
-            {feedback.recommendations.length > 0 && (
-                <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    {feedback.recommendations.map((rec, i) => (
-                        <li key={i} style={{ fontSize: '0.82rem', color: '#166534', lineHeight: '1.4' }}>{rec}</li>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Summary */}
+            <p style={{ fontSize: '0.88rem', color: '#166534', margin: 0, lineHeight: '1.6' }}>{feedback.summary}</p>
+
+            {/* Per-subject sections */}
+            {feedback.subjectAnalyses.map((subj, si) => (
+                <div key={si} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: '999px', padding: '2px 10px', fontSize: '0.75rem', fontWeight: 700 }}>
+                            {subj.courseCode} — {subj.courseTitle}
+                        </span>
+                    </div>
+                    <p style={{ fontSize: '0.83rem', color: '#15803d', margin: 0, fontStyle: 'italic', lineHeight: '1.5' }}>{subj.overallComment}</p>
+                    {subj.weakTopics.map((topic, ti) => (
+                        <div key={ti} style={{ background: '#fff', border: '1px solid #bbf7d0', borderRadius: '7px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#166534' }}>
+                                {topic.coTitle}
+                            </div>
+                            <p style={{ fontSize: '0.82rem', color: '#374151', margin: 0, lineHeight: '1.55' }}>{topic.insight}</p>
+                            {topic.studyTips.length > 0 && (
+                                <div>
+                                    <p style={{ fontSize: '0.73rem', fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '4px 0 4px' }}>Study Tips</p>
+                                    <ul style={{ margin: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                        {topic.studyTips.map((tip, ti2) => (
+                                            <li key={ti2} style={{ fontSize: '0.81rem', color: '#166534', lineHeight: '1.45' }}>{tip}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
                     ))}
-                </ul>
-            )}
+                </div>
+            ))}
+
         </div>
     );
 }
@@ -339,7 +393,7 @@ export function ViewExam() {
                 }))
                 .sort((a, b) => a.coOrderIndex - b.coOrderIndex || a.moOrderIndex - b.moOrderIndex);
 
-            newAnalyses[sub.attempt_number] = { topics, aiFeedback: null, isLoadingAI: false, aiError: null };
+            newAnalyses[sub.attempt_number] = { topics, aiFeedback: sub.ai_analysis ?? null, isLoadingAI: false, aiError: null };
         }
         setAttemptAnalyses(newAnalyses);
         setAnalysisLoaded(true);
@@ -376,15 +430,34 @@ export function ViewExam() {
         if (!analysis || analysis.isLoadingAI || analysis.aiFeedback) return;
         setAttemptAnalyses(prev => ({ ...prev, [attemptNumber]: { ...prev[attemptNumber], isLoadingAI: true, aiError: null } }));
         const sub = submissions.find(s => s.attempt_number === attemptNumber);
-        const score = sub?.score ?? 0;
-        const total = sub?.total_items ?? 0;
-        const weakTopics = analysis.topics.filter(t => t.incorrectCount > 0);
+        const examSubjects = exam.exam_subjects
+            .map(es => {
+                const coMap: Record<string, { coTitle: string; incorrectCount: number; totalCount: number; mos: { moDescription: string; incorrectCount: number; totalCount: number }[] }> = {};
+                analysis.topics
+                    .filter(t => t.subjectId === es.subject_id && t.incorrectCount > 0)
+                    .forEach(t => {
+                        if (!coMap[t.coId]) coMap[t.coId] = { coTitle: t.coTitle, incorrectCount: 0, totalCount: 0, mos: [] };
+                        coMap[t.coId].incorrectCount += t.incorrectCount;
+                        coMap[t.coId].totalCount += t.totalCount;
+                        coMap[t.coId].mos.push({ moDescription: t.moDescription, incorrectCount: t.incorrectCount, totalCount: t.totalCount });
+                    });
+                const topics = Object.values(coMap).map(c => ({
+                    coTitle: c.coTitle,
+                    incorrectCount: c.incorrectCount,
+                    totalCount: c.totalCount,
+                    pctCorrect: ((c.totalCount - c.incorrectCount) / c.totalCount) * 100,
+                    moduleOutcomes: c.mos,
+                }));
+                return { courseCode: es.subjects?.course_code ?? '', courseTitle: es.subjects?.course_title ?? '', topics };
+            })
+            .filter(s => s.topics.length > 0);
         const { data, error: aiErr } = await generateStudentAnalysis(
             exam.title,
-            weakTopics,
-            [{ attemptNumber, score, total }],
-            false
+            examSubjects,
+            { score: sub?.score ?? 0, total: sub?.total_items ?? 0, attemptNumber },
+            passingRate
         );
+        if (data && sub) saveSubmissionAiAnalysis(sub.id, data);
         setAttemptAnalyses(prev => ({
             ...prev,
             [attemptNumber]: { ...prev[attemptNumber], aiFeedback: data, isLoadingAI: false, aiError: aiErr },
@@ -393,8 +466,13 @@ export function ViewExam() {
 
     if (isLoading) {
         return (
-            <div className="qb-container create-question-wrapper">
-                <p className="settings-loading-row">Loading exam...</p>
+            <div className="qb-container create-question-wrapper" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+                    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#ec1f28" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                    </svg>
+                    <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.95rem', fontWeight: 500 }}>Loading exam...</p>
+                </div>
             </div>
         );
     }
@@ -452,6 +530,8 @@ export function ViewExam() {
     const bestScore = scores.length > 0 ? Math.max(...scores) : null;
     const latestScore = gradedSubs.length > 0 ? scores[scores.length - 1] : null;
     const hasPassed = scores.some(pct => pct >= passingRate);
+    const allAttemptsDone = exam.exam_attempts.length > 0 && exam.exam_attempts.every(a => a.status === 'done');
+    const showGrade = hasPassed || (allAttemptsDone && gradedSubs.length > 0);
 
     const statusStyleMap: Record<string, { color: string; bg: string; label: string }> = {
         available: { color: '#15803d', bg: '#dcfce7', label: 'Available' },
@@ -584,7 +664,7 @@ export function ViewExam() {
                                 </div>
                                 <div style={{ background: '#fff', border: '1px solid var(--prof-border)', borderRadius: '10px', padding: '12px 16px', minWidth: '100px' }}>
                                     <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>Grade</div>
-                                    {gradedSubs.length > 0 ? (
+                                    {showGrade ? (
                                         <div style={{ fontSize: '1.5rem', fontWeight: 800, color: hasPassed ? '#15803d' : '#b91c1c' }}>
                                             {hasPassed ? 'P' : 'F'}
                                         </div>
@@ -684,7 +764,7 @@ export function ViewExam() {
                                             { label: 'Best Score', value: bestScore !== null ? `${bestScore.toFixed(1)}%` : '—', color: bestScore !== null ? getGradeColors(bestScore, passingRate).text : '#b91c1c' },
                                             { label: 'Latest Score', value: latestScore !== null ? `${latestScore.toFixed(1)}%` : '—', color: latestScore !== null ? getGradeColors(latestScore, passingRate).text : '#b91c1c' },
                                             { label: 'Graded Attempts', value: `${gradedSubs.length} / ${exam.max_attempts}`, color: 'var(--prof-text-main)' },
-                                            { label: 'Grade', value: hasPassed ? 'P' : 'F', color: hasPassed ? '#15803d' : '#b91c1c' },
+                                            { label: 'Grade', value: showGrade ? (hasPassed ? 'P' : 'F') : '—', color: showGrade ? (hasPassed ? '#15803d' : '#b91c1c') : 'var(--prof-text-muted)' },
                                         ].map(stat => (
                                             <div key={stat.label} style={{ background: '#fff', border: '1px solid var(--prof-border)', borderRadius: '10px', padding: '14px 16px' }}>
                                                 <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>{stat.label}</div>
@@ -738,71 +818,81 @@ export function ViewExam() {
                                         const activeSub = gradedSubs.find(s => s.attempt_number === activeAttemptNum);
                                         const pct = activeSub ? ((activeSub.score ?? 0) / (activeSub.total_items ?? 1)) * 100 : 0;
                                         const gc = getGradeColors(pct, passingRate);
+                                        const hasWeakTopics = analysis ? analysis.topics.some(t => t.incorrectCount > 0) : false;
                                         return (
-                                            <div className="cs-card">
-                                                {/* Header row */}
-                                                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-                                                    <h3 className="cs-card-title" style={{ margin: 0, flex: 1 }}>Analysis</h3>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                                {/* ── Main analysis card ── */}
+                                                <div className="cs-card">
+                                                    {/* Header row */}
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+                                                        <h3 className="cs-card-title" style={{ margin: 0, flex: 1 }}>Analysis</h3>
 
-                                                    {/* Attempt selector */}
-                                                    {gradedSubs.length > 1 && (
+                                                        {/* Attempt selector */}
+                                                        {gradedSubs.length > 1 && (
+                                                            <div style={{ display: 'flex', gap: '3px', background: '#f1f5f9', borderRadius: '8px', padding: '3px' }}>
+                                                                {gradedSubs.map(s => (
+                                                                    <button
+                                                                        key={s.attempt_number}
+                                                                        onClick={() => setSelectedAttempt(s.attempt_number)}
+                                                                        style={{ fontSize: '0.73rem', fontWeight: 600, padding: '3px 9px', borderRadius: '5px', border: 'none', cursor: 'pointer', background: s.attempt_number === activeAttemptNum ? '#fff' : 'transparent', color: s.attempt_number === activeAttemptNum ? 'var(--prof-text-main)' : 'var(--prof-text-muted)', boxShadow: s.attempt_number === activeAttemptNum ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.15s' }}
+                                                                    >
+                                                                        Attempt {s.attempt_number}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        )}
+
+                                                        {/* View toggle */}
                                                         <div style={{ display: 'flex', gap: '3px', background: '#f1f5f9', borderRadius: '8px', padding: '3px' }}>
-                                                            {gradedSubs.map(s => (
+                                                            {(['chart', 'breakdown'] as const).map(v => (
                                                                 <button
-                                                                    key={s.attempt_number}
-                                                                    onClick={() => setSelectedAttempt(s.attempt_number)}
-                                                                    style={{ fontSize: '0.73rem', fontWeight: 600, padding: '3px 9px', borderRadius: '5px', border: 'none', cursor: 'pointer', background: s.attempt_number === activeAttemptNum ? '#fff' : 'transparent', color: s.attempt_number === activeAttemptNum ? 'var(--prof-text-main)' : 'var(--prof-text-muted)', boxShadow: s.attempt_number === activeAttemptNum ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.15s' }}
+                                                                    key={v}
+                                                                    onClick={() => setAnalyticsView(v)}
+                                                                    style={{ fontSize: '0.73rem', fontWeight: 600, padding: '3px 9px', borderRadius: '5px', border: 'none', cursor: 'pointer', background: analyticsView === v ? '#fff' : 'transparent', color: analyticsView === v ? 'var(--prof-text-main)' : 'var(--prof-text-muted)', boxShadow: analyticsView === v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.15s' }}
                                                                 >
-                                                                    Attempt {s.attempt_number}
+                                                                    {v === 'chart' ? 'Pie Chart' : 'Topic Breakdown'}
                                                                 </button>
                                                             ))}
                                                         </div>
+                                                    </div>
+
+                                                    {/* Attempt score info */}
+                                                    {activeSub && (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                                                            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: gc.text, background: gc.bg, border: `1px solid ${gc.border}`, padding: '2px 8px', borderRadius: '999px' }}>
+                                                                {activeSub.score}/{activeSub.total_items} ({pct.toFixed(0)}%)
+                                                            </span>
+                                                            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: pct >= passingRate ? '#15803d' : '#b91c1c' }}>
+                                                                {pct >= passingRate ? 'Pass' : 'Fail'}
+                                                            </span>
+                                                        </div>
                                                     )}
 
-                                                    {/* View toggle */}
-                                                    <div style={{ display: 'flex', gap: '3px', background: '#f1f5f9', borderRadius: '8px', padding: '3px' }}>
-                                                        {(['chart', 'breakdown'] as const).map(v => (
-                                                            <button
-                                                                key={v}
-                                                                onClick={() => setAnalyticsView(v)}
-                                                                style={{ fontSize: '0.73rem', fontWeight: 600, padding: '3px 9px', borderRadius: '5px', border: 'none', cursor: 'pointer', background: analyticsView === v ? '#fff' : 'transparent', color: analyticsView === v ? 'var(--prof-text-main)' : 'var(--prof-text-muted)', boxShadow: analyticsView === v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.15s' }}
-                                                            >
-                                                                {v === 'chart' ? 'Pie Chart' : 'Topic Breakdown'}
-                                                            </button>
-                                                        ))}
-                                                    </div>
+                                                    {/* Content */}
+                                                    {analysis ? (
+                                                        analyticsView === 'chart' ? (
+                                                            <SubjectPieChart subjects={examSubjects} topics={analysis.topics} passingRate={passingRate} />
+                                                        ) : (
+                                                            <TopicBreakdownList topics={analysis.topics} subjects={examSubjects} />
+                                                        )
+                                                    ) : (
+                                                        <p style={{ fontSize: '0.82rem', color: 'var(--prof-text-muted)', margin: 0 }}>No data available.</p>
+                                                    )}
                                                 </div>
 
-                                                {/* Attempt score info */}
-                                                {activeSub && (
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-                                                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: gc.text, background: gc.bg, border: `1px solid ${gc.border}`, padding: '2px 8px', borderRadius: '999px' }}>
-                                                            {activeSub.score}/{activeSub.total_items} ({pct.toFixed(0)}%)
-                                                        </span>
-                                                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: pct >= passingRate ? '#15803d' : '#b91c1c' }}>
-                                                            {pct >= passingRate ? 'Pass' : 'Fail'}
-                                                        </span>
-                                                    </div>
-                                                )}
-
-                                                {/* Content */}
-                                                {analysis ? (
-                                                    analyticsView === 'chart' ? (
-                                                        <SubjectPieChart subjects={examSubjects} topics={analysis.topics} passingRate={passingRate} />
-                                                    ) : (
-                                                        <TopicBreakdownList topics={analysis.topics} subjects={examSubjects} />
-                                                    )
-                                                ) : (
-                                                    <p style={{ fontSize: '0.82rem', color: 'var(--prof-text-muted)', margin: 0 }}>No data available.</p>
-                                                )}
-
-                                                {/* AI section */}
+                                                {/* ── Separate AI Analysis card ── */}
                                                 {exam.ai_analysis_enabled && analysis && activeAttemptNum !== null && (
-                                                    <div style={{ marginTop: '16px' }}>
+                                                    <div className="cs-card" style={{ background: '#f0fdf4', border: '1px solid #86efac' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+                                                            <svg fill="none" strokeWidth="2" stroke="#16a34a" viewBox="0 0 24 24" width="15" height="15">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                                                            </svg>
+                                                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.05em' }}>AI Analysis</span>
+                                                        </div>
                                                         {analysis.aiFeedback ? (
-                                                            <AIFeedbackBlock feedback={analysis.aiFeedback} error={analysis.aiError} />
+                                                            <AIAnalysisCard feedback={analysis.aiFeedback} />
                                                         ) : analysis.isLoadingAI ? (
-                                                            <div style={{ fontSize: '0.82rem', color: 'var(--prof-text-muted)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <div style={{ fontSize: '0.82rem', color: '#15803d', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                                 <svg style={{ animation: 'spin 1s linear infinite' }} fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
                                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                                                                 </svg>
@@ -810,13 +900,15 @@ export function ViewExam() {
                                                             </div>
                                                         ) : analysis.aiError ? (
                                                             <p style={{ fontSize: '0.82rem', color: '#b91c1c', margin: 0 }}>{analysis.aiError}</p>
-                                                        ) : (
+                                                        ) : hasWeakTopics ? (
                                                             <button
                                                                 onClick={() => loadAttemptAI(activeAttemptNum)}
-                                                                style={{ fontSize: '0.8rem', fontWeight: 600, color: '#2563eb', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer' }}
+                                                                style={{ fontSize: '0.8rem', fontWeight: 600, color: '#15803d', background: '#dcfce7', border: '1px solid #86efac', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer' }}
                                                             >
                                                                 Generate AI Analysis
                                                             </button>
+                                                        ) : (
+                                                            <p style={{ fontSize: '0.82rem', color: '#15803d', margin: 0, fontStyle: 'italic' }}>No weak areas to analyze.</p>
                                                         )}
                                                     </div>
                                                 )}

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import type { AnalysisFeedback } from './gemini';
 
 export interface StudentExam {
     id: string;
@@ -33,6 +34,7 @@ export interface StudentSubmission {
     total_items: number | null;
     submitted_at: string | null;
     created_at: string;
+    ai_analysis: AnalysisFeedback | null;
 }
 
 export function getStudentExamStatus(exam: StudentExam): 'available' | 'upcoming' | 'completed' | 'locked' {
@@ -82,11 +84,22 @@ export async function fetchStudentSubmissions(
 ): Promise<{ data: StudentSubmission[]; error: string | null }> {
     const { data, error } = await supabase
         .from('student_submissions')
-        .select('*')
+        .select('id, exam_id, student_id, attempt_number, set_number, answers, score, total_items, submitted_at, created_at, ai_analysis')
         .eq('exam_id', examId)
         .eq('student_id', studentId)
         .order('attempt_number', { ascending: true });
 
     if (error) return { data: [], error: error.message };
     return { data: data as StudentSubmission[], error: null };
+}
+
+export async function saveSubmissionAiAnalysis(
+    submissionId: string,
+    analysis: AnalysisFeedback
+): Promise<{ error: string | null }> {
+    const { error } = await supabase
+        .from('student_submissions')
+        .update({ ai_analysis: analysis })
+        .eq('id', submissionId);
+    return { error: error?.message ?? null };
 }

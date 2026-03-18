@@ -64,6 +64,113 @@ function getGradeColors(pct: number, passingRate: number) {
 
 type Tab = 'overview' | 'papers' | 'students' | 'scan';
 
+const PIE_COLORS_MINI = ['#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#14b8a6'];
+
+function MiniSubjectPieChart({ subjects, questionIds, questionMap, answers, passingRate }: {
+    subjects: { subject_id: string; course_code: string; course_title: string }[];
+    questionIds: string[];
+    questionMap: Record<string, QuestionSummary>;
+    answers: Record<string, number>;
+    passingRate: number;
+}) {
+    const [hoveredId, setHoveredId] = useState<string | null>(null);
+    const cx = 90, cy = 90, outerR = 72, innerR = 44;
+
+    const data = subjects.map(subj => {
+        const qs = questionIds.filter(id => questionMap[id]?.subject_id === subj.subject_id);
+        const total = qs.length;
+        const correct = qs.filter(id => (answers[id] ?? -1) === questionMap[id]?.correct_choice).length;
+        return { ...subj, total, correct, pct: total > 0 ? (correct / total) * 100 : 0 };
+    }).filter(d => d.total > 0);
+
+    const totalItems = data.reduce((s, d) => s + d.total, 0);
+    const totalCorrect = data.reduce((s, d) => s + d.correct, 0);
+    const totalWrong = totalItems - totalCorrect;
+
+    type Slice = { id: string; value: number; color: string; start: number; end: number; midAngle: number };
+    const allSlices: Slice[] = [];
+    let angle = -90;
+    data.forEach((d, i) => {
+        const sweep = totalItems > 0 ? (d.correct / totalItems) * 360 : 0;
+        allSlices.push({ id: d.subject_id, value: d.correct, color: PIE_COLORS_MINI[i % PIE_COLORS_MINI.length], start: angle, end: angle + sweep, midAngle: angle + sweep / 2 });
+        angle += sweep;
+    });
+    if (totalWrong > 0) {
+        const sweep = totalItems > 0 ? (totalWrong / totalItems) * 360 : 0;
+        allSlices.push({ id: '__wrong__', value: totalWrong, color: '#fca5a5', start: angle, end: angle + sweep, midAngle: angle + sweep / 2 });
+    }
+
+    const toXY = (r: number, deg: number): [number, number] => [
+        cx + r * Math.cos((deg * Math.PI) / 180),
+        cy + r * Math.sin((deg * Math.PI) / 180),
+    ];
+    const donutPath = (oR: number, iR: number, sDeg: number, eDeg: number) => {
+        const gap = allSlices.length > 1 ? 1.5 : 0;
+        const s = sDeg + gap / 2, e = eDeg - gap / 2;
+        const [ox1, oy1] = toXY(oR, s); const [ox2, oy2] = toXY(oR, e);
+        const [ix1, iy1] = toXY(iR, s); const [ix2, iy2] = toXY(iR, e);
+        const large = e - s > 180 ? 1 : 0;
+        return `M ${ox1} ${oy1} A ${oR} ${oR} 0 ${large} 1 ${ox2} ${oy2} L ${ix2} ${iy2} A ${iR} ${iR} 0 ${large} 0 ${ix1} ${iy1} Z`;
+    };
+
+    const overallPct = totalItems > 0 ? (totalCorrect / totalItems) * 100 : 0;
+    const gc = getGradeColors(overallPct, passingRate);
+
+    return (
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', width: '100%' }}>
+            <svg viewBox="0 0 180 180" width="180" height="180"
+                style={{ flexShrink: 0, filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.12))', transform: 'perspective(600px) rotateX(12deg)', animation: 'pieIn 0.45s ease', transformOrigin: 'center' }}>
+                {allSlices.map(s => {
+                    const isHov = hoveredId === s.id;
+                    const dx = isHov ? 5 * Math.cos(s.midAngle * Math.PI / 180) : 0;
+                    const dy = isHov ? 5 * Math.sin(s.midAngle * Math.PI / 180) : 0;
+                    return (
+                        <path key={s.id} d={donutPath(outerR, innerR, s.start, s.end)} fill={s.color}
+                            transform={isHov ? `translate(${dx}, ${dy})` : undefined}
+                            style={{ transition: 'transform 0.2s ease', cursor: 'default', filter: isHov ? 'brightness(1.1)' : undefined }}
+                            onMouseEnter={() => setHoveredId(s.id)}
+                            onMouseLeave={() => setHoveredId(null)} />
+                    );
+                })}
+                <circle cx={cx} cy={cy} r={innerR} fill="white" />
+                <text x={cx} y={cy - 7} textAnchor="middle" fontSize="17" fontWeight="700" fill={gc.text}>{overallPct.toFixed(0)}%</text>
+                <text x={cx} y={cy + 10} textAnchor="middle" fontSize="9" fill="#94a3b8" fontWeight="600">OVERALL</text>
+            </svg>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minWidth: '150px' }}>
+                {data.map((d, i) => {
+                    const isHov = hoveredId === d.subject_id;
+                    const sliceColor = PIE_COLORS_MINI[i % PIE_COLORS_MINI.length];
+                    return (
+                        <div key={d.subject_id}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 6px', borderRadius: '6px', background: isHov ? `${sliceColor}1a` : 'transparent', transition: 'background 0.15s', cursor: 'default' }}
+                            onMouseEnter={() => setHoveredId(d.subject_id)}
+                            onMouseLeave={() => setHoveredId(null)}>
+                            <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: sliceColor, flexShrink: 0, transform: isHov ? 'scale(1.2)' : 'scale(1)', transition: 'transform 0.15s' }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--prof-text-main)' }}>{d.course_code}</div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--prof-text-muted)', lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.course_title}</div>
+                            </div>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', flexShrink: 0 }}>
+                                {d.correct} correct
+                            </span>
+                        </div>
+                    );
+                })}
+                {totalWrong > 0 && (
+                    <div
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '6px', borderTop: '1px solid #f1f5f9', padding: '6px', borderRadius: '6px', background: hoveredId === '__wrong__' ? '#fff1f2' : 'transparent', transition: 'background 0.15s', cursor: 'default' }}
+                        onMouseEnter={() => setHoveredId('__wrong__')}
+                        onMouseLeave={() => setHoveredId(null)}>
+                        <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#fca5a5', flexShrink: 0, transform: hoveredId === '__wrong__' ? 'scale(1.2)' : 'scale(1)', transition: 'transform 0.15s' }} />
+                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#b91c1c', flex: 1 }}>Mistakes</span>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b91c1c', flexShrink: 0 }}>{totalWrong} wrong</span>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 export function ViewExam() {
     const { examId, tab } = useParams<{ examId: string; tab?: string }>();
     const navigate = useNavigate();
@@ -239,8 +346,13 @@ export function ViewExam() {
 
     if (isLoading) {
         return (
-            <div className="qb-container create-question-wrapper">
-                <p className="settings-loading-row">Loading exam...</p>
+            <div className="qb-container create-question-wrapper" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+                    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--prof-primary)" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                    </svg>
+                    <p style={{ margin: 0, color: 'var(--prof-text-muted)', fontSize: '0.95rem', fontWeight: 500 }}>Loading exam...</p>
+                </div>
             </div>
         );
     }
@@ -791,7 +903,9 @@ export function ViewExam() {
                                                                                 <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.82rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>
                                                                                     {submission?.score != null
                                                                                         ? `${submission.score} / ${submission.total_items}`
-                                                                                        : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                                                                        : !submission && isDone
+                                                                                            ? <span style={{ fontSize: '0.74rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '2px 7px' }}>Did Not Take</span>
+                                                                                            : <span style={{ color: '#cbd5e1' }}>—</span>}
                                                                                 </td>
                                                                                 <td style={{ padding: '7px 10px', textAlign: 'center' }}>
                                                                                     {submission?.score != null ? (() => {
@@ -801,11 +915,13 @@ export function ViewExam() {
                                                                                     })() : <span style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>—</span>}
                                                                                 </td>
                                                                                 <td style={{ padding: '7px 16px 7px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                                                                                    {submission && !isSelecting && (
+                                                                                    {submission && !isSelecting ? (
                                                                                         <button onClick={e => { e.stopPropagation(); handleToggleGradeView(gradeKey, attempt_number, submission.set_number); }} style={{ padding: '3px 10px', borderRadius: '6px', border: '1px solid var(--prof-border)', background: isExpanded ? '#eff6ff' : '#fff', color: isExpanded ? '#2563eb' : 'var(--prof-text-main)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500 }}>
                                                                                             {isExpanded ? 'Hide' : 'View'}
                                                                                         </button>
-                                                                                    )}
+                                                                                    ) : !submission && isDone && !isSelecting ? (
+                                                                                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontStyle: 'italic' }}>not submitted</span>
+                                                                                    ) : null}
                                                                                 </td>
                                                                             </tr>
                                                                                 {isExpanded && submission && !isSelecting && (
@@ -832,7 +948,7 @@ export function ViewExam() {
                                                                                                 return (
                                                                                                     <>
                                                                                                         {/* ── Header ── */}
-                                                                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--prof-border,#e2e8f0)', flexWrap: 'wrap', gap: '8px' }}>
+                                                                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--prof-border,#e2e8f0)', flexWrap: 'wrap', gap: '12px' }}>
                                                                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.82rem', flexWrap: 'wrap' }}>
                                                                                                                 <span style={{ fontWeight: 700, color: '#0f172a' }}>{correct} / {total}</span>
                                                                                                                 <span style={{ fontWeight: 600, color: pctColor }}>{pct}%</span>
@@ -853,8 +969,9 @@ export function ViewExam() {
                                                                                                                 )}
                                                                                                             </div>
                                                                                                         </div>
-                                                                                                        {/* ── Answer grid ── */}
-                                                                                                        <div style={{ padding: '12px 16px', overflowX: 'auto' }}>
+                                                                                                        {/* ── Answer grid + Pie chart ── */}
+                                                                                                        <div style={{ display: 'flex', gap: '24px', padding: '12px 16px', alignItems: 'stretch' }}>
+                                                                                                        <div style={{ overflowX: 'auto', flexShrink: 0 }}>
                                                                                                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 36px)', gap: '4px', minWidth: '400px' }}>
                                                                                                                 {answerKey.questionIds.map((qId, qi) => {
                                                                                                                     const rawChoice = isEditing ? (editingAnswers[qId] ?? -1) : (submission.answers[qId] ?? -1);
@@ -887,6 +1004,16 @@ export function ViewExam() {
                                                                                                                 })}
                                                                                                             </div>
                                                                                                             {isEditing && <p style={{ margin: '8px 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>Click a cell to cycle: A → B → C → D → E → blank</p>}
+                                                                                                        </div>
+                                                                                                        <div style={{ flex: 1, minWidth: 0, padding: '0 8px', display: 'flex', alignItems: 'center' }}>
+                                                                                                            <MiniSubjectPieChart
+                                                                                                                subjects={exam.exam_subjects.filter(es => es.subjects).map(es => ({ subject_id: es.subject_id, course_code: es.subjects!.course_code, course_title: es.subjects!.course_title }))}
+                                                                                                                questionIds={answerKey.questionIds}
+                                                                                                                questionMap={questionMap}
+                                                                                                                answers={activeAnswers}
+                                                                                                                passingRate={passingRate}
+                                                                                                            />
+                                                                                                        </div>
                                                                                                         </div>
                                                                                                     </>
                                                                                                 );
@@ -983,6 +1110,7 @@ export function ViewExam() {
                                     { label: 'Term', value: exam.term },
                                     { label: 'Sets / Attempt', value: exam.num_sets === 0 ? <span style={{ color: '#ef4444' }}>Not set</span> : exam.num_sets },
                                     { label: 'Max Attempts', value: exam.max_attempts },
+                                    { label: 'AI Analysis', value: exam.ai_analysis_enabled ? <span style={{ color: '#15803d', fontWeight: 600 }}>Enabled</span> : <span style={{ color: '#94a3b8' }}>Disabled</span> },
                                 ].map(({ label, value }) => (
                                     <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '6px 0', borderBottom: '1px solid var(--prof-border)' }}>
                                         <span style={{ fontSize: '0.78rem', color: 'var(--prof-text-muted)', fontWeight: 500 }}>{label}</span>
@@ -1590,6 +1718,7 @@ export function ViewExam() {
                                     pagedQuestions.map((q, idx) => {
                                         const globalIdx = currentPage * ITEMS_PER_PAGE + idx;
                                         const isExpanded = expandedId === q.id;
+                                        const subCode = exam?.exam_subjects.find(es => es.subject_id === q.subject_id)?.subjects?.course_code;
                                         return (
                                             <div
                                                 key={q.id}
@@ -1604,8 +1733,11 @@ export function ViewExam() {
                                                             dangerouslySetInnerHTML={{ __html: renderMathHtml(q.question_text) }}
                                                         />
                                                         <div className="exam-q-meta">
+                                                            {subCode && (
+                                                                <span className="exam-q-tag subject">{subCode}</span>
+                                                            )}
                                                             {q.course_outcomes && (
-                                                                <span className="exam-q-tag co">{q.course_outcomes.title}</span>
+                                                                <span className="exam-q-tag co">CO{(q.course_outcomes.order_index ?? 0) + 1}</span>
                                                             )}
                                                             {q.module_outcomes && (
                                                                 <span className="exam-q-tag mo">MO{(q.course_outcomes?.order_index ?? 0) + 1}{q.module_outcomes.order_index + 1}</span>

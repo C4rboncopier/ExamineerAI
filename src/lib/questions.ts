@@ -201,6 +201,7 @@ export async function fetchQuestionsBySubject(
 
 export interface QuestionSummary {
   id: string;
+  subject_id: string;
   question_text: string;
   choices: string[];
   correct_choice: number;
@@ -215,7 +216,7 @@ export async function fetchQuestionsByIds(
   if (ids.length === 0) return { data: [], error: null };
   const { data, error } = await supabase
     .from('questions')
-    .select('id, question_text, choices, correct_choice, image_url, course_outcomes(title, order_index), module_outcomes(description, order_index)')
+    .select('id, subject_id, question_text, choices, correct_choice, image_url, course_outcomes(title, order_index), module_outcomes(description, order_index)')
     .in('id', ids);
   if (error) return { data: [], error: error.message };
   return { data: data as unknown as QuestionSummary[], error: null };

@@ -1,6 +1,19 @@
+export interface TopicAnalysis {
+    coTitle: string;
+    insight: string;
+    studyTips: string[];
+}
+
+export interface SubjectAnalysis {
+    courseCode: string;
+    courseTitle: string;
+    overallComment: string;
+    weakTopics: TopicAnalysis[];
+}
+
 export interface AnalysisFeedback {
     summary: string;
-    recommendations: string[];
+    subjectAnalyses: SubjectAnalysis[];
 }
 
 export interface GeneratedQuestion {
@@ -111,38 +124,63 @@ Rules:
 
 export async function generateStudentAnalysis(
     examTitle: string,
-    weakAreas: { coTitle: string; moDescription: string; pctCorrect: number; incorrectCount: number; totalCount: number }[],
-    attemptsSummary: { attemptNumber: number; score: number; total: number }[],
-    isOverall: boolean
+    subjects: {
+        courseCode: string;
+        courseTitle: string;
+        topics: {
+            coTitle: string;
+            incorrectCount: number;
+            totalCount: number;
+            pctCorrect: number;
+            moduleOutcomes: { moDescription: string; incorrectCount: number; totalCount: number }[];
+        }[];
+    }[],
+    attemptSummary: { score: number; total: number; attemptNumber: number },
+    passingRate: number
 ): Promise<{ data: AnalysisFeedback | null; error: string | null }> {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
     if (!apiKey) {
         return { data: null, error: 'Gemini API key not configured.' };
     }
 
-    const attemptsText = attemptsSummary
-        .map(a => `Attempt ${a.attemptNumber}: ${a.score}/${a.total} (${((a.score / a.total) * 100).toFixed(0)}%)`)
-        .join('\n');
-    const weakAreasText = weakAreas.length > 0
-        ? weakAreas.map(w => `- ${w.coTitle} > ${w.moDescription}: ${w.incorrectCount}/${w.totalCount} incorrect (${(100 - w.pctCorrect).toFixed(0)}% error rate)`).join('\n')
-        : 'None identified.';
+    const { score, total, attemptNumber } = attemptSummary;
+    const pct = total > 0 ? ((score / total) * 100).toFixed(0) : '0';
+    const passed = total > 0 && (score / total) * 100 >= passingRate;
 
-    const scope = isOverall ? 'all attempts combined' : 'this attempt';
-    const prompt = `You are an educational assistant analyzing a student's exam performance.
+    const subjectsText = subjects.map(subj => {
+        const topicsText = subj.topics.map(t => {
+            const moLines = t.moduleOutcomes.map(mo =>
+                `        • ${mo.moDescription}: ${mo.incorrectCount}/${mo.totalCount} wrong`
+            ).join('\n');
+            return `    - ${t.coTitle}: ${t.incorrectCount}/${t.totalCount} wrong (${(100 - t.pctCorrect).toFixed(0)}% error rate)\n${moLines}`;
+        }).join('\n');
+        return `[${subj.courseCode} — ${subj.courseTitle}]\n${topicsText}`;
+    }).join('\n\n');
 
-Exam: "${examTitle}"
-Scope: ${scope}
+    const prompt = `You are an educational assistant providing detailed, personalized feedback on a student's exam performance.
 
-${isOverall ? 'Attempts:\n' + attemptsText : 'Score: ' + attemptsText}
+Exam: "${examTitle}" (multiple choice)
+Passing rate: ${passingRate}%
+Attempt ${attemptNumber}: ${score}/${total} (${pct}%) — ${passed ? 'Pass' : 'Fail'}
 
-Weak areas (topics with incorrect answers):
-${weakAreasText}
+The following subjects had weak course outcomes. Each CO shows the wrong answer count and a breakdown by module outcome (MO) for deeper context:
 
-Provide:
-1. A brief summary (2-3 sentences) of the student's main areas of struggle based on the weak areas above.
-2. Exactly 3 to 5 specific, actionable study recommendations to improve performance.
+${subjectsText}
 
-Keep the tone constructive and encouraging. Focus only on the identified weak areas.`;
+Provide a thorough, detailed analysis structured as follows:
+
+1. summary: A 2-3 sentence overview of the student's overall performance, highlighting the main areas of struggle.
+
+2. For EACH subject listed above, provide:
+   - courseCode: the subject code exactly as listed
+   - courseTitle: the subject title exactly as listed
+   - overallComment: 1-2 sentences summarizing the student's performance in this subject and what it suggests about their understanding
+   - weakTopics: for EACH weak CO listed under this subject:
+     - coTitle: the CO title exactly as listed
+     - insight: 2-3 sentences explaining what concept this CO covers, why it is important, and what specific gaps the MO-level breakdown reveals
+     - studyTips: exactly 1-2 specific, actionable study suggestions tailored to this particular CO (e.g., practice exercises, key concepts to review, common mistakes to avoid)
+
+Be specific, substantive, and constructive. Avoid generic advice. Use an encouraging tone.`;
 
     const body = {
         contents: [{ parts: [{ text: prompt }] }],
@@ -152,9 +190,32 @@ Keep the tone constructive and encouraging. Focus only on the identified weak ar
                 type: 'object',
                 properties: {
                     summary: { type: 'string' },
-                    recommendations: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 5 },
+                    subjectAnalyses: {
+                        type: 'array',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                courseCode: { type: 'string' },
+                                courseTitle: { type: 'string' },
+                                overallComment: { type: 'string' },
+                                weakTopics: {
+                                    type: 'array',
+                                    items: {
+                                        type: 'object',
+                                        properties: {
+                                            coTitle: { type: 'string' },
+                                            insight: { type: 'string' },
+                                            studyTips: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 3 },
+                                        },
+                                        required: ['coTitle', 'insight', 'studyTips'],
+                                    },
+                                },
+                            },
+                            required: ['courseCode', 'courseTitle', 'overallComment', 'weakTopics'],
+                        },
+                    },
                 },
-                required: ['summary', 'recommendations'],
+                required: ['summary', 'subjectAnalyses'],
             },
         },
     };
