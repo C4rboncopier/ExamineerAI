@@ -65,8 +65,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
+    // When the tab becomes visible again, proactively refresh the session
+    // to prevent sign-out caused by browser throttling the token refresh timer
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (!session) handleSession(null);
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       subscription.unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [handleSession]);
 

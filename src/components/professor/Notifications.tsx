@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import {
     fetchNotifications,
     markNotificationRead,
-    markAllNotificationsRead,
     deleteReadNotifications,
     type ProfessorNotification,
 } from '../../lib/notifications';
@@ -40,12 +40,21 @@ export function Notifications() {
 
     useEffect(() => { load(); }, [load]);
 
-    const handleMarkAllRead = async () => {
+    useEffect(() => {
         if (!user?.id) return;
-        await markAllNotificationsRead(user.id);
-        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-        refreshCount();
-    };
+        const channel = supabase
+            .channel(`notifications-list-${user.id}`)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'professor_notifications',
+                filter: `recipient_id=eq.${user.id}`,
+            }, () => {
+                load();
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [user?.id, load]);
 
     const handleClearRead = async () => {
         if (!user?.id) return;
@@ -96,11 +105,6 @@ export function Notifications() {
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    {unreadCount > 0 && (
-                        <button className="btn-secondary" onClick={handleMarkAllRead}>
-                            Mark all as read
-                        </button>
-                    )}
                     {notifications.some(n => n.read) && (
                         <button className="btn-secondary" onClick={handleClearRead}>
                             Clear read

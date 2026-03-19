@@ -206,8 +206,15 @@ export function Settings() {
                                             {showConfirm ? <EyeOffIcon /> : <EyeIcon />}
                                         </button>
                                     </div>
-                                    {confirmPassword.length > 0 && newPassword !== confirmPassword && (
-                                        <p className="cs-error" style={{ marginTop: '5px', marginBottom: 0 }}>Passwords do not match.</p>
+                                    {confirmPassword.length > 0 && (
+                                        newPassword === confirmPassword ? (
+                                            <p style={{ marginTop: '5px', marginBottom: 0, fontSize: '0.8rem', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                                Passwords match.
+                                            </p>
+                                        ) : (
+                                            <p className="cs-error" style={{ marginTop: '5px', marginBottom: 0 }}>Passwords do not match.</p>
+                                        )
                                     )}
                                 </div>
                             </div>

@@ -122,7 +122,7 @@ export function ExamsList() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
                     {groupedExams.map(group => (
                         <div key={group.termString}>
-                            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--prof-text-main)', marginBottom: '16px', borderBottom: '2px solid var(--prof-border)', paddingBottom: '8px' }}>
+                            <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--prof-text-muted)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                 {group.termString}
                             </h3>
                             <div className="subjects-grid">

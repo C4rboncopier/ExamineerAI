@@ -21,6 +21,7 @@ import { Popup } from '../common/Popup';
 import { LoadingOverlay } from '../common/LoadingOverlay';
 import { ExamStudents } from './ExamStudents';
 import OMRScanner from './OMRScanner';
+import { ExamAnalysis } from './ExamAnalysis';
 import {
     fetchAttemptGrades,
     fetchSetAnswerKey,
@@ -67,7 +68,7 @@ function getGradeColors(pct: number, passingRate: number) {
     return { text: '#14532d', bg: '#bbf7d0', border: '#4ade80', solid: '#15803d' };
 }
 
-type Tab = 'overview' | 'papers' | 'students' | 'scan';
+type Tab = 'overview' | 'papers' | 'students' | 'scan' | 'analysis';
 
 const PIE_COLORS_MINI = ['#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#14b8a6'];
 
@@ -256,7 +257,7 @@ export function ViewExam() {
 
     // ── Tab navigation (derived from URL) ──
     const activeTab: Tab =
-        tab === 'papers' || tab === 'students' || tab === 'scan' || tab === 'overview'
+        tab === 'papers' || tab === 'students' || tab === 'scan' || tab === 'overview' || tab === 'analysis'
             ? tab
             : 'overview';
 
@@ -310,6 +311,7 @@ export function ViewExam() {
 
     // ── Grade release ──
     const [isTogglingRelease, setIsTogglingRelease] = useState<number | null>(null);
+    const [isTogglingAllRelease, setIsTogglingAllRelease] = useState(false);
 
     // ── Grades ──
     const [gradesData, setGradesData] = useState<Record<number, AttemptGradeRow[]>>({});
@@ -550,6 +552,37 @@ export function ViewExam() {
         });
     };
 
+    const handleToggleAllGradeRelease = async () => {
+        const deployedList = exam?.exam_attempts.filter(a => a.status === 'deployed' || a.status === 'done') ?? [];
+        const allReleased = deployedList.every(a => attemptGradesReleasedMap[a.attempt_number]?.released);
+        setIsTogglingAllRelease(true);
+        const errors: string[] = [];
+        await Promise.all(deployedList.map(async a => {
+            const info = attemptGradesReleasedMap[a.attempt_number];
+            if (!info) return;
+            if (allReleased && info.released) {
+                const { error } = await hideAttemptGrades(info.id);
+                if (error) errors.push(error);
+            } else if (!allReleased && !info.released) {
+                const { error } = await releaseAttemptGrades(info.id);
+                if (error) errors.push(error);
+            }
+        }));
+        setIsTogglingAllRelease(false);
+        if (errors.length) { alert(`Some attempts failed: ${errors.join(', ')}`); }
+        setExam(prev => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                exam_attempts: prev.exam_attempts.map(a =>
+                    (a.status === 'deployed' || a.status === 'done')
+                        ? { ...a, grades_released: !allReleased }
+                        : a
+                ),
+            };
+        });
+    };
+
     const handleDeployAttempt = async (attemptNumber: number) => {
         if (!exam) return;
         setIsAttemptDeploying(true);
@@ -746,7 +779,7 @@ export function ViewExam() {
         .filter(a => a.status === 'deployed' || a.status === 'done')
         .sort((a, b) => a.attempt_number - b.attempt_number);
 
-    const TAB_LABELS: Record<Tab, string> = { overview: 'Overview', papers: 'Exams', students: 'Students', scan: 'Scan OMR' };
+    const TAB_LABELS: Record<Tab, string> = { overview: 'Overview', papers: 'Exams', students: 'Students', scan: 'Scan OMR', analysis: 'Analysis' };
 
     return (
         <div className="qb-container create-question-wrapper">
@@ -770,7 +803,7 @@ export function ViewExam() {
 
             {/* ── Tab nav ── */}
             <div style={{ display: 'flex', borderBottom: '2px solid var(--prof-border)', marginBottom: '24px' }}>
-                {(['overview', 'papers', 'students', 'scan'] as Tab[]).map(t => {
+                {(['overview', 'papers', 'scan', 'analysis', 'students'] as Tab[]).map(t => {
                     const isActive = activeTab === t;
                     return (
                         <button
@@ -779,6 +812,11 @@ export function ViewExam() {
                                 if (activeTab === 'scan' && isScannerBusy && t !== activeTab) {
                                     setPendingTab(t);
                                 } else {
+                                    if (t === 'scan' && deployedAttempts.length > 0) {
+                                        const openAttempt = deployedAttempts.find(a => a.status === 'deployed');
+                                        const target = openAttempt ?? deployedAttempts[deployedAttempts.length - 1];
+                                        setScannerAttempt(target.attempt_number);
+                                    }
                                     navigate(`/professor/exams/${examId}/${t}`);
                                 }
                             }}
@@ -923,7 +961,25 @@ export function ViewExam() {
                                                                 </svg>
                                                                 Scan
                                                             </button>
-                                                            {(() => {
+                                                            {gradesSummaryMode ? (() => {
+                                                                const allReleased = deployedAttempts.every(a => attemptGradesReleasedMap[a.attempt_number]?.released);
+                                                                return (
+                                                                    <button
+                                                                        className="btn-secondary"
+                                                                        disabled={isTogglingAllRelease}
+                                                                        onClick={handleToggleAllGradeRelease}
+                                                                        style={{ padding: '4px 10px', fontSize: '0.77rem', height: '26px', display: 'inline-flex', alignItems: 'center', gap: '4px', color: allReleased ? '#15803d' : 'var(--prof-text-main)', borderColor: allReleased ? '#86efac' : undefined, background: allReleased ? '#f0fdf4' : undefined, opacity: isTogglingAllRelease ? 0.6 : 1 }}
+                                                                        title={allReleased ? 'All grades visible to students — click to hide all' : 'Release grades for all attempts'}
+                                                                    >
+                                                                        {allReleased ? (
+                                                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                                                        ) : (
+                                                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13"><path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
+                                                                        )}
+                                                                        {isTogglingAllRelease ? '...' : allReleased ? 'All Released' : 'Release All'}
+                                                                    </button>
+                                                                );
+                                                            })() : (() => {
                                                                 const releaseInfo = attemptGradesReleasedMap[attempt_number];
                                                                 const isReleased = releaseInfo?.released ?? false;
                                                                 const isToggling = isTogglingRelease === attempt_number;
@@ -1356,7 +1412,7 @@ export function ViewExam() {
                                     </div>
 
                                     {/* Co-handlers */}
-                                    {faculty.map(f => {
+                                    {faculty.filter(f => f.status !== 'declined').map(f => {
                                         const fName = f.professor?.full_name ?? f.professor?.email ?? 'Unknown';
                                         return (
                                             <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 0', borderTop: '1px solid var(--prof-border)' }}>
@@ -1380,7 +1436,7 @@ export function ViewExam() {
                                         );
                                     })}
 
-                                    {faculty.length === 0 && (
+                                    {faculty.filter(f => f.status !== 'declined').length === 0 && (
                                         <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: 'var(--prof-text-muted)', fontStyle: 'italic' }}>No co-handlers invited yet.</p>
                                     )}
                                 </div>
@@ -1389,7 +1445,7 @@ export function ViewExam() {
 
                         {/* ── Invite Modal ── */}
                         {isInviteOpen && (() => {
-                            const invitedIds = new Set(faculty.map(f => f.professor_id));
+                            const invitedIds = new Set(faculty.filter(f => f.status !== 'declined').map(f => f.professor_id));
                             const filtered = allProfessors.filter(p =>
                                 p.id !== exam.created_by &&
                                 !invitedIds.has(p.id) &&
@@ -2307,6 +2363,16 @@ export function ViewExam() {
                     </div>
                 );
             })()}
+
+            {activeTab === 'analysis' && (
+                <ExamAnalysis
+                    exam={exam}
+                    gradesData={gradesData}
+                    questionMap={questionMap}
+                    passingRate={passingRate}
+                    isLoadingGrades={isLoadingGrades}
+                />
+            )}
 
             {/* ── Loading overlay (blocks all interaction while generating) ── */}
             <LoadingOverlay

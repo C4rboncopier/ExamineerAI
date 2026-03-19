@@ -174,7 +174,7 @@ export function CreateTemplate() {
                                 type="text"
                                 placeholder="e.g. CS101-MID"
                                 value={code}
-                                onChange={e => setCode(e.target.value)}
+                                onChange={e => setCode(e.target.value.toUpperCase())}
                                 required
                             />
                         </div>

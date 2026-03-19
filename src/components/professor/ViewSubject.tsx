@@ -42,6 +42,7 @@ export function ViewSubject() {
     const [error, setError] = useState<string | null>(null);
     const [deletePopupOpen, setDeletePopupOpen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
 
     // Faculty state
     const [faculty, setFaculty] = useState<SubjectFacultyMember[]>([]);
@@ -308,7 +309,7 @@ export function ViewSubject() {
                                         <StatusBadge status={f.status} />
                                         {isMainProfessor && (
                                             <button
-                                                onClick={() => handleRemoveFaculty(f.id)}
+                                                onClick={() => setRemoveTarget({ id: f.id, name: fName })}
                                                 title="Remove co-handler"
                                                 style={{ flexShrink: 0, width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: '1px solid transparent', borderRadius: '5px', cursor: 'pointer', color: '#94a3b8', transition: 'all 0.15s' }}
                                                 onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.borderColor = '#fca5a5'; e.currentTarget.style.color = '#b91c1c'; }}
@@ -331,6 +332,21 @@ export function ViewSubject() {
 
             {/* Question Bank tab */}
             {activeTab === 'question-bank' && <QuestionBankList embedded={true} canManage={canManage} />}
+
+            <Popup
+                isOpen={removeTarget !== null}
+                title="Remove Co-Handler"
+                message={`Remove ${removeTarget?.name ?? 'this professor'} from the subject? They will lose access and their invitation will be cancelled.`}
+                type="danger"
+                onConfirm={async () => {
+                    if (!removeTarget) return;
+                    await handleRemoveFaculty(removeTarget.id);
+                    setRemoveTarget(null);
+                }}
+                onCancel={() => setRemoveTarget(null)}
+                confirmText="Remove"
+                cancelText="Cancel"
+            />
 
             <Popup
                 isOpen={deletePopupOpen}

@@ -31,6 +31,14 @@ export async function addExamFaculty(
     examId: string,
     professorId: string
 ): Promise<{ data: ExamFacultyMember | null; error: string | null }> {
+    // Remove any existing declined row so a fresh invite can be inserted
+    await supabase
+        .from('exam_faculty')
+        .delete()
+        .eq('exam_id', examId)
+        .eq('professor_id', professorId)
+        .eq('status', 'declined');
+
     const { data, error } = await supabase
         .from('exam_faculty')
         .insert({ exam_id: examId, professor_id: professorId, status: 'pending' })

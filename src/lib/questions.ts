@@ -22,6 +22,7 @@ export interface QuestionWithOutcomes extends Question {
   course_outcomes: {
     id: string;
     title: string;
+    description: string;
     order_index: number;
   };
   module_outcomes: {
@@ -206,7 +207,7 @@ export interface QuestionSummary {
   choices: string[];
   correct_choice: number;
   image_url: string | null;
-  course_outcomes: { title: string; order_index: number } | null;
+  course_outcomes: { title: string; description: string; order_index: number } | null;
   module_outcomes: { description: string; order_index: number } | null;
 }
 
@@ -216,7 +217,7 @@ export async function fetchQuestionsByIds(
   if (ids.length === 0) return { data: [], error: null };
   const { data, error } = await supabase
     .from('questions')
-    .select('id, subject_id, question_text, choices, correct_choice, image_url, course_outcomes(title, order_index), module_outcomes(description, order_index)')
+    .select('id, subject_id, question_text, choices, correct_choice, image_url, course_outcomes(title, description, order_index), module_outcomes(description, order_index)')
     .in('id', ids);
   if (error) return { data: [], error: error.message };
   return { data: data as unknown as QuestionSummary[], error: null };
@@ -368,7 +369,7 @@ export async function fetchQuestionsWithOutcomesByIds(
   if (ids.length === 0) return { data: [], error: null };
   const { data, error } = await supabase
     .from('questions')
-    .select('id, subject_id, correct_choice, course_outcome_id, module_outcome_id, course_outcomes(id, title, order_index), module_outcomes(id, description, order_index)')
+    .select('id, subject_id, correct_choice, course_outcome_id, module_outcome_id, course_outcomes(id, title, description, order_index), module_outcomes(id, description, order_index)')
     .in('id', ids);
   if (error) return { data: [], error: error.message };
   return { data: data as unknown as QuestionWithOutcomes[], error: null };

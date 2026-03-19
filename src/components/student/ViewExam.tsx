@@ -553,7 +553,6 @@ export function ViewExam() {
     const passingAttemptNum = hasPassed
         ? (gradedSubs.find(s => (s.score! / s.total_items!) * 100 >= passingRate)?.attempt_number ?? null)
         : null;
-    const allAttemptsDone = exam.exam_attempts.length > 0 && exam.exam_attempts.every(a => a.status === 'done');
     const lastAttemptSub = submissionByAttempt[exam.max_attempts];
     const lastAttemptGradesReleased = attemptGradesReleasedMap[exam.max_attempts] ?? false;
     const failedLastAttempt = !hasPassed
@@ -562,7 +561,7 @@ export function ViewExam() {
         && lastAttemptSub.total_items !== null
         && lastAttemptGradesReleased
         && ((lastAttemptSub.score / lastAttemptSub.total_items) * 100) < passingRate;
-    const showGrade = hasPassed || (allAttemptsDone && gradedSubs.length > 0) || failedLastAttempt;
+    const showGrade = hasPassed || failedLastAttempt;
 
     const statusStyleMap: Record<string, { color: string; bg: string; label: string }> = {
         available: { color: '#15803d', bg: '#dcfce7', label: 'Available' },

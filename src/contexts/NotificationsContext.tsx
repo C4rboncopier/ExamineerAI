@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { fetchUnreadCount } from '../lib/notifications';
+import { supabase } from '../lib/supabase';
 
 interface NotificationsContextType {
     unreadCount: number;
@@ -25,6 +26,22 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     useEffect(() => {
         refreshCount();
     }, [refreshCount]);
+
+    useEffect(() => {
+        if (!user?.id) return;
+        const channel = supabase
+            .channel(`notifications-count-${user.id}`)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'professor_notifications',
+                filter: `recipient_id=eq.${user.id}`,
+            }, () => {
+                refreshCount();
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [user?.id, refreshCount]);
 
     return (
         <NotificationsContext.Provider value={{ unreadCount, refreshCount }}>
