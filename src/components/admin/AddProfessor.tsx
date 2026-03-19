@@ -70,6 +70,7 @@ export function AddProfessor() {
         if (!addForm.email.trim()) { setFormError('Email address is required.'); return; }
         if (!addForm.username.trim()) { setFormError('Username is required.'); return; }
         if (!addForm.password.trim()) { setFormError('Password is required.'); return; }
+        if (!addForm.program_id) { setFormError('Program assignment is required.'); return; }
 
         setIsSubmitting(true);
         try {
@@ -78,9 +79,16 @@ export function AddProfessor() {
                 full_name: addForm.full_name,
                 username: addForm.username,
                 password: addForm.password,
-                program_id: addForm.program_id || null, // program can be optional for professor
+                program_id: addForm.program_id,
             });
-            if (error) { setFormError(error); return; }
+            if (error) {
+                setFormError(
+                    /already registered|already exists|duplicate|email/i.test(error)
+                        ? 'An account with this email already exists.'
+                        : error
+                );
+                return;
+            }
             navigate('/admin/professors', { state: { toastMessage: `Professor "${addForm.full_name}" has been added.` } });
         } catch {
             setFormError('An unexpected error occurred. Please try again.');
@@ -125,7 +133,7 @@ export function AddProfessor() {
                         {/* Email */}
                         <div>
                             <label style={labelStyle}>Email Address</label>
-                            <input type="email" required style={inputStyle} placeholder="professor@university.edu" value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))} />
+                            <input type="email" required style={inputStyle} placeholder="professor@mcm.edu.ph" value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))} />
                         </div>
                     </div>
 
@@ -189,14 +197,6 @@ export function AddProfessor() {
                                         />
                                     </div>
                                     <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                                        <div
-                                            style={{ padding: '8px 12px', fontSize: '0.85rem', cursor: 'pointer', transition: 'background 0.1s', background: addForm.program_id === '' ? '#f1f5f9' : 'transparent' }}
-                                            onClick={() => { setAddForm(f => ({ ...f, program_id: '' })); setIsProgramDropdownOpen(false); }}
-                                            onMouseOver={e => e.currentTarget.style.background = '#f8fafc'}
-                                            onMouseOut={e => e.currentTarget.style.background = addForm.program_id === '' ? '#f1f5f9' : 'transparent'}
-                                        >
-                                            — None —
-                                        </div>
                                         {filteredPrograms.length > 0 ? filteredPrograms.map(p => (
                                             <div
                                                 key={p.id}

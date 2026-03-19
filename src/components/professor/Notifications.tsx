@@ -9,6 +9,7 @@ import {
     type ProfessorNotification,
 } from '../../lib/notifications';
 import { updateFacultyStatus } from '../../lib/examFaculty';
+import { updateSubjectFacultyStatus } from '../../lib/subjectFaculty';
 
 function timeAgo(dateStr: string): string {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -54,7 +55,11 @@ export function Notifications() {
 
     const handleAccept = async (notif: ProfessorNotification) => {
         setActionLoading(notif.id + '_accept');
-        await updateFacultyStatus(notif.payload.faculty_id, 'accepted');
+        if (notif.type === 'exam_invite') {
+            await updateFacultyStatus(notif.payload.faculty_id, 'accepted');
+        } else {
+            await updateSubjectFacultyStatus(notif.payload.faculty_id, 'accepted');
+        }
         await markNotificationRead(notif.id);
         setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
         refreshCount();
@@ -63,7 +68,11 @@ export function Notifications() {
 
     const handleDecline = async (notif: ProfessorNotification) => {
         setActionLoading(notif.id + '_decline');
-        await updateFacultyStatus(notif.payload.faculty_id, 'declined');
+        if (notif.type === 'exam_invite') {
+            await updateFacultyStatus(notif.payload.faculty_id, 'declined');
+        } else {
+            await updateSubjectFacultyStatus(notif.payload.faculty_id, 'declined');
+        }
         await markNotificationRead(notif.id);
         setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
         refreshCount();
@@ -147,7 +156,7 @@ export function Notifications() {
                         {filter === 'unread' ? 'No unread notifications.' : 'No notifications yet.'}
                     </p>
                     <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--prof-text-muted)' }}>
-                        {filter === 'unread' ? 'Switch to "All" to see past notifications.' : 'Exam handling invitations will appear here.'}
+                        {filter === 'unread' ? 'Switch to "All" to see past notifications.' : 'Exam and subject handling invitations will appear here.'}
                     </p>
                 </div>
             ) : (
@@ -155,6 +164,9 @@ export function Notifications() {
                     {displayed.map((notif, idx) => {
                         const isPending = !notif.read;
                         const senderName = notif.sender?.full_name ?? notif.sender?.email ?? 'A professor';
+                        const itemTitle = notif.type === 'exam_invite'
+                            ? (notif.payload as { exam_title: string }).exam_title
+                            : (notif.payload as { subject_title: string }).subject_title;
                         const isFirst = idx === 0;
                         return (
                             <div
@@ -194,13 +206,13 @@ export function Notifications() {
                                     <p style={{ margin: '0 0 2px', fontSize: '0.9rem', color: 'var(--prof-text-main)', lineHeight: 1.45 }}>
                                         <strong>{senderName}</strong>
                                         {' '}invited you to co-handle{' '}
-                                        <strong>{notif.payload.exam_title}</strong>.
+                                        <strong>{itemTitle}</strong>.
                                     </p>
                                     <p style={{ margin: '0 0 10px', fontSize: '0.77rem', color: 'var(--prof-text-muted)' }}>
                                         {timeAgo(notif.created_at)}
                                     </p>
 
-                                    {notif.type === 'exam_invite' && isPending && (
+                                    {isPending && (
                                         <div style={{ display: 'flex', gap: '8px' }}>
                                             <button
                                                 onClick={() => handleAccept(notif)}
@@ -231,7 +243,7 @@ export function Notifications() {
                                         </div>
                                     )}
 
-                                    {notif.type === 'exam_invite' && !isPending && (
+                                    {!isPending && (
                                         <span style={{
                                             display: 'inline-block', fontSize: '0.77rem', fontWeight: 600,
                                             background: '#f1f5f9', color: '#64748b',

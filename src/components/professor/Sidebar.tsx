@@ -37,6 +37,13 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                 <div className="nav-section">
                     <h3 className="nav-section-title">Menu</h3>
                     <button
+                        className={`prof-nav-btn ${isActive('/professor/exams') ? 'active' : ''}`}
+                        onClick={() => handleNavigate('/professor/exams')}
+                    >
+                        <svg className="nav-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Exams
+                    </button>
+                    <button
                         className={`prof-nav-btn ${isActive('/professor/subjects') ? 'active' : ''}`}
                         onClick={() => handleNavigate('/professor/subjects')}
                     >
@@ -49,13 +56,6 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                     >
                         <svg className="nav-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"></path></svg>
                         Templates
-                    </button>
-                    <button
-                        className={`prof-nav-btn ${isActive('/professor/exams') ? 'active' : ''}`}
-                        onClick={() => handleNavigate('/professor/exams')}
-                    >
-                        <svg className="nav-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                        Exams
                     </button>
                     <button
                         className={`prof-nav-btn ${isActive('/professor/notifications') ? 'active' : ''}`}
@@ -77,6 +77,13 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                 </div>
 
                 <div className="nav-section">
+                    <button
+                        className={`prof-nav-btn ${isActive('/professor/account') ? 'active' : ''}`}
+                        onClick={() => handleNavigate('/professor/account')}
+                    >
+                        <svg className="nav-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        Account
+                    </button>
                     <button
                         className={`prof-nav-btn ${isActive('/professor/settings') ? 'active' : ''}`}
                         onClick={() => handleNavigate('/professor/settings')}

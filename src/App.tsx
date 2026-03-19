@@ -26,11 +26,14 @@ import { StudentsList } from './components/admin/StudentsList';
 import { AddStudent } from './components/admin/AddStudent';
 import { EditStudent } from './components/admin/EditStudent';
 import { Settings as AdminSettings } from './components/admin/Settings';
+import { AdminExamsList } from './components/admin/AdminExamsList';
+import { AdminSubjectsList } from './components/admin/AdminSubjectsList';
 
 import { ExamsList as StudentExamsList } from './components/student/ExamsList';
 import { ViewExam as StudentViewExam } from './components/student/ViewExam';
 import { GradesList as StudentGradesList } from './components/student/GradesList';
 import { Settings as StudentSettings } from './components/student/Settings';
+import { Account } from './components/common/Account';
 
 function App() {
   return (
@@ -52,13 +55,16 @@ function App() {
               <Route path="students" element={<StudentsList />} />
               <Route path="students/addstudent" element={<AddStudent />} />
               <Route path="students/editstudent/:id" element={<EditStudent />} />
+              <Route path="exams" element={<AdminExamsList />} />
+              <Route path="subjects" element={<AdminSubjectsList />} />
               <Route path="settings" element={<AdminSettings />} />
+              <Route path="account" element={<Account />} />
             </Route>
           </Route>
 
           <Route element={<ProtectedRoute allowedRoles={['professor']} />}>
             <Route path="/professor" element={<ProfessorDashboard />}>
-              <Route index element={<Navigate to="subjects" replace />} />
+              <Route index element={<Navigate to="exams" replace />} />
               <Route path="subjects" element={<SubjectsList />} />
               <Route path="subjects/create" element={<CreateSubject />} />
               <Route path="subjects/:subjectId/edit" element={<CreateSubject />} />
@@ -76,6 +82,7 @@ function App() {
               <Route path="exams/:examId/edit" element={<CreateExam />} />
               <Route path="settings" element={<ProfessorSettings />} />
               <Route path="notifications" element={<Notifications />} />
+              <Route path="account" element={<Account />} />
             </Route>
           </Route>
 
@@ -87,6 +94,7 @@ function App() {
               <Route path="exams/:examId/:tab" element={<StudentViewExam />} />
               <Route path="grades" element={<StudentGradesList />} />
               <Route path="settings" element={<StudentSettings />} />
+              <Route path="account" element={<Account />} />
             </Route>
           </Route>
 

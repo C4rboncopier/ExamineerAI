@@ -1,33 +1,66 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { SubjectWithCounts } from '../../lib/subjects';
-import { fetchSubjects } from '../../lib/subjects';
+import { fetchProfessorSubjectsWithAccess } from '../../lib/subjects';
+import type { SubjectWithAccess, SubjectAccessType } from '../../lib/subjects';
 
 const ITEMS_PER_PAGE = 12;
 
+type AccessFilter = 'all' | 'manageable' | 'view-only';
+
+function AccessBadge({ type }: { type: SubjectAccessType }) {
+    if (type === 'exam-only') {
+        return (
+            <span style={{
+                display: 'inline-flex', alignItems: 'center',
+                fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px',
+                borderRadius: '99px', background: '#f1f5f9', color: '#64748b',
+                border: '1px solid #e2e8f0', lineHeight: 1.4,
+            }}>
+                View Only
+            </span>
+        );
+    }
+    return (
+        <span style={{
+            display: 'inline-flex', alignItems: 'center',
+            fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px',
+            borderRadius: '99px', background: '#dcfce7', color: '#15803d',
+            border: '1px solid #bbf7d0', lineHeight: 1.4,
+        }}>
+            Manageable
+        </span>
+    );
+}
+
 export function QuestionBankSubjects() {
     const navigate = useNavigate();
-    const [subjects, setSubjects] = useState<SubjectWithCounts[]>([]);
+    const [subjects, setSubjects] = useState<SubjectWithAccess[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [accessFilter, setAccessFilter] = useState<AccessFilter>('manageable');
     const [currentPage, setCurrentPage] = useState(1);
 
     useEffect(() => {
         setIsLoading(true);
-        fetchSubjects().then(({ data }) => {
+        fetchProfessorSubjectsWithAccess().then(({ data }) => {
             setSubjects(data);
             setIsLoading(false);
         });
     }, []);
 
     const filteredSubjects = useMemo(() => {
-        if (!searchQuery.trim()) return subjects;
-        const q = searchQuery.toLowerCase().trim();
-        return subjects.filter(s =>
-            s.course_title.toLowerCase().includes(q) ||
-            s.course_code.toLowerCase().includes(q)
-        );
-    }, [subjects, searchQuery]);
+        let result = subjects;
+        if (accessFilter === 'manageable') result = result.filter(s => s.accessType !== 'exam-only');
+        else if (accessFilter === 'view-only') result = result.filter(s => s.accessType === 'exam-only');
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase().trim();
+            result = result.filter(s =>
+                s.course_title.toLowerCase().includes(q) ||
+                s.course_code.toLowerCase().includes(q)
+            );
+        }
+        return result;
+    }, [subjects, searchQuery, accessFilter]);
 
     const totalPages = Math.max(1, Math.ceil(filteredSubjects.length / ITEMS_PER_PAGE));
     const paginatedSubjects = filteredSubjects.slice(
@@ -37,7 +70,7 @@ export function QuestionBankSubjects() {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery]);
+    }, [searchQuery, accessFilter]);
 
     return (
         <div className="qb-container">
@@ -63,20 +96,35 @@ export function QuestionBankSubjects() {
                 </div>
             ) : (
                 <>
-                    <div className="subjects-search">
-                        <svg className="search-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"></path></svg>
-                        <input
-                            type="text"
-                            className="subjects-search-input"
-                            placeholder="Search by course title or code..."
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                        />
-                        {searchQuery && (
-                            <button className="search-clear-btn" onClick={() => setSearchQuery('')} title="Clear search">
-                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
-                            </button>
-                        )}
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', alignItems: 'center' }}>
+                        <div className="subjects-search" style={{ flex: 1, marginBottom: 0 }}>
+                            <svg className="search-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"></path></svg>
+                            <input
+                                type="text"
+                                className="subjects-search-input"
+                                placeholder="Search by course title or code..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                            />
+                            {searchQuery && (
+                                <button className="search-clear-btn" onClick={() => setSearchQuery('')} title="Clear search">
+                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                </button>
+                            )}
+                        </div>
+                        <select
+                            value={accessFilter}
+                            onChange={e => setAccessFilter(e.target.value as AccessFilter)}
+                            style={{
+                                flexShrink: 0, width: '160px', padding: '10px 12px', border: '1px solid var(--prof-border)',
+                                borderRadius: '8px', fontSize: '0.875rem', background: 'var(--prof-surface)',
+                                color: 'var(--prof-text-main)', cursor: 'pointer', outline: 'none', height: '46px',
+                            }}
+                        >
+                            <option value="all">All Access</option>
+                            <option value="manageable">Manageable</option>
+                            <option value="view-only">View Only</option>
+                        </select>
                     </div>
 
                     {filteredSubjects.length === 0 ? (
@@ -85,7 +133,7 @@ export function QuestionBankSubjects() {
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"></path>
                             </svg>
                             <h3>No results found</h3>
-                            <p>No subjects match "{searchQuery}". Try a different search term.</p>
+                            <p>No subjects match your current filters.</p>
                         </div>
                     ) : (
                         <>
@@ -99,7 +147,10 @@ export function QuestionBankSubjects() {
                                     >
                                         <div className="subject-card-body">
                                             <div className="subject-card-info">
-                                                <span className="subject-code">{subject.course_code}</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                    <span className="subject-code">{subject.course_code}</span>
+                                                    <AccessBadge type={subject.accessType} />
+                                                </div>
                                                 <h3 className="subject-name">{subject.course_title}</h3>
                                                 <span className="subject-meta">
                                                     {subject.questions?.[0]?.count ?? 0} Question{(subject.questions?.[0]?.count ?? 0) !== 1 ? 's' : ''} available

@@ -207,6 +207,99 @@ async function generateAndSaveSets(
     return { error: null };
 }
 
+// ─── Admin Types ──────────────────────────────────────────────
+
+export interface ExamCoHandler {
+    professor_id: string;
+    full_name: string | null;
+    email: string | null;
+}
+
+export interface AdminExam {
+    id: string;
+    title: string;
+    code: string;
+    num_sets: number;
+    max_attempts: number;
+    academic_year: string;
+    term: string;
+    status: 'locked' | 'unlocked';
+    program_ids: string[];
+    created_at: string;
+    created_by: string;
+    ai_analysis_enabled: boolean;
+    exam_subjects: ExamSubject[];
+    enrollment_count: number;
+    creator_name: string | null;
+    creator_email: string | null;
+    co_handlers: ExamCoHandler[];
+}
+
+export async function fetchAdminExams(): Promise<{ data: AdminExam[]; error: string | null }> {
+    const { data, error } = await supabase
+        .from('exams')
+        .select('id, title, code, num_sets, max_attempts, academic_year, term, created_at, status, program_ids, ai_analysis_enabled, created_by, exam_subjects(subject_id, subjects(course_code, course_title)), exam_enrollments(count)')
+        .order('created_at', { ascending: false });
+
+    if (error) return { data: [], error: error.message };
+
+    const rows = data as any[];
+    const creatorIds = [...new Set(rows.map((e: any) => e.created_by).filter(Boolean))];
+    const examIds = rows.map((e: any) => e.id);
+
+    let profileMap: Record<string, { full_name: string | null; email: string | null }> = {};
+    let coHandlerMap: Record<string, ExamCoHandler[]> = {};
+
+    const [profilesResult, facultyResult] = await Promise.all([
+        creatorIds.length > 0
+            ? supabase.from('profiles').select('id, full_name, email').in('id', creatorIds)
+            : Promise.resolve({ data: [] }),
+        examIds.length > 0
+            ? supabase
+                .from('exam_faculty')
+                .select('exam_id, professor_id, professor:profiles(full_name, email)')
+                .in('exam_id', examIds)
+                .eq('status', 'accepted')
+            : Promise.resolve({ data: [] }),
+    ]);
+
+    if (profilesResult.data) {
+        for (const p of profilesResult.data as any[]) profileMap[p.id] = { full_name: p.full_name, email: p.email };
+    }
+    if (facultyResult.data) {
+        for (const ef of facultyResult.data as any[]) {
+            if (!coHandlerMap[ef.exam_id]) coHandlerMap[ef.exam_id] = [];
+            coHandlerMap[ef.exam_id].push({
+                professor_id: ef.professor_id,
+                full_name: ef.professor?.full_name ?? null,
+                email: ef.professor?.email ?? null,
+            });
+        }
+    }
+
+    const merged: AdminExam[] = rows.map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        code: e.code,
+        num_sets: e.num_sets,
+        max_attempts: e.max_attempts,
+        academic_year: e.academic_year,
+        term: e.term,
+        status: e.status,
+        program_ids: e.program_ids ?? [],
+        created_at: e.created_at,
+        created_by: e.created_by,
+        ai_analysis_enabled: e.ai_analysis_enabled,
+        exam_subjects: e.exam_subjects ?? [],
+        enrollment_count: e.exam_enrollments?.[0]?.count ?? 0,
+        creator_name: profileMap[e.created_by]?.full_name ?? null,
+        creator_email: profileMap[e.created_by]?.email ?? null,
+        co_handlers: coHandlerMap[e.id] ?? [],
+    }));
+
+    return { data: merged, error: null };
+}
+
 // ─── CRUD ─────────────────────────────────────────────────────
 
 export async function fetchExams(): Promise<{ data: Exam[]; error: string | null }> {

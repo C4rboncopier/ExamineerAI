@@ -296,6 +296,72 @@ export async function deleteQuestion(
   return { error: null };
 }
 
+// ─── PAGINATED FETCH ──────────────────────────────────────────
+
+export interface PaginatedQuestionsResult {
+  data: QuestionWithOutcomes[];
+  count: number;
+  error: string | null;
+}
+
+export async function fetchQuestionsBySubjectPaginated(
+  subjectId: string,
+  page: number,
+  pageSize: number,
+  filters?: { coId?: string; moId?: string; search?: string }
+): Promise<PaginatedQuestionsResult> {
+  let query = supabase
+    .from('questions')
+    .select(
+      `*, course_outcomes(id, title, order_index), module_outcomes(id, description, order_index)`,
+      { count: 'exact' }
+    )
+    .eq('subject_id', subjectId)
+    .order('created_at', { ascending: false });
+
+  if (filters?.coId) query = query.eq('course_outcome_id', filters.coId);
+  if (filters?.moId) query = query.eq('module_outcome_id', filters.moId);
+  if (filters?.search?.trim()) {
+    query = query.ilike('question_text', `%${filters.search.trim()}%`);
+  }
+
+  const from = (page - 1) * pageSize;
+  query = query.range(from, from + pageSize - 1);
+
+  const { data, error, count } = await query;
+  if (error) return { data: [], count: 0, error: error.message };
+  return { data: data as QuestionWithOutcomes[], count: count ?? 0, error: null };
+}
+
+// ─── LIGHTWEIGHT OUTCOME IDs (for summary modal) ─────────────
+
+export async function fetchQuestionOutcomeIdsBySubject(
+  subjectId: string
+): Promise<{ data: { course_outcome_id: string; module_outcome_id: string }[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from('questions')
+    .select('course_outcome_id, module_outcome_id')
+    .eq('subject_id', subjectId);
+  if (error) return { data: [], error: error.message };
+  return { data: data as { course_outcome_id: string; module_outcome_id: string }[], error: null };
+}
+
+export async function countQuestionsByCourseOutcome(coId: string): Promise<number> {
+  const { count } = await supabase
+    .from('questions')
+    .select('id', { count: 'exact', head: true })
+    .eq('course_outcome_id', coId);
+  return count ?? 0;
+}
+
+export async function countQuestionsByModuleOutcome(moId: string): Promise<number> {
+  const { count } = await supabase
+    .from('questions')
+    .select('id', { count: 'exact', head: true })
+    .eq('module_outcome_id', moId);
+  return count ?? 0;
+}
+
 export async function fetchQuestionsWithOutcomesByIds(
   ids: string[]
 ): Promise<{ data: QuestionWithOutcomes[]; error: string | null }> {

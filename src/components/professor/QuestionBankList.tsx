@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { fetchSubjectById } from '../../lib/subjects';
-import type { SubjectWithCounts } from '../../lib/subjects';
-import { fetchQuestionsBySubject, deleteQuestion } from '../../lib/questions';
+import { fetchSubjectWithOutcomes } from '../../lib/subjects';
+import type { SubjectWithOutcomes } from '../../lib/subjects';
+import { fetchQuestionsBySubjectPaginated, fetchQuestionOutcomeIdsBySubject, deleteQuestion } from '../../lib/questions';
 import { mapToQuestionData } from '../../lib/question-utils';
 import type { QuestionData } from '../../lib/question-utils';
 import { Popup } from '../common/Popup';
@@ -28,15 +28,17 @@ function LatexText({ text }: { text: string }) {
     return <span dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
+export function QuestionBankList({ embedded = false, canManage = true }: { embedded?: boolean; canManage?: boolean }) {
     const { subjectId } = useParams<{ subjectId: string }>();
     const navigate = useNavigate();
 
-    const [subject, setSubject] = useState<SubjectWithCounts | null>(null);
-    const [questions, setQuestions] = useState<QuestionData[]>([]);
+    const [subject, setSubject] = useState<SubjectWithOutcomes | null>(null);
+    const [pageQuestions, setPageQuestions] = useState<QuestionData[]>([]);
+    const [totalCount, setTotalCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [selectedCo, setSelectedCo] = useState('');
     const [selectedMo, setSelectedMo] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
@@ -53,111 +55,127 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
     const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
     const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
+    // ── Summary ──
+    const [summaryOutcomeIds, setSummaryOutcomeIds] = useState<{ course_outcome_id: string; module_outcome_id: string }[]>([]);
+    const [summaryLoading, setSummaryLoading] = useState(false);
+    const [summaryDirty, setSummaryDirty] = useState(true);
+
+    // Debounce search input
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => setDebouncedSearch(searchQuery), 350);
+        return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    }, [searchQuery]);
+
+    // Load subject outline for CO/MO filter options
     useEffect(() => {
         if (!subjectId) return;
-        fetchSubjectById(subjectId).then(({ data }) => setSubject(data));
+        fetchSubjectWithOutcomes(subjectId).then(({ data }) => setSubject(data));
     }, [subjectId]);
 
-    const loadQuestions = useCallback(async () => {
+    // Fetch current page from server
+    const loadPage = useCallback(async (page: number) => {
         if (!subjectId) return;
         setIsLoading(true);
         setError(null);
-        const result = await fetchQuestionsBySubject(subjectId);
+        const result = await fetchQuestionsBySubjectPaginated(subjectId, page, ITEMS_PER_PAGE, {
+            coId: selectedCo || undefined,
+            moId: selectedMo || undefined,
+            search: debouncedSearch || undefined,
+        });
         if (result.error) {
             setError(result.error);
         } else {
-            setQuestions(result.data.map(mapToQuestionData));
+            setPageQuestions(result.data.map(mapToQuestionData));
+            setTotalCount(result.count);
         }
         setIsLoading(false);
-    }, [subjectId]);
+    }, [subjectId, selectedCo, selectedMo, debouncedSearch]);
 
-    useEffect(() => {
-        loadQuestions();
-    }, [loadQuestions]);
-
-    // Unique COs from all questions
-    const coOptions = useMemo(() => {
-        const seen = new Set<string>();
-        const result: { id: string; title: string }[] = [];
-        for (const q of questions) {
-            if (q.coId && !seen.has(q.coId)) {
-                seen.add(q.coId);
-                result.push({ id: q.coId, title: q.coTitle ?? q.coId });
-            }
-        }
-        return result;
-    }, [questions]);
-
-    // MOs scoped to the selected CO (or all if none selected)
-    const moOptions = useMemo(() => {
-        const source = selectedCo ? questions.filter(q => q.coId === selectedCo) : questions;
-        const seen = new Set<string>();
-        const result: { id: string; label: string; orderIndex: number }[] = [];
-        for (const q of source) {
-            if (q.moId && !seen.has(q.moId)) {
-                seen.add(q.moId);
-                result.push({ id: q.moId, label: `MO ${(q.moOrderIndex ?? 0) + 1}`, orderIndex: q.moOrderIndex ?? 0 });
-            }
-        }
-        return result.sort((a, b) => a.orderIndex - b.orderIndex);
-    }, [questions, selectedCo]);
-
-    const filteredQuestions = useMemo(() => {
-        let result = questions;
-        if (searchQuery.trim()) {
-            const q = searchQuery.toLowerCase().trim();
-            result = result.filter(qn =>
-                qn.question.toLowerCase().includes(q) ||
-                qn.choices.some(c => c.toLowerCase().includes(q))
-            );
-        }
-        if (selectedCo) result = result.filter(q => q.coId === selectedCo);
-        if (selectedMo) result = result.filter(q => q.moId === selectedMo);
-        return result;
-    }, [questions, searchQuery, selectedCo, selectedMo]);
-
-    const totalPages = Math.max(1, Math.ceil(filteredQuestions.length / ITEMS_PER_PAGE));
-    const paginatedQuestions = filteredQuestions.slice(
-        (currentPage - 1) * ITEMS_PER_PAGE,
-        currentPage * ITEMS_PER_PAGE
-    );
-
+    // Reset to page 1 when filters / search change
     useEffect(() => {
         setCurrentPage(1);
         setExpandedId(null);
         setIsSelectMode(false);
         setSelectedIds(new Set());
-    }, [searchQuery, selectedCo, selectedMo]);
+    }, [debouncedSearch, selectedCo, selectedMo]);
+
+    // Load page whenever page or loadPage changes
+    useEffect(() => {
+        loadPage(currentPage);
+    }, [loadPage, currentPage]);
 
     useEffect(() => {
         document.querySelector('.prof-content-scroll')?.scrollTo({ top: 0, behavior: 'instant' });
     }, [currentPage]);
 
-    const handleCoChange = (coId: string) => {
-        setSelectedCo(coId);
-        setSelectedMo('');
-    };
+    const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
 
-    // Summary: CO totals + per-MO breakdown
+    // CO options from subject outline
+    const coOptions = useMemo(() => {
+        if (!subject) return [];
+        return [...subject.course_outcomes]
+            .sort((a, b) => a.order_index - b.order_index)
+            .map(co => ({ id: co.id, title: co.title }));
+    }, [subject]);
+
+    // MO options scoped to selected CO
+    const moOptions = useMemo(() => {
+        if (!subject) return [];
+        const targetCos = selectedCo
+            ? subject.course_outcomes.filter(co => co.id === selectedCo)
+            : subject.course_outcomes;
+        return targetCos.flatMap(co => {
+            const coIdx = subject.course_outcomes.findIndex(c => c.id === co.id);
+            return [...co.module_outcomes]
+                .sort((a, b) => a.order_index - b.order_index)
+                .map(mo => ({ id: mo.id, label: `MO ${coIdx + 1}${mo.order_index + 1}`, orderIndex: mo.order_index }));
+        });
+    }, [subject, selectedCo]);
+
+    // Summary data — derived from lightweight outcome IDs + subject outline
     const summaryData = useMemo(() => {
-        const byco: Record<string, {
-            title: string;
-            total: number;
-            mos: Record<string, { label: string; count: number; orderIndex: number }>;
-        }> = {};
-        for (const q of questions) {
-            if (!byco[q.coId]) byco[q.coId] = { title: q.coTitle ?? q.coId, total: 0, mos: {} };
-            byco[q.coId].total++;
-            if (!byco[q.coId].mos[q.moId]) {
-                byco[q.coId].mos[q.moId] = { label: `MO ${(q.moOrderIndex ?? 0) + 1}`, count: 0, orderIndex: q.moOrderIndex ?? 0 };
+        if (!subject || summaryOutcomeIds.length === 0) return [];
+        const byco: Record<string, { title: string; total: number; mos: Record<string, { label: string; count: number; orderIndex: number }> }> = {};
+        for (const row of summaryOutcomeIds) {
+            if (!byco[row.course_outcome_id]) {
+                const co = subject.course_outcomes.find(c => c.id === row.course_outcome_id);
+                byco[row.course_outcome_id] = { title: co?.title ?? '—', total: 0, mos: {} };
             }
-            byco[q.coId].mos[q.moId].count++;
+            byco[row.course_outcome_id].total++;
+            if (!byco[row.course_outcome_id].mos[row.module_outcome_id]) {
+                const co = subject.course_outcomes.find(c => c.id === row.course_outcome_id);
+                const mo = co?.module_outcomes.find(m => m.id === row.module_outcome_id);
+                const coIdx = subject.course_outcomes.findIndex(c => c.id === row.course_outcome_id);
+                byco[row.course_outcome_id].mos[row.module_outcome_id] = {
+                    label: `MO ${coIdx + 1}${(mo?.order_index ?? 0) + 1}`,
+                    count: 0,
+                    orderIndex: mo?.order_index ?? 0,
+                };
+            }
+            byco[row.course_outcome_id].mos[row.module_outcome_id].count++;
         }
         return Object.values(byco).map(co => ({
             ...co,
             mos: Object.values(co.mos).sort((a, b) => a.orderIndex - b.orderIndex),
         }));
-    }, [questions]);
+    }, [subject, summaryOutcomeIds]);
+
+    const handleOpenSummary = async () => {
+        setSummaryOpen(true);
+        if (!summaryDirty) return;
+        setSummaryLoading(true);
+        const { data } = await fetchQuestionOutcomeIdsBySubject(subjectId!);
+        setSummaryOutcomeIds(data);
+        setSummaryDirty(false);
+        setSummaryLoading(false);
+    };
+
+    const handleCoChange = (coId: string) => {
+        setSelectedCo(coId);
+        setSelectedMo('');
+    };
 
     const confirmDelete = (e: React.MouseEvent, q: QuestionData) => {
         e.stopPropagation();
@@ -171,9 +189,13 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
         if (result.error) {
             setError(result.error);
         } else {
-            setQuestions(prev => prev.filter(q => q.id !== questionToDelete.id));
+            setSummaryDirty(true);
             if (expandedId === questionToDelete.id) setExpandedId(null);
             setToastMessage('Question deleted successfully.');
+            const newTotalPages = Math.max(1, Math.ceil((totalCount - 1) / ITEMS_PER_PAGE));
+            const targetPage = Math.min(currentPage, newTotalPages);
+            if (targetPage === currentPage) loadPage(currentPage);
+            else setCurrentPage(targetPage);
         }
         setDeletePopupOpen(false);
         setQuestionToDelete(null);
@@ -181,17 +203,16 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
 
     const handleBulkDelete = async () => {
         setIsBulkDeleting(true);
-        const toDelete = questions.filter(q => selectedIds.has(q.id));
+        const toDelete = pageQuestions.filter(q => selectedIds.has(q.id));
         const results = await Promise.all(
             toDelete.map(q => deleteQuestion(q.id, q.professorId, q.subjectId))
         );
         const errorCount = results.filter(r => r.error).length;
+        const deleted = toDelete.length - errorCount;
+        setSummaryDirty(true);
         if (errorCount === 0) {
-            setQuestions(prev => prev.filter(q => !selectedIds.has(q.id)));
             setToastMessage(`${toDelete.length} question${toDelete.length !== 1 ? 's' : ''} deleted.`);
         } else {
-            const failedIds = new Set(toDelete.filter((_, i) => results[i].error).map(q => q.id));
-            setQuestions(prev => prev.filter(q => failedIds.has(q.id) || !selectedIds.has(q.id)));
             setError(`Failed to delete ${errorCount} question(s).`);
         }
         if (expandedId && selectedIds.has(expandedId)) setExpandedId(null);
@@ -199,11 +220,13 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
         setIsSelectMode(false);
         setBulkDeleteOpen(false);
         setIsBulkDeleting(false);
+        const newTotalPages = Math.max(1, Math.ceil((totalCount - deleted) / ITEMS_PER_PAGE));
+        const targetPage = Math.min(currentPage, newTotalPages);
+        if (targetPage === currentPage) loadPage(currentPage);
+        else setCurrentPage(targetPage);
     };
 
-    const toggleExpand = (id: string) => {
-        setExpandedId(prev => (prev === id ? null : id));
-    };
+    const toggleExpand = (id: string) => setExpandedId(prev => (prev === id ? null : id));
 
     const toggleSelectId = (id: string) => {
         setSelectedIds(prev => {
@@ -215,36 +238,28 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
         });
     };
 
-    const allOnPageSelected = paginatedQuestions.length > 0 && paginatedQuestions.every(q => selectedIds.has(q.id));
-    const someOnPageSelected = paginatedQuestions.some(q => selectedIds.has(q.id));
+    const allOnPageSelected = pageQuestions.length > 0 && pageQuestions.every(q => selectedIds.has(q.id));
+    const someOnPageSelected = pageQuestions.some(q => selectedIds.has(q.id));
 
     const handleCheckboxActivate = (id: string) => {
-        if (!isSelectMode) {
-            setIsSelectMode(true);
-            setExpandedId(null);
-        }
+        if (!isSelectMode) { setIsSelectMode(true); setExpandedId(null); }
         toggleSelectId(id);
     };
 
-    const exitSelectMode = () => {
-        setIsSelectMode(false);
-        setSelectedIds(new Set());
-    };
+    const exitSelectMode = () => { setIsSelectMode(false); setSelectedIds(new Set()); };
 
     const toggleSelectAllOnPage = () => {
         setSelectedIds(prev => {
             const n = new Set(prev);
-            if (allOnPageSelected) {
-                paginatedQuestions.forEach(q => n.delete(q.id));
-            } else {
-                paginatedQuestions.forEach(q => n.add(q.id));
-            }
+            if (allOnPageSelected) { pageQuestions.forEach(q => n.delete(q.id)); }
+            else { pageQuestions.forEach(q => n.add(q.id)); }
             if (n.size === 0) setIsSelectMode(false);
             return n;
         });
     };
 
     const hasFilters = !!(searchQuery || selectedCo || selectedMo);
+    const isEmpty = !isLoading && totalCount === 0 && !hasFilters;
 
     return (
         <div className="qb-container">
@@ -263,24 +278,22 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
 
             {error && <p className="cs-error">{error}</p>}
 
-            {isLoading ? (
-                <div className="subjects-loading">
-                    <p>Loading questions...</p>
-                </div>
-            ) : questions.length === 0 ? (
+            {isEmpty ? (
                 <div className="subjects-empty">
                     <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" className="empty-icon">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"></path>
                     </svg>
                     <h3>No questions yet</h3>
                     <p>Add your first question to this subject's question bank.</p>
-                    <button className="btn-primary" onClick={() => navigate(`/professor/subjects/${subjectId}/question-bank/create`)} style={{ marginTop: '16px' }}>
-                        + Add Question
-                    </button>
+                    {canManage && (
+                        <button className="btn-primary" onClick={() => navigate(`/professor/subjects/${subjectId}/question-bank/create`)} style={{ marginTop: '16px' }}>
+                            + Add Question
+                        </button>
+                    )}
                 </div>
             ) : (
                 <>
-                    {/* Single-row: Search + Filters + Actions */}
+                    {/* Search + Filters + Actions */}
                     <div className="ql-filter-bar" style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: isSelectMode ? '8px' : '24px', flexWrap: 'wrap' }}>
                         <div className="subjects-search" style={{ flex: '1', minWidth: '160px', margin: 0 }}>
                             <svg className="search-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"></path></svg>
@@ -328,7 +341,7 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
                         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
                             <button
                                 className="btn-secondary"
-                                onClick={() => setSummaryOpen(true)}
+                                onClick={handleOpenSummary}
                                 style={{ padding: '10px 14px', fontSize: '0.88rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                             >
                                 <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
@@ -336,20 +349,26 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
                                 </svg>
                                 Summary
                             </button>
-                            <button className="btn-primary" style={{ padding: '10px 14px', fontSize: '0.88rem' }} onClick={() => navigate(`/professor/subjects/${subjectId}/question-bank/create`)}>
-                                + Add Question
-                            </button>
+                            {canManage && (
+                                <button className="btn-primary" style={{ padding: '10px 14px', fontSize: '0.88rem' }} onClick={() => navigate(`/professor/subjects/${subjectId}/question-bank/create`)}>
+                                    + Add Question
+                                </button>
+                            )}
                         </div>
                     </div>
 
-                    {filteredQuestions.length === 0 ? (
+                    {isLoading ? (
+                        <div className="subjects-loading">
+                            <p>Loading questions...</p>
+                        </div>
+                    ) : pageQuestions.length === 0 ? (
                         <div className="subjects-empty">
                             <h3>No results found</h3>
                             <p>No questions match the current filters.</p>
                         </div>
                     ) : (
                         <>
-                            {/* Contextual selection bar — activated by clicking any row checkbox */}
+                            {/* Contextual selection bar */}
                             {isSelectMode && (
                                 <div style={{
                                     display: 'flex', alignItems: 'center',
@@ -394,7 +413,7 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
                             )}
 
                             <div className="ql-list">
-                                {paginatedQuestions.map((q, index) => {
+                                {pageQuestions.map((q, index) => {
                                     const isExpanded = !isSelectMode && expandedId === q.id;
                                     const isSelected = selectedIds.has(q.id);
                                     const globalIndex = (currentPage - 1) * ITEMS_PER_PAGE + index + 1;
@@ -409,15 +428,16 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
                                                 style={{ cursor: isSelectMode ? 'pointer' : undefined }}
                                                 onClick={() => isSelectMode ? toggleSelectId(q.id) : toggleExpand(q.id)}
                                             >
-                                                {/* Checkbox + number */}
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexShrink: 0 }}>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={isSelected}
-                                                        onChange={() => {}}
-                                                        onClick={e => { e.stopPropagation(); handleCheckboxActivate(q.id); }}
-                                                        style={{ cursor: 'pointer', width: '14px', height: '14px', flexShrink: 0 }}
-                                                    />
+                                                    {canManage && (
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isSelected}
+                                                            onChange={() => {}}
+                                                            onClick={e => { e.stopPropagation(); handleCheckboxActivate(q.id); }}
+                                                            style={{ cursor: 'pointer', width: '14px', height: '14px', flexShrink: 0 }}
+                                                        />
+                                                    )}
                                                     <span className="ql-num">{globalIndex}.</span>
                                                 </div>
                                                 <span className="ql-text"><LatexText text={q.question} /></span>
@@ -425,7 +445,7 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
                                                     {q.coTitle && <span className="qc-tag">{q.coTitle}</span>}
                                                     {q.moDescription && <span className="qc-tag">MO {(q.moOrderIndex ?? 0) + 1}</span>}
                                                 </div>
-                                                {!isSelectMode && (
+                                                {!isSelectMode && canManage && (
                                                     <div className="ql-row-actions" onClick={e => e.stopPropagation()}>
                                                         <button className="btn-icon" onClick={() => navigate(`/professor/subjects/${subjectId}/question-bank/${q.id}/edit`)} title="Edit Question">
                                                             <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"></path></svg>
@@ -501,7 +521,9 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
                             )}
 
                             <p className="subjects-count">
-                                Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredQuestions.length)} of {filteredQuestions.length} question{filteredQuestions.length !== 1 ? 's' : ''}
+                                {totalCount === 0
+                                    ? 'No questions found'
+                                    : `Showing ${(currentPage - 1) * ITEMS_PER_PAGE + 1}–${Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} of ${totalCount} question${totalCount !== 1 ? 's' : ''}`}
                             </p>
                         </>
                     )}
@@ -518,31 +540,39 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
                                 <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
                             </button>
                         </div>
-                        <div className="ql-summary-total">
-                            <span>Total:</span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <strong>{questions.length}</strong>
-                                <span>question{questions.length !== 1 ? 's' : ''}</span>
+                        {summaryLoading ? (
+                            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--prof-text-muted)', fontSize: '0.9rem' }}>
+                                Loading summary...
                             </div>
-                        </div>
-                        <div className="ql-summary-body">
-                            {summaryData.map((co, i) => (
-                                <div key={i} className="ql-summary-co">
-                                    <div className="ql-summary-co-row">
-                                        <span className="ql-summary-co-title">{co.title}</span>
-                                        <span className="ql-summary-co-count">{co.total}</span>
-                                    </div>
-                                    <div className="ql-summary-mos">
-                                        {co.mos.map((mo, j) => (
-                                            <div key={j} className="ql-summary-mo-row">
-                                                <span className="ql-summary-mo-label">{mo.label}</span>
-                                                <span className="ql-summary-mo-count">{mo.count}</span>
-                                            </div>
-                                        ))}
+                        ) : (
+                            <>
+                                <div className="ql-summary-total">
+                                    <span>Total:</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <strong>{summaryOutcomeIds.length}</strong>
+                                        <span>question{summaryOutcomeIds.length !== 1 ? 's' : ''}</span>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
+                                <div className="ql-summary-body">
+                                    {summaryData.map((co, i) => (
+                                        <div key={i} className="ql-summary-co">
+                                            <div className="ql-summary-co-row">
+                                                <span className="ql-summary-co-title">{co.title}</span>
+                                                <span className="ql-summary-co-count">{co.total}</span>
+                                            </div>
+                                            <div className="ql-summary-mos">
+                                                {co.mos.map((mo, j) => (
+                                                    <div key={j} className="ql-summary-mo-row">
+                                                        <span className="ql-summary-mo-label">{mo.label}</span>
+                                                        <span className="ql-summary-mo-count">{mo.count}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
@@ -561,7 +591,7 @@ export function QuestionBankList({ embedded = false }: { embedded?: boolean }) {
             <Popup
                 isOpen={bulkDeleteOpen}
                 title="Delete Selected Questions"
-                message={`Delete ${selectedIds.size} question${selectedIds.size !== 1 ? 's' : ''}? This action cannot be undone.`}
+                message={`Delete ${selectedIds.size} question${selectedIds.size !== 1 ? 's' : ''} This action cannot be undone.`}
                 type="danger"
                 onConfirm={handleBulkDelete}
                 onCancel={() => setBulkDeleteOpen(false)}

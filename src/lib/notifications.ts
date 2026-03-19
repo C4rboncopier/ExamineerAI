@@ -1,11 +1,15 @@
 import { supabase } from './supabase';
 
+export type NotificationPayload =
+    | { exam_id: string; exam_title: string; faculty_id: string }
+    | { subject_id: string; subject_title: string; faculty_id: string };
+
 export interface ProfessorNotification {
     id: string;
     recipient_id: string;
     sender_id: string;
-    type: 'exam_invite';
-    payload: { exam_id: string; exam_title: string; faculty_id: string };
+    type: 'exam_invite' | 'subject_invite';
+    payload: NotificationPayload;
     read: boolean;
     created_at: string;
     sender: {
@@ -99,5 +103,36 @@ export async function createExamInviteNotification(params: {
                 faculty_id: params.facultyId,
             },
         });
+    return { error: error?.message ?? null };
+}
+
+export async function createSubjectInviteNotification(params: {
+    recipientId: string;
+    senderId: string;
+    subjectId: string;
+    subjectTitle: string;
+    facultyId: string;
+}): Promise<{ error: string | null }> {
+    const { error } = await supabase
+        .from('professor_notifications')
+        .insert({
+            recipient_id: params.recipientId,
+            sender_id: params.senderId,
+            type: 'subject_invite',
+            payload: {
+                subject_id: params.subjectId,
+                subject_title: params.subjectTitle,
+                faculty_id: params.facultyId,
+            },
+        });
+    return { error: error?.message ?? null };
+}
+
+export async function deleteNotificationBySubjectFacultyId(
+    facultyId: string
+): Promise<{ error: string | null }> {
+    const { error } = await supabase.rpc('delete_subject_invite_notification', {
+        p_faculty_id: facultyId,
+    });
     return { error: error?.message ?? null };
 }

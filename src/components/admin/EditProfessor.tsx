@@ -92,17 +92,27 @@ export function EditProfessor() {
         if (!editForm.full_name.trim()) { setFormError('Full name is required.'); return; }
         if (!editForm.email.trim()) { setFormError('Email address is required.'); return; }
         if (!editForm.username.trim()) { setFormError('Username is required.'); return; }
+        if (!editForm.program_id) { setFormError('Program assignment is required.'); return; }
+
+        const emailChanged = editForm.email.trim() !== originalEmail;
 
         setIsSubmitting(true);
         try {
             const { error } = await updateProfessor(id, {
                 full_name: editForm.full_name,
                 username: editForm.username,
-                program_id: editForm.program_id || null,
-                email: editForm.email !== originalEmail ? editForm.email : undefined,
+                program_id: editForm.program_id,
+                email: emailChanged ? editForm.email : undefined,
             });
 
-            if (error) { setFormError(error); return; }
+            if (error) {
+                setFormError(
+                    /already registered|already exists|duplicate|email/i.test(error)
+                        ? 'An account with this email already exists.'
+                        : error
+                );
+                return;
+            }
             navigate('/admin/professors', { state: { toastMessage: `Professor "${editForm.full_name}" has been updated.` } });
         } catch {
             setFormError('An unexpected error occurred. Please try again.');
@@ -155,7 +165,7 @@ export function EditProfessor() {
                         {/* Email */}
                         <div>
                             <label style={labelStyle}>Email Address</label>
-                            <input type="email" required style={inputStyle} placeholder="professor@university.edu" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} />
+                            <input type="email" required style={inputStyle} placeholder="professor@mcm.edu.ph" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} />
                         </div>
                     </div>
 
@@ -191,14 +201,6 @@ export function EditProfessor() {
                                         />
                                     </div>
                                     <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                                        <div
-                                            style={{ padding: '8px 12px', fontSize: '0.85rem', cursor: 'pointer', transition: 'background 0.1s', background: editForm.program_id === '' ? '#f1f5f9' : 'transparent' }}
-                                            onClick={() => { setEditForm(f => ({ ...f, program_id: '' })); setIsProgramDropdownOpen(false); }}
-                                            onMouseOver={e => e.currentTarget.style.background = '#f8fafc'}
-                                            onMouseOut={e => e.currentTarget.style.background = editForm.program_id === '' ? '#f1f5f9' : 'transparent'}
-                                        >
-                                            — None —
-                                        </div>
                                         {filteredPrograms.length > 0 ? filteredPrograms.map(p => (
                                             <div
                                                 key={p.id}

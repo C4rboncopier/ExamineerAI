@@ -58,7 +58,7 @@ export function ProfessorDashboard() {
                         </div>
                         <div className="user-profile">
                             <TopbarBell />
-                            <span className="user-email">{profile?.email || 'professor@examineerai.com'}</span>
+                            <span className="user-email">{profile?.full_name || profile?.email || 'User'}</span>
                             <button onClick={signOut} className="btn-logout">Sign Out</button>
                         </div>
                     </header>

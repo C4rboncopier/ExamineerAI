@@ -1,18 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { createSubject, updateSubject, fetchSubjectWithOutcomes } from '../../lib/subjects';
+import { createSubject, updateSubject, fetchSubjectWithOutcomes, type DuplicateSubjectInfo } from '../../lib/subjects';
+import { countQuestionsByCourseOutcome, countQuestionsByModuleOutcome } from '../../lib/questions';
 import { Popup } from '../common/Popup';
 
 interface ModuleOutcome {
     id: string;
+    dbId?: string;
     description: string;
 }
 
 interface CourseOutcome {
     id: string;
+    dbId?: string;
     description: string;
     modules: ModuleOutcome[];
 }
+
+type PendingRemove =
+    | { type: 'co'; coId: string }
+    | { type: 'mo'; coId: string; moId: string };
 
 const initialOutcomes = (): CourseOutcome[] => [
     { id: crypto.randomUUID(), description: '', modules: [{ id: crypto.randomUUID(), description: '' }] }
@@ -29,7 +36,12 @@ export function CreateSubject() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoadingSubject, setIsLoadingSubject] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const [duplicateSubject, setDuplicateSubject] = useState<DuplicateSubjectInfo | null>(null);
     const [submitSuccess, setSubmitSuccess] = useState(false);
+
+    const [pendingRemove, setPendingRemove] = useState<PendingRemove | null>(null);
+    const [pendingRemoveCount, setPendingRemoveCount] = useState(0);
+    const [pendingRemoveLoading, setPendingRemoveLoading] = useState(false);
 
     useEffect(() => {
         if (!subjectId) return;
@@ -48,11 +60,13 @@ export function CreateSubject() {
             const sorted = [...data.course_outcomes].sort((a, b) => a.order_index - b.order_index);
             setOutcomes(sorted.map(co => ({
                 id: crypto.randomUUID(),
+                dbId: co.id,
                 description: co.description,
                 modules: [...co.module_outcomes]
                     .sort((a, b) => a.order_index - b.order_index)
                     .map(mo => ({
                         id: crypto.randomUUID(),
+                        dbId: mo.id,
                         description: mo.description,
                     })),
             })));
@@ -61,31 +75,65 @@ export function CreateSubject() {
         });
     }, [subjectId]);
 
-    const goBack = () => navigate('/professor/subjects');
+    const goBack = () => navigate(isEditMode && subjectId ? `/professor/subjects/${subjectId}/overview` : '/professor/subjects');
 
     const addCourseOutcome = () => {
         setOutcomes([...outcomes, { id: crypto.randomUUID(), description: '', modules: [{ id: crypto.randomUUID(), description: '' }] }]);
     };
 
-    const removeCourseOutcome = (coId: string) => {
-        if (outcomes.length > 1) {
-            setOutcomes(outcomes.filter(co => co.id !== coId));
+    const requestRemoveCourseOutcome = async (coId: string) => {
+        if (outcomes.length <= 1) return;
+        const co = outcomes.find(c => c.id === coId);
+        if (isEditMode && co?.dbId) {
+            setPendingRemoveLoading(true);
+            const count = await countQuestionsByCourseOutcome(co.dbId);
+            setPendingRemoveLoading(false);
+            if (count > 0) {
+                setPendingRemoveCount(count);
+                setPendingRemove({ type: 'co', coId });
+                return;
+            }
         }
+        setOutcomes(outcomes.filter(c => c.id !== coId));
+    };
+
+    const requestRemoveModuleOutcome = async (coId: string, moId: string) => {
+        const co = outcomes.find(c => c.id === coId);
+        if (!co || co.modules.length <= 1) return;
+        const mo = co.modules.find(m => m.id === moId);
+        if (isEditMode && mo?.dbId) {
+            setPendingRemoveLoading(true);
+            const count = await countQuestionsByModuleOutcome(mo.dbId);
+            setPendingRemoveLoading(false);
+            if (count > 0) {
+                setPendingRemoveCount(count);
+                setPendingRemove({ type: 'mo', coId, moId });
+                return;
+            }
+        }
+        setOutcomes(outcomes.map(c => {
+            if (c.id !== coId) return c;
+            return { ...c, modules: c.modules.filter(m => m.id !== moId) };
+        }));
+    };
+
+    const confirmPendingRemove = () => {
+        if (!pendingRemove) return;
+        if (pendingRemove.type === 'co') {
+            setOutcomes(outcomes.filter(c => c.id !== pendingRemove.coId));
+        } else {
+            setOutcomes(outcomes.map(c => {
+                if (c.id !== pendingRemove.coId) return c;
+                return { ...c, modules: c.modules.filter(m => m.id !== pendingRemove.moId) };
+            }));
+        }
+        setPendingRemove(null);
     };
 
     const addModuleOutcome = (coId: string) => {
         setOutcomes(outcomes.map(co => {
             if (co.id === coId) {
                 return { ...co, modules: [...co.modules, { id: crypto.randomUUID(), description: '' }] };
-            }
-            return co;
-        }));
-    };
-
-    const removeModuleOutcome = (coId: string, moId: string) => {
-        setOutcomes(outcomes.map(co => {
-            if (co.id === coId && co.modules.length > 1) {
-                return { ...co, modules: co.modules.filter(mo => mo.id !== moId) };
             }
             return co;
         }));
@@ -110,6 +158,7 @@ export function CreateSubject() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitError(null);
+        setDuplicateSubject(null);
         setSubmitSuccess(false);
         setIsSubmitting(true);
 
@@ -119,12 +168,13 @@ export function CreateSubject() {
             modules: co.modules.map(mo => ({ description: mo.description })),
         }));
 
-        const { error } = isEditMode && subjectId
+        const result = isEditMode && subjectId
             ? await updateSubject(subjectId, courseTitle, courseCode, payload)
             : await createSubject(courseTitle, courseCode, payload);
 
-        if (error) {
-            setSubmitError(error);
+        if (result.error) {
+            setSubmitError(result.error);
+            if (result.duplicateSubject) setDuplicateSubject(result.duplicateSubject);
             setIsSubmitting(false);
             return;
         }
@@ -178,7 +228,7 @@ export function CreateSubject() {
                                 type="text"
                                 placeholder="e.g. CS101"
                                 value={courseCode}
-                                onChange={e => setCourseCode(e.target.value)}
+                                onChange={e => setCourseCode(e.target.value.toUpperCase())}
                                 required
                             />
                         </div>
@@ -204,7 +254,7 @@ export function CreateSubject() {
                                         rows={2}
                                     />
                                     {outcomes.length > 1 && (
-                                        <button type="button" className="btn-icon danger sm" onClick={() => removeCourseOutcome(co.id)} title="Remove CO">
+                                        <button type="button" className="btn-icon danger sm" onClick={() => requestRemoveCourseOutcome(co.id)} disabled={pendingRemoveLoading} title="Remove CO">
                                             <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                         </button>
                                     )}
@@ -224,7 +274,7 @@ export function CreateSubject() {
                                                 rows={2}
                                             />
                                             {co.modules.length > 1 && (
-                                                <button type="button" className="btn-icon danger sm" onClick={() => removeModuleOutcome(co.id, mo.id)} title="Remove MO">
+                                                <button type="button" className="btn-icon danger sm" onClick={() => requestRemoveModuleOutcome(co.id, mo.id)} disabled={pendingRemoveLoading} title="Remove MO">
                                                     <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
                                                 </button>
                                             )}
@@ -246,7 +296,27 @@ export function CreateSubject() {
                     </div>
                 </div>
 
-                {submitError && <p className="cs-error">{submitError}</p>}
+                {submitError && (
+                    <div style={{
+                        background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px',
+                        padding: '14px 16px', display: 'flex', gap: '12px', alignItems: 'flex-start',
+                        marginTop: '16px',
+                    }}>
+                        <svg fill="none" strokeWidth="2" stroke="#ef4444" viewBox="0 0 24 24" width="20" height="20" style={{ flexShrink: 0, marginTop: '1px' }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        </svg>
+                        <div>
+                            <p style={{ margin: 0, fontWeight: 600, fontSize: '0.88rem', color: '#b91c1c' }}>{submitError}</p>
+                            {duplicateSubject && (
+                                <div style={{ marginTop: '8px', padding: '8px 12px', background: '#fff', border: '1px solid #fecaca', borderRadius: '7px', fontSize: '0.83rem', color: '#7f1d1d' }}>
+                                    <p style={{ margin: '0 0 2px' }}><strong>Existing subject:</strong> {duplicateSubject.course_title}</p>
+                                    <p style={{ margin: '0 0 2px' }}><strong>Course code:</strong> {duplicateSubject.course_code}</p>
+                                    <p style={{ margin: 0 }}><strong>Created by:</strong> {duplicateSubject.creator_name}</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 <div className="cs-actions">
                     <button type="button" className="btn-secondary" onClick={goBack}>
@@ -264,7 +334,18 @@ export function CreateSubject() {
                 message={isEditMode ? 'The subject was successfully updated.' : 'The new subject was successfully created.'}
                 type="success"
                 onConfirm={goBack}
-                confirmText="Back to Subjects List"
+                confirmText={isEditMode ? 'Back to Subject' : 'Back to Subjects List'}
+            />
+
+            <Popup
+                isOpen={!!pendingRemove}
+                title={`Remove ${pendingRemove?.type === 'co' ? 'Course Outcome' : 'Module Outcome'}?`}
+                message={`This ${pendingRemove?.type === 'co' ? 'Course Outcome' : 'Module Outcome'} has ${pendingRemoveCount} linked question${pendingRemoveCount !== 1 ? 's' : ''}. Removing it will permanently delete those questions. This cannot be undone.`}
+                type="danger"
+                onConfirm={confirmPendingRemove}
+                onCancel={() => setPendingRemove(null)}
+                confirmText="Yes, Remove"
+                cancelText="Keep It"
             />
         </div>
     );
