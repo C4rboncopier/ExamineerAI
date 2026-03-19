@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useMemo, useCallback, type CSSProperties } from 'react';
+import { Fragment, useState, useEffect, useMemo, useCallback, useRef, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import katex from 'katex';
 import {
@@ -32,6 +32,7 @@ import {
     type AttemptGradeRow,
     type SetAnswerKey,
 } from '../../lib/grading';
+import * as XLSX from 'xlsx';
 
 function renderMathHtml(text: string): string {
     const mathPattern = /\$\$([^$]+?)\$\$/g;
@@ -253,7 +254,10 @@ export function ViewExam() {
     const [exam, setExam] = useState<ExamWithSets | null>(null);
     const [questionMap, setQuestionMap] = useState<Record<string, QuestionSummary>>({});
     const [isLoading, setIsLoading] = useState(true);
+    const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const questionsLoadedRef = useRef(false);
+    const professorsLoadedRef = useRef(false);
 
     // ── Tab navigation (derived from URL) ──
     const activeTab: Tab =
@@ -362,21 +366,13 @@ export function ViewExam() {
 
     const loadExam = useCallback(async () => {
         if (!examId) return;
-        const [{ data, error }, { data: fac }, { data: profs }] = await Promise.all([
+        const [{ data, error }, { data: fac }] = await Promise.all([
             fetchExamById(examId),
             fetchExamFaculty(examId),
-            fetchProfessors(),
         ]);
         if (error || !data) { setError('Failed to load exam.'); setIsLoading(false); return; }
         setExam(data);
         setFaculty(fac ?? []);
-        setAllProfessors(profs ?? []);
-        const allIds = [...new Set(data.exam_sets.flatMap(s => s.question_ids))];
-        if (allIds.length === 0) { setIsLoading(false); return; }
-        const { data: questions } = await fetchQuestionsByIds(allIds);
-        const map: Record<string, QuestionSummary> = {};
-        questions.forEach(q => { map[q.id] = q; });
-        setQuestionMap(map);
         setIsLoading(false);
     }, [examId]);
 
@@ -398,6 +394,39 @@ export function ViewExam() {
     }, [exam, examId]);
 
     useEffect(() => { loadGradesOnly(); }, [loadGradesOnly]);
+
+    const loadQuestions = useCallback(async () => {
+        if (!exam || questionsLoadedRef.current) return;
+        questionsLoadedRef.current = true;
+        setIsLoadingQuestions(true);
+        const allIds = [...new Set(exam.exam_sets.flatMap(s => s.question_ids))];
+        if (allIds.length > 0) {
+            const { data: questions } = await fetchQuestionsByIds(allIds);
+            const map: Record<string, QuestionSummary> = {};
+            questions.forEach(q => { map[q.id] = q; });
+            setQuestionMap(map);
+        }
+        setIsLoadingQuestions(false);
+    }, [exam]);
+
+    useEffect(() => {
+        if (exam && !questionsLoadedRef.current && (activeTab === 'papers' || activeTab === 'analysis')) {
+            loadQuestions();
+        }
+    }, [exam, activeTab, loadQuestions]);
+
+    const loadProfessors = useCallback(async () => {
+        if (professorsLoadedRef.current) return;
+        professorsLoadedRef.current = true;
+        const { data: profs } = await fetchProfessors();
+        setAllProfessors(profs ?? []);
+    }, []);
+
+    useEffect(() => {
+        if (activeTab === 'students' && !professorsLoadedRef.current) {
+            loadProfessors();
+        }
+    }, [activeTab, loadProfessors]);
 
     useEffect(() => {
         setActiveSet(0);
@@ -779,6 +808,81 @@ export function ViewExam() {
         .filter(a => a.status === 'deployed' || a.status === 'done')
         .sort((a, b) => a.attempt_number - b.attempt_number);
 
+    const downloadGradesXlsx = () => {
+        const wb = XLSX.utils.book_new();
+        if (gradesSummaryMode) {
+            const studentMap: Record<string, AttemptGradeRow['enrollment']> = {};
+            const subMap: Record<string, Record<number, AttemptGradeRow['submission']>> = {};
+            for (const [attemptKey, attemptRows] of Object.entries(gradesData)) {
+                const aNum = Number(attemptKey);
+                for (const { enrollment, submission } of attemptRows) {
+                    if (!studentMap[enrollment.student_id]) studentMap[enrollment.student_id] = enrollment;
+                    if (!subMap[enrollment.student_id]) subMap[enrollment.student_id] = {};
+                    subMap[enrollment.student_id][aNum] = submission;
+                }
+            }
+            const totalItemsPerAttempt: Record<number, number> = {};
+            for (const a of deployedAttempts) {
+                const rows = gradesData[a.attempt_number] ?? [];
+                totalItemsPerAttempt[a.attempt_number] =
+                    rows.find(r => r.submission?.total_items != null)?.submission!.total_items ?? 0;
+            }
+            const overallTotal = deployedAttempts.length > 0
+                ? Math.max(...deployedAttempts.map(a => totalItemsPerAttempt[a.attempt_number] ?? 0))
+                : 0;
+            const header = [
+                'Student Name', 'Username', 'Student ID', 'Exam Code', 'Total Questions',
+                ...deployedAttempts.flatMap(a => [
+                    `Attempt ${a.attempt_number} Score`,
+                    `Attempt ${a.attempt_number} Grade`,
+                ]),
+            ];
+            const data = Object.values(studentMap).map(enrollment => {
+                const subs = subMap[enrollment.student_id] ?? {};
+                const attemptCols = deployedAttempts.flatMap(a => {
+                    const sub = subs[a.attempt_number];
+                    const ti = totalItemsPerAttempt[a.attempt_number];
+                    const pct = sub?.score != null && ti > 0 ? (sub.score / ti) * 100 : null;
+                    if (sub == null) return ['Did Not Take', 'Did Not Take'];
+                    return [sub.score ?? '', pct !== null ? (pct >= passingRate ? 'P' : 'F') : ''];
+                });
+                return [
+                    enrollment.student?.full_name ?? '',
+                    enrollment.student?.username ?? '',
+                    enrollment.student?.student_id ?? '',
+                    exam.code,
+                    overallTotal,
+                    ...attemptCols,
+                ];
+            });
+            const ws = XLSX.utils.aoa_to_sheet([header, ...data]);
+            XLSX.utils.book_append_sheet(wb, ws, 'Grades');
+            XLSX.writeFile(wb, `${exam.code}_${exam.academic_year}_${exam.term}_Summary_Grades.xlsx`);
+        } else {
+            const attemptNum = gradesAttemptFilter ?? deployedAttempts[0]?.attempt_number;
+            if (attemptNum == null) return;
+            const rows = gradesData[attemptNum] ?? [];
+            const totalItems = rows.find(r => r.submission?.total_items != null)?.submission!.total_items ?? 0;
+            const header = ['Student Name', 'Username', 'Student ID', 'Exam Code', 'Total Questions', 'Score', 'Grade'];
+            const data = rows.map(({ enrollment, submission }) => {
+                const pct = submission?.score != null && totalItems > 0
+                    ? (submission.score / totalItems) * 100 : null;
+                return [
+                    enrollment.student?.full_name ?? '',
+                    enrollment.student?.username ?? '',
+                    enrollment.student?.student_id ?? '',
+                    exam.code,
+                    totalItems,
+                    submission == null ? 'Did Not Take' : (submission.score ?? ''),
+                    submission == null ? 'Did Not Take' : (pct !== null ? (pct >= passingRate ? 'P' : 'F') : ''),
+                ];
+            });
+            const ws = XLSX.utils.aoa_to_sheet([header, ...data]);
+            XLSX.utils.book_append_sheet(wb, ws, 'Grades');
+            XLSX.writeFile(wb, `${exam.code}_${exam.academic_year}_${exam.term}_Attempt${attemptNum}_Grades.xlsx`);
+        }
+    };
+
     const TAB_LABELS: Record<Tab, string> = { overview: 'Overview', papers: 'Exams', students: 'Students', scan: 'Scan OMR', analysis: 'Analysis' };
 
     return (
@@ -960,6 +1064,20 @@ export function ViewExam() {
                                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75V16.5zM16.5 6.75h.75v.75h-.75v-.75zM13.5 13.5h.75v.75h-.75v-.75zM13.5 19.5h.75v.75h-.75v-.75zM19.5 13.5h.75v.75h-.75v-.75zM19.5 19.5h.75v.75h-.75v-.75zM16.5 16.5h.75v.75h-.75v-.75z" />
                                                                 </svg>
                                                                 Scan
+                                                            </button>
+                                                            <button
+                                                                className="btn-secondary"
+                                                                onClick={downloadGradesXlsx}
+                                                                disabled={isLoadingGrades || Object.keys(gradesData).length === 0}
+                                                                title="Download grades as Excel (.xlsx)"
+                                                                style={{ padding: '4px 10px', fontSize: '0.77rem', height: '26px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                                            >
+                                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                                                    <polyline points="7 10 12 15 17 10"/>
+                                                                    <line x1="12" y1="15" x2="12" y2="3"/>
+                                                                </svg>
+                                                                Download
                                                             </button>
                                                             {gradesSummaryMode ? (() => {
                                                                 const allReleased = deployedAttempts.every(a => attemptGradesReleasedMap[a.attempt_number]?.released);
@@ -1616,6 +1734,12 @@ export function ViewExam() {
             ══════════════════════════════════════════════ */}
             {activeTab === 'papers' && (
                 <div>
+                    {isLoadingQuestions && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 0', color: 'var(--prof-text-muted)', fontSize: '0.85rem' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+                            Loading questions…
+                        </div>
+                    )}
                     {/* Attempt selector */}
                     {exam.max_attempts > 1 && (
                         <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>

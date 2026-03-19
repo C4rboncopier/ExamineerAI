@@ -24,7 +24,7 @@ export async function fetchSubjectFaculty(
         .order('created_at', { ascending: true });
 
     if (error) return { data: [], error: error.message };
-    return { data: data as SubjectFacultyMember[], error: null };
+    return { data: data as unknown as SubjectFacultyMember[], error: null };
 }
 
 export async function addSubjectFaculty(
@@ -46,7 +46,7 @@ export async function addSubjectFaculty(
         .single();
 
     if (error) return { data: null, error: error.message };
-    return { data: data as SubjectFacultyMember, error: null };
+    return { data: data as unknown as SubjectFacultyMember, error: null };
 }
 
 export async function removeSubjectFaculty(

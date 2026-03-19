@@ -24,7 +24,7 @@ export async function fetchExamFaculty(
         .order('created_at', { ascending: true });
 
     if (error) return { data: [], error: error.message };
-    return { data: data as ExamFacultyMember[], error: null };
+    return { data: data as unknown as ExamFacultyMember[], error: null };
 }
 
 export async function addExamFaculty(
@@ -46,7 +46,7 @@ export async function addExamFaculty(
         .single();
 
     if (error) return { data: null, error: error.message };
-    return { data: data as ExamFacultyMember, error: null };
+    return { data: data as unknown as ExamFacultyMember, error: null };
 }
 
 export async function removeExamFaculty(

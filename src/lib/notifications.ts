@@ -29,7 +29,7 @@ export async function fetchNotifications(
         .order('created_at', { ascending: false });
 
     if (error) return { data: [], error: error.message };
-    return { data: data as ProfessorNotification[], error: null };
+    return { data: data as unknown as ProfessorNotification[], error: null };
 }
 
 export async function fetchUnreadCount(recipientId: string): Promise<number> {

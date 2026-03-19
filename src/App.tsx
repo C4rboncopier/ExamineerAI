@@ -8,7 +8,7 @@ import { ProfessorDashboard } from './pages/ProfessorDashboard';
 import { StudentDashboard } from './pages/StudentDashboard';
 import { SubjectsList } from './components/professor/SubjectsList';
 import { CreateSubject } from './components/professor/CreateSubject';
-import { QuestionBankList } from './components/professor/QuestionBankList';
+
 import { CreateQuestion } from './components/professor/CreateQuestion';
 import { ViewSubject } from './components/professor/ViewSubject';
 import { ExamsList } from './components/professor/ExamsList';
