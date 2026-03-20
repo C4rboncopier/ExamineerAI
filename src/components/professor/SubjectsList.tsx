@@ -135,9 +135,9 @@ export function SubjectsList() {
                             value={accessFilter}
                             onChange={e => setAccessFilter(e.target.value as AccessFilter)}
                             style={{
-                                flexShrink: 0, width: '160px', padding: '10px 12px', border: '1px solid var(--prof-border)',
+                                flexShrink: 0, width: '160px', padding: '9px 12px', border: '1.5px solid var(--prof-border)',
                                 borderRadius: '8px', fontSize: '0.875rem', background: 'var(--prof-surface)',
-                                color: 'var(--prof-text-main)', cursor: 'pointer', outline: 'none', height: '46px',
+                                color: 'var(--prof-text-main)', cursor: 'pointer', outline: 'none',
                             }}
                         >
                             <option value="all">All Access</option>

@@ -76,7 +76,7 @@ export function ExamsList() {
                     <p className="subjects-subtitle">Manage your generated exam sets.</p>
                 </div>
                 <div className="prof-exam-header-btns" style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn-secondary" onClick={() => printOMR()}>
+                    <button className="btn-secondary ve-hide-mobile" onClick={() => printOMR()}>
                         Download OMR
                     </button>
                     <button className="btn-primary" onClick={() => navigate('/professor/exams/create')}>

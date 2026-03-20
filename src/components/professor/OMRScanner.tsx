@@ -83,7 +83,7 @@ function getMultiBubbleQuestions(omrResult: OMRResult): Set<number> {
 
 export default function OMRScanner({ examId, attemptNumber, numSets, enrollments, existingGrades, onComplete, onBusyChange }: Props) {
     const [mode, setMode] = useState<ScanMode>('camera');
-    const serverUrl = '/omr';
+    const serverUrl = import.meta.env.VITE_OMR_URL || '/omr';
 
     // ── Processing ────────────────────────────────────────────────────────────
     const [isProcessing, setIsProcessing] = useState(false);

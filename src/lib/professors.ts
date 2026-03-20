@@ -39,12 +39,13 @@ export async function createProfessor(payload: {
     username: string;
     password: string;
     program_id: string | null;
-}): Promise<{ error: string | null }> {
+}): Promise<{ error: string | null; emailError: string | null }> {
     const { data, error } = await supabase.functions.invoke('create-professor', {
         body: payload,
     });
-    if (error) return { error: error.message };
-    return { error: data?.error ?? null };
+    if (error) return { error: error.message, emailError: null };
+    if (data?.error) return { error: data.error, emailError: null };
+    return { error: null, emailError: data?.email_error ?? null };
 }
 
 export async function updateProfessor(

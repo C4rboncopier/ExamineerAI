@@ -74,7 +74,7 @@ export function AddProfessor() {
 
         setIsSubmitting(true);
         try {
-            const { error } = await createProfessor({
+            const { error, emailError } = await createProfessor({
                 email: addForm.email,
                 full_name: addForm.full_name,
                 username: addForm.username,
@@ -89,7 +89,10 @@ export function AddProfessor() {
                 );
                 return;
             }
-            navigate('/admin/professors', { state: { toastMessage: `Professor "${addForm.full_name}" has been added.` } });
+            const toastMessage = emailError
+                ? `Professor "${addForm.full_name}" added, but email notification failed: ${emailError}`
+                : `Professor "${addForm.full_name}" added and notified by email.`;
+            navigate('/admin/professors', { state: { toastMessage } });
         } catch {
             setFormError('An unexpected error occurred. Please try again.');
         } finally {
