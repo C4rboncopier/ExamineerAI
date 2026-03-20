@@ -907,7 +907,7 @@ export function ExamAnalysis({ exam, gradesData, questionMap, passingRate, isLoa
                                 const bestAttempt = top.attempts.reduce((best, a) => a.pct > best.pct ? a : best, top.attempts[0]);
                                 const setLetter = bestAttempt ? String.fromCharCode(64 + bestAttempt.setNum) : null;
                                 rows.push({
-                                    label: 'Top Performer',
+                                    label: 'Top Scorer',
                                     detail: top.name,
                                     subDetail: bestAttempt ? `Attempt ${bestAttempt.attemptNum} · Set ${setLetter}` : undefined,
                                     stat: `${top.bestPct.toFixed(0)}%`,

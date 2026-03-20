@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { fetchProfessors, deleteProfessor } from '../../lib/professors';
-import type { Professor } from '../../lib/professors';
+import { fetchProfessors, deleteProfessor, checkProfessorOwnership } from '../../lib/professors';
+import type { Professor, ProfessorOwnershipInfo } from '../../lib/professors';
 import { Popup } from '../common/Popup';
 import { Toast } from '../common/Toast';
 
@@ -30,6 +30,11 @@ export function ProfessorsList() {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [bulkDeletePopupOpen, setBulkDeletePopupOpen] = useState(false);
     const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+    // Ownership check
+    const [isCheckingDelete, setIsCheckingDelete] = useState(false);
+    type BlockedProf = { professor: Professor; subjects: ProfessorOwnershipInfo['subjects']; exams: ProfessorOwnershipInfo['exams'] };
+    const [ownershipWarning, setOwnershipWarning] = useState<{ blocked: BlockedProf[]; canDelete: Professor[] } | null>(null);
 
     const [toast, setToast] = useState<ToastState>({ open: false, message: '', type: 'success' });
     const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => setToast({ open: true, message, type }), []);
@@ -100,6 +105,18 @@ export function ProfessorsList() {
 
     // ── Single Delete ───────────────────────────────────────────────────
 
+    async function openDeleteSingle(prof: Professor) {
+        setIsCheckingDelete(true);
+        const { data } = await checkProfessorOwnership(prof.id);
+        setIsCheckingDelete(false);
+        if (data.subjects.length > 0 || data.exams.length > 0) {
+            setOwnershipWarning({ blocked: [{ professor: prof, subjects: data.subjects, exams: data.exams }], canDelete: [] });
+        } else {
+            setProfToDelete(prof);
+            setDeletePopupOpen(true);
+        }
+    }
+
     async function handleDelete() {
         if (!profToDelete) return;
         setIsDeleting(true);
@@ -118,6 +135,24 @@ export function ProfessorsList() {
 
     // ── Bulk Delete ─────────────────────────────────────────────────────
 
+    async function openBulkDelete() {
+        setIsCheckingDelete(true);
+        const ids = Array.from(selectedIds);
+        const checks = await Promise.all(ids.map(async id => {
+            const prof = professors.find(p => p.id === id)!;
+            const { data } = await checkProfessorOwnership(id);
+            return { professor: prof, subjects: data.subjects, exams: data.exams };
+        }));
+        setIsCheckingDelete(false);
+        const blocked = checks.filter(c => c.subjects.length > 0 || c.exams.length > 0);
+        const canDelete = checks.filter(c => c.subjects.length === 0 && c.exams.length === 0).map(c => c.professor);
+        if (blocked.length > 0) {
+            setOwnershipWarning({ blocked, canDelete });
+        } else {
+            setBulkDeletePopupOpen(true);
+        }
+    }
+
     async function handleBulkDelete() {
         setIsBulkDeleting(true);
         const ids = Array.from(selectedIds);
@@ -134,6 +169,27 @@ export function ProfessorsList() {
             showToast(`${errorCount} professor(s) could not be deleted.`, 'error');
         } else {
             showToast(`${ids.length} professor${ids.length !== 1 ? 's' : ''} deleted.`);
+        }
+    }
+
+    async function handleDeleteUnblocked() {
+        if (!ownershipWarning || ownershipWarning.canDelete.length === 0) return;
+        const toDelete = ownershipWarning.canDelete;
+        setOwnershipWarning(null);
+        setIsBulkDeleting(true);
+        let errorCount = 0;
+        for (const prof of toDelete) {
+            const { error } = await deleteProfessor(prof.id);
+            if (error) errorCount++;
+        }
+        const deletedIds = new Set(toDelete.map(p => p.id));
+        setProfessors(prev => prev.filter(p => !deletedIds.has(p.id)));
+        setSelectedIds(prev => { const next = new Set(prev); deletedIds.forEach(id => next.delete(id)); return next; });
+        setIsBulkDeleting(false);
+        if (errorCount > 0) {
+            showToast(`${errorCount} professor(s) could not be deleted.`, 'error');
+        } else {
+            showToast(`${toDelete.length} professor${toDelete.length !== 1 ? 's' : ''} deleted.`);
         }
     }
 
@@ -219,10 +275,11 @@ export function ProfessorsList() {
                             Clear
                         </button>
                         <button
-                            style={{ padding: '5px 12px', fontSize: '0.825rem', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-                            onClick={() => setBulkDeletePopupOpen(true)}
+                            style={{ padding: '5px 12px', fontSize: '0.825rem', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: isCheckingDelete ? 'default' : 'pointer', fontWeight: 600, opacity: isCheckingDelete ? 0.7 : 1 }}
+                            onClick={openBulkDelete}
+                            disabled={isCheckingDelete}
                         >
-                            Delete Selected
+                            {isCheckingDelete ? 'Checking…' : 'Delete Selected'}
                         </button>
                     </div>
                 </div>
@@ -314,7 +371,7 @@ export function ProfessorsList() {
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
                                         </svg>
                                     </button>
-                                    <button className="btn-icon danger" title="Delete professor" onClick={() => { setProfToDelete(prof); setDeletePopupOpen(true); }}>
+                                    <button className="btn-icon danger" title="Delete professor" disabled={isCheckingDelete} onClick={() => openDeleteSingle(prof)}>
                                         <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15">
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                         </svg>
@@ -385,6 +442,91 @@ export function ProfessorsList() {
                         </div>
                         <div style={{ padding: '16px 24px', borderTop: '1px solid var(--prof-border)', display: 'flex', justifyContent: 'flex-end', background: 'var(--prof-bg)' }}>
                             <button className="btn-primary" onClick={() => setViewTarget(null)} style={{ padding: '8px 16px' }}>Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Ownership Warning Modal */}
+            {ownershipWarning && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(2px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+                    <div style={{ background: '#fff', borderRadius: '16px', width: '100%', maxWidth: '520px', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)' }}>
+                        {/* Header */}
+                        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #fee2e2', background: '#fff7f7' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#fee2e2', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    <svg fill="none" strokeWidth="2" stroke="#dc2626" viewBox="0 0 24 24" width="20" height="20"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+                                </div>
+                                <div>
+                                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
+                                        Cannot Delete Professor{ownershipWarning.blocked.length > 1 ? 's' : ''}
+                                    </h3>
+                                    <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+                                        {ownershipWarning.blocked.length === 1 ? 'This professor' : `${ownershipWarning.blocked.length} professors`}{' '}
+                                        still {ownershipWarning.blocked.length === 1 ? 'has' : 'have'} active subjects or exams as main professor.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Body */}
+                        <div style={{ padding: '16px 24px', maxHeight: '360px', overflowY: 'auto' }}>
+                            <p style={{ margin: '0 0 12px', fontSize: '0.85rem', color: '#475569' }}>
+                                The following professor{ownershipWarning.blocked.length > 1 ? 's are' : ' is'} the main professor of one or more subjects or exams.
+                                They must pass their main role to a co-handler before being deleted.
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {ownershipWarning.blocked.map(({ professor, subjects, exams }) => (
+                                    <div key={professor.id} style={{ borderRadius: '8px', border: '1px solid #fca5a5', overflow: 'hidden' }}>
+                                        <div style={{ padding: '7px 12px', background: '#fee2e2' }}>
+                                            <span style={{ fontSize: '0.87rem', fontWeight: 700, color: '#991b1b' }}>{professor.full_name ?? professor.email}</span>
+                                        </div>
+                                        {(subjects.length > 0 || exams.length > 0) && (
+                                            <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                                {subjects.map(s => (
+                                                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '0.81rem', color: '#475569' }}>
+                                                        <span style={{ flexShrink: 0, fontSize: '0.67rem', fontWeight: 600, background: '#eff6ff', color: '#1e40af', border: '1px solid #93c5fd', borderRadius: '6px', padding: '1px 6px' }}>Subject</span>
+                                                        {s.course_title} ({s.course_code})
+                                                    </div>
+                                                ))}
+                                                {exams.map(e => (
+                                                    <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '0.81rem', color: '#475569' }}>
+                                                        <span style={{ flexShrink: 0, fontSize: '0.67rem', fontWeight: 600, background: '#fef9c3', color: '#854d0e', border: '1px solid #fde047', borderRadius: '6px', padding: '1px 6px' }}>Exam</span>
+                                                        {e.title} ({e.code})
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                            {ownershipWarning.canDelete.length > 0 && (
+                                <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '8px', background: '#f0fdf4', border: '1px solid #86efac' }}>
+                                    <p style={{ margin: 0, fontSize: '0.82rem', color: '#166534' }}>
+                                        <strong>{ownershipWarning.canDelete.length} professor{ownershipWarning.canDelete.length !== 1 ? 's' : ''}</strong>{' '}
+                                        ({ownershipWarning.canDelete.map(p => p.full_name ?? p.email).join(', ')}) can still be deleted.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{ padding: '14px 24px', borderTop: '1px solid var(--prof-border)', background: 'var(--prof-bg)', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                            {ownershipWarning.canDelete.length > 0 && (
+                                <button
+                                    style={{ padding: '7px 16px', fontSize: '0.875rem', fontWeight: 600, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '7px', cursor: 'pointer' }}
+                                    onClick={handleDeleteUnblocked}
+                                >
+                                    Delete {ownershipWarning.canDelete.length} Unblocked
+                                </button>
+                            )}
+                            <button
+                                className="btn-secondary"
+                                style={{ padding: '7px 16px', fontSize: '0.875rem' }}
+                                onClick={() => setOwnershipWarning(null)}
+                            >
+                                {ownershipWarning.canDelete.length > 0 ? 'Cancel' : 'OK'}
+                            </button>
                         </div>
                     </div>
                 </div>

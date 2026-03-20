@@ -472,3 +472,15 @@ export async function deleteExam(id: string): Promise<{ error: string | null }> 
     if (error) return { error: error.message };
     return { error: null };
 }
+
+export async function transferExamOwnership(
+    examId: string,
+    newOwnerId: string,
+    _oldOwnerId: string
+): Promise<{ error: string | null }> {
+    const { error } = await supabase.rpc('transfer_exam_ownership', {
+        p_exam_id: examId,
+        p_new_owner_id: newOwnerId,
+    });
+    return { error: error?.message ?? null };
+}

@@ -185,7 +185,7 @@ export function QuestionBankList({ embedded = false, canManage = true }: { embed
 
     const handleDelete = async () => {
         if (!questionToDelete) return;
-        const result = await deleteQuestion(questionToDelete.id, questionToDelete.professorId, questionToDelete.subjectId);
+        const result = await deleteQuestion(questionToDelete.id, questionToDelete.imageUrl ?? null);
         if (result.error) {
             setError(result.error);
         } else {
@@ -205,7 +205,7 @@ export function QuestionBankList({ embedded = false, canManage = true }: { embed
         setIsBulkDeleting(true);
         const toDelete = pageQuestions.filter(q => selectedIds.has(q.id));
         const results = await Promise.all(
-            toDelete.map(q => deleteQuestion(q.id, q.professorId, q.subjectId))
+            toDelete.map(q => deleteQuestion(q.id, q.imageUrl ?? null))
         );
         const errorCount = results.filter(r => r.error).length;
         const deleted = toDelete.length - errorCount;

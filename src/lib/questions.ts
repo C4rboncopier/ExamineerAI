@@ -34,22 +34,16 @@ export interface QuestionWithOutcomes extends Question {
 
 // ─── IMAGE HELPERS (private) ─────────────────────────────────
 
-function buildStoragePath(
-  professorId: string,
-  subjectId: string,
-  questionId: string,
-  fileName: string
-): string {
-  return `${professorId}/${subjectId}/${questionId}/${fileName}`;
+function buildStoragePath(subjectId: string, questionId: string, fileName: string): string {
+  return `${subjectId}/${questionId}/${fileName}`;
 }
 
 async function uploadImage(
-  professorId: string,
   subjectId: string,
   questionId: string,
   file: File
 ): Promise<{ url: string | null; error: string | null }> {
-  const path = buildStoragePath(professorId, subjectId, questionId, file.name);
+  const path = buildStoragePath(subjectId, questionId, file.name);
 
   const { error } = await supabase.storage
     .from('question-images')
@@ -66,33 +60,22 @@ async function uploadImage(
   return { url: publicUrlData.publicUrl, error: null };
 }
 
-async function deleteImageFolder(
-  professorId: string,
-  subjectId: string,
-  questionId: string
-): Promise<{ error: string | null }> {
-  const folderPath = `${professorId}/${subjectId}/${questionId}`;
+function getStorageFolderFromUrl(imageUrl: string): string | null {
+  const marker = '/question-images/';
+  const idx = imageUrl.indexOf(marker);
+  if (idx === -1) return null;
+  const fullPath = decodeURIComponent(imageUrl.slice(idx + marker.length));
+  const lastSlash = fullPath.lastIndexOf('/');
+  return lastSlash >= 0 ? fullPath.slice(0, lastSlash) : null;
+}
 
-  const { data: files, error: listError } = await supabase.storage
-    .from('question-images')
-    .list(folderPath);
-
-  if (listError) {
-    return { error: listError.message };
-  }
-
+async function deleteImageByUrl(imageUrl: string): Promise<void> {
+  const folder = getStorageFolderFromUrl(imageUrl);
+  if (!folder) return;
+  const { data: files } = await supabase.storage.from('question-images').list(folder);
   if (files && files.length > 0) {
-    const paths = files.map((f) => `${folderPath}/${f.name}`);
-    const { error: removeError } = await supabase.storage
-      .from('question-images')
-      .remove(paths);
-
-    if (removeError) {
-      return { error: removeError.message };
-    }
+    await supabase.storage.from('question-images').remove(files.map(f => `${folder}/${f.name}`));
   }
-
-  return { error: null };
 }
 
 // ─── CREATE ──────────────────────────────────────────────────
@@ -101,15 +84,9 @@ export async function createQuestion(
   payload: CreateQuestionPayload,
   imageFile?: File | null
 ): Promise<{ data: string | null; error: string | null }> {
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) {
-    return { data: null, error: 'Authentication required.' };
-  }
-
   const { data, error } = await supabase
     .from('questions')
     .insert({
-      professor_id: user.id,
       subject_id: payload.subject_id,
       course_outcome_id: payload.course_outcome_id,
       module_outcome_id: payload.module_outcome_id,
@@ -127,12 +104,7 @@ export async function createQuestion(
   const questionId = data.id as string;
 
   if (imageFile) {
-    const { url, error: uploadError } = await uploadImage(
-      user.id,
-      payload.subject_id,
-      questionId,
-      imageFile
-    );
+    const { url, error: uploadError } = await uploadImage(payload.subject_id, questionId, imageFile);
 
     if (uploadError) {
       await supabase.from('questions').delete().eq('id', questionId);
@@ -145,7 +117,7 @@ export async function createQuestion(
       .eq('id', questionId);
 
     if (patchError) {
-      await deleteImageFolder(user.id, payload.subject_id, questionId);
+      if (url) await deleteImageByUrl(url);
       await supabase.from('questions').delete().eq('id', questionId);
       return { data: null, error: `Failed to save image URL: ${patchError.message}` };
     }
@@ -230,11 +202,6 @@ export async function updateQuestion(
   payload: UpdateQuestionPayload,
   imageFile?: File | null
 ): Promise<{ data: string | null; error: string | null }> {
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) {
-    return { data: null, error: 'Authentication required.' };
-  }
-
   const updateData: Record<string, unknown> = {
     subject_id: payload.subject_id,
     course_outcome_id: payload.course_outcome_id,
@@ -244,24 +211,27 @@ export async function updateQuestion(
     correct_choice: payload.correct_choice,
   };
 
-  if (imageFile) {
-    await deleteImageFolder(user.id, payload.subject_id, questionId);
+  if (imageFile || payload.remove_image) {
+    const { data: existing } = await supabase
+      .from('questions')
+      .select('image_url')
+      .eq('id', questionId)
+      .single();
+    const currentImageUrl = (existing as { image_url: string | null } | null)?.image_url ?? null;
 
-    const { url, error: uploadError } = await uploadImage(
-      user.id,
-      payload.subject_id,
-      questionId,
-      imageFile
-    );
-
-    if (uploadError) {
-      return { data: null, error: `Image upload failed: ${uploadError}` };
+    if (currentImageUrl) {
+      await deleteImageByUrl(currentImageUrl);
     }
 
-    updateData.image_url = url;
-  } else if (payload.remove_image) {
-    await deleteImageFolder(user.id, payload.subject_id, questionId);
-    updateData.image_url = null;
+    if (imageFile) {
+      const { url, error: uploadError } = await uploadImage(payload.subject_id, questionId, imageFile);
+      if (uploadError) {
+        return { data: null, error: `Image upload failed: ${uploadError}` };
+      }
+      updateData.image_url = url;
+    } else {
+      updateData.image_url = null;
+    }
   }
 
   const { error } = await supabase
@@ -280,10 +250,11 @@ export async function updateQuestion(
 
 export async function deleteQuestion(
   questionId: string,
-  professorId: string,
-  subjectId: string
+  imageUrl: string | null
 ): Promise<{ error: string | null }> {
-  await deleteImageFolder(professorId, subjectId, questionId);
+  if (imageUrl) {
+    await deleteImageByUrl(imageUrl);
+  }
 
   const { error } = await supabase
     .from('questions')

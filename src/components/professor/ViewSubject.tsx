@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { fetchSubjectWithOutcomes, deleteSubject } from '../../lib/subjects';
+import { fetchSubjectWithOutcomes, deleteSubject, transferSubjectOwnership } from '../../lib/subjects';
 import type { SubjectWithOutcomes } from '../../lib/subjects';
 import { fetchSubjectFaculty, addSubjectFaculty, removeSubjectFaculty, type SubjectFacultyMember } from '../../lib/subjectFaculty';
 import { fetchProfessors, type Professor } from '../../lib/professors';
@@ -43,6 +43,8 @@ export function ViewSubject() {
     const [deletePopupOpen, setDeletePopupOpen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
+    const [passTarget, setPassTarget] = useState<{ facultyId: string; professorId: string; name: string } | null>(null);
+    const [isPassing, setIsPassing] = useState(false);
 
     // Faculty state
     const [faculty, setFaculty] = useState<SubjectFacultyMember[]>([]);
@@ -106,6 +108,19 @@ export function ViewSubject() {
         setInviteLoading(null);
     };
 
+    const handlePassRole = async () => {
+        if (!passTarget || !subject || !user) return;
+        setIsPassing(true);
+        const { error } = await transferSubjectOwnership(subject.id, passTarget.professorId, user.id);
+        if (error) { setIsPassing(false); setPassTarget(null); return; }
+        // Refresh faculty and subject ownership locally
+        const { data: freshFaculty } = await fetchSubjectFaculty(subject.id);
+        setFaculty(freshFaculty);
+        setSubject(prev => prev ? { ...prev, created_by: passTarget.professorId, professor_id: passTarget.professorId } : prev);
+        setIsPassing(false);
+        setPassTarget(null);
+    };
+
     // Computed permissions
     const isMainProfessor = !!subject && subject.created_by === user?.id;
     const isAcceptedCohandler = faculty.some(f => f.professor_id === user?.id && f.status === 'accepted');
@@ -131,8 +146,10 @@ export function ViewSubject() {
 
     const sortedCOs = [...subject.course_outcomes].sort((a, b) => a.order_index - b.order_index);
 
-    // Find creator profile from allProfessors
-    const creatorProfile = allProfessors.find(p => p.id === subject.created_by);
+    // Find creator profile from allProfessors, with fallback to faculty join data
+    const creatorProfile = allProfessors.find(p => p.id === subject.created_by)
+        ?? faculty.find(f => f.professor_id === subject.created_by)?.professor
+        ?? null;
     const creatorName = creatorProfile?.full_name ?? creatorProfile?.email ?? 'Unknown';
 
     return (
@@ -233,8 +250,7 @@ export function ViewSubject() {
                         <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '6px', borderBottom: '1px solid var(--prof-border)' }}>
                             {canManage && (
                                 <button
-                                    className="btn-secondary"
-                                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start' }}
+                                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', fontWeight: 600, borderRadius: '7px', border: '1px solid #93c5fd', background: '#dbeafe', color: '#1e40af', cursor: 'pointer' }}
                                     onClick={() => navigate(`/professor/subjects/${subjectId}/edit`)}
                                 >
                                     <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>
@@ -243,8 +259,7 @@ export function ViewSubject() {
                             )}
                             {isMainProfessor && (
                                 <button
-                                    className="btn-secondary"
-                                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', color: '#dc2626', borderColor: '#fca5a5' }}
+                                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', fontSize: '0.83rem', justifyContent: 'flex-start', fontWeight: 600, borderRadius: '7px', border: '1px solid #fca5a5', background: '#fee2e2', color: '#991b1b', cursor: 'pointer' }}
                                     onClick={() => setDeletePopupOpen(true)}
                                 >
                                     <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg>
@@ -307,6 +322,17 @@ export function ViewSubject() {
                                         </div>
                                         <span style={{ flex: 1, fontSize: '0.82rem', color: 'var(--prof-text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fName}</span>
                                         <StatusBadge status={f.status} />
+                                        {isMainProfessor && f.status === 'accepted' && (
+                                            <button
+                                                onClick={() => setPassTarget({ facultyId: f.id, professorId: f.professor_id, name: fName })}
+                                                title="Pass main professor role"
+                                                style={{ flexShrink: 0, width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: '1px solid transparent', borderRadius: '5px', cursor: 'pointer', color: '#94a3b8', transition: 'all 0.15s' }}
+                                                onMouseEnter={e => { e.currentTarget.style.background = '#fef9c3'; e.currentTarget.style.borderColor = '#fde047'; e.currentTarget.style.color = '#854d0e'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}
+                                            >
+                                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="12" height="12"><path strokeLinecap="round" strokeLinejoin="round" d="M5 16L2 6l5.5 5.5L12 4l4.5 7.5L22 6l-3 10H5z" /></svg>
+                                            </button>
+                                        )}
                                         {isMainProfessor && (
                                             <button
                                                 onClick={() => setRemoveTarget({ id: f.id, name: fName })}
@@ -345,6 +371,17 @@ export function ViewSubject() {
                 }}
                 onCancel={() => setRemoveTarget(null)}
                 confirmText="Remove"
+                cancelText="Cancel"
+            />
+
+            <Popup
+                isOpen={passTarget !== null}
+                title="Pass Main Professor Role"
+                message={`Pass your main professor role to ${passTarget?.name ?? 'this co-handler'}? They will become the main professor of this subject, and you will become a co-handler.`}
+                type="warning"
+                onConfirm={handlePassRole}
+                onCancel={() => setPassTarget(null)}
+                confirmText={isPassing ? 'Passing…' : 'Pass Role'}
                 cancelText="Cancel"
             />
 

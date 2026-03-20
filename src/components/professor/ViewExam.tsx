@@ -6,7 +6,7 @@ import {
     generateExamPapersForAttempt, deleteAttemptPapers,
     deployAttempt, markAttemptDone,
     releaseAttemptGrades, hideAttemptGrades,
-    updateExamSetOrder,
+    updateExamSetOrder, transferExamOwnership,
 } from '../../lib/exams';
 import type { ExamWithSets, ExamSetDetail, AllocationConfig } from '../../lib/exams';
 import { fetchExamFaculty, addExamFaculty, removeExamFaculty, type ExamFacultyMember } from '../../lib/examFaculty';
@@ -341,6 +341,8 @@ export function ViewExam() {
     const [allProfessors, setAllProfessors] = useState<Professor[]>([]);
     const [inviteLoading, setInviteLoading] = useState<string | null>(null);
     const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
+    const [passTarget, setPassTarget] = useState<{ facultyId: string; professorId: string; name: string } | null>(null);
+    const [isPassing, setIsPassing] = useState(false);
     const [invitePage, setInvitePage] = useState(0);
 
     // ── OMR scanner busy guard ──
@@ -377,6 +379,16 @@ export function ViewExam() {
     }, [examId]);
 
     useEffect(() => { loadExam(); }, [loadExam]);
+
+    const handlePassExamRole = async () => {
+        if (!passTarget || !exam || !user) return;
+        setIsPassing(true);
+        const { error } = await transferExamOwnership(exam.id, passTarget.professorId, user.id);
+        if (error) { setIsPassing(false); setPassTarget(null); return; }
+        await loadExam();
+        setIsPassing(false);
+        setPassTarget(null);
+    };
 
     const loadGradesOnly = useCallback(async () => {
         if (!exam || !examId) return;
@@ -422,11 +434,13 @@ export function ViewExam() {
         setAllProfessors(profs ?? []);
     }, []);
 
+    useEffect(() => { loadProfessors(); }, [loadProfessors]);
+
     useEffect(() => {
-        if (activeTab === 'students' && !professorsLoadedRef.current) {
+        if ((activeTab === 'students' || isInviteOpen) && !professorsLoadedRef.current) {
             loadProfessors();
         }
-    }, [activeTab, loadProfessors]);
+    }, [activeTab, isInviteOpen, loadProfessors]);
 
     useEffect(() => {
         setActiveSet(0);
@@ -1487,7 +1501,9 @@ export function ViewExam() {
                         {/* ── Faculty section ── */}
                         {(() => {
                             const isMain = exam.created_by === user?.id;
-                            const creatorProfile = allProfessors.find(p => p.id === exam.created_by);
+                            const creatorProfile = allProfessors.find(p => p.id === exam.created_by)
+                                ?? faculty.find(f => f.professor_id === exam.created_by)?.professor
+                                ?? null;
 
                             const statusBadge = (status: ExamFacultyMember['status']) => {
                                 if (status === 'accepted') return <span style={{ fontSize: '0.67rem', fontWeight: 600, background: '#dcfce7', color: '#15803d', border: '1px solid #86efac', borderRadius: '8px', padding: '1px 6px' }}>Accepted</span>;
@@ -1539,6 +1555,17 @@ export function ViewExam() {
                                                 </div>
                                                 <span style={{ flex: 1, fontSize: '0.82rem', color: 'var(--prof-text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fName}</span>
                                                 {statusBadge(f.status)}
+                                                {isMain && f.status === 'accepted' && (
+                                                    <button
+                                                        onClick={() => setPassTarget({ facultyId: f.id, professorId: f.professor_id, name: fName })}
+                                                        title="Pass main professor role"
+                                                        style={{ flexShrink: 0, width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: '1px solid transparent', borderRadius: '5px', cursor: 'pointer', color: '#94a3b8', transition: 'all 0.15s' }}
+                                                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fef9c3'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#fde047'; (e.currentTarget as HTMLButtonElement).style.color = '#854d0e'; }}
+                                                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = '#94a3b8'; }}
+                                                    >
+                                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="12" height="12"><path strokeLinecap="round" strokeLinejoin="round" d="M5 16L2 6l5.5 5.5L12 4l4.5 7.5L22 6l-3 10H5z" /></svg>
+                                                    </button>
+                                                )}
                                                 {isMain && (
                                                     <button
                                                         onClick={() => setRemoveTarget({ id: f.id, name: fName })}
@@ -2522,6 +2549,16 @@ export function ViewExam() {
                 }}
                 onCancel={() => setRemoveTarget(null)}
                 confirmText="Remove"
+                cancelText="Cancel"
+            />
+            <Popup
+                isOpen={passTarget !== null}
+                title="Pass Main Professor Role"
+                message={`Pass your main professor role to ${passTarget?.name ?? 'this co-handler'}? They will become the main professor of this exam, and you will become a co-handler.`}
+                type="warning"
+                onConfirm={handlePassExamRole}
+                onCancel={() => setPassTarget(null)}
+                confirmText={isPassing ? 'Passing…' : 'Pass Role'}
                 cancelText="Cancel"
             />
             <Popup

@@ -198,7 +198,7 @@ export function CreateExam() {
         setIsSubmitting(true);
 
         if (isEditMode && examId) {
-            const { error } = await updateExam(examId, title, code, selectedSubjectIds, numSets, maxAttempts, academicYear, term, selectedProgramIds, aiAnalysisEnabled, isCoHandler);
+            const { error } = await updateExam(examId, title, code, selectedSubjectIds, numSets, maxAttempts, academicYear, term, selectedProgramIds, aiAnalysisEnabled, false);
             if (error) { setSubmitError(error); setIsSubmitting(false); return; }
             showToast('Exam updated.');
         } else {
@@ -360,8 +360,7 @@ export function CreateExam() {
                                     <div className="cq-subject-search" ref={programDropdownRef}>
                                         <div
                                             className={`cq-subject-trigger ${programDropdownOpen ? 'open' : ''}`}
-                                            onClick={isCoHandler ? undefined : () => setProgramDropdownOpen(!programDropdownOpen)}
-                                            style={{ cursor: isCoHandler ? 'not-allowed' : undefined, opacity: isCoHandler ? 0.6 : 1 }}
+                                            onClick={() => setProgramDropdownOpen(!programDropdownOpen)}
                                         >
                                             <span className="cq-placeholder">
                                                 {selectedProgramIds.length > 0
@@ -419,18 +418,16 @@ export function CreateExam() {
                                                         <span style={{ fontSize: '14px', color: '#334155', marginRight: '8px' }}>
                                                             {program.code}
                                                         </span>
-                                                        {!isCoHandler && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setSelectedProgramIds(prev => prev.filter(pid => pid !== id))}
-                                                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
-                                                                title="Remove Program"
-                                                            >
-                                                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path>
-                                                                </svg>
-                                                            </button>
-                                                        )}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setSelectedProgramIds(prev => prev.filter(pid => pid !== id))}
+                                                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
+                                                            title="Remove Program"
+                                                        >
+                                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path>
+                                                            </svg>
+                                                        </button>
                                                     </div>
                                                 );
                                             })}
@@ -451,7 +448,7 @@ export function CreateExam() {
                         {/* ── Card 3: Subjects ── */}
                         <div className="cs-card">
                             <h3 className="cs-card-title">Included Subjects <span style={{ fontWeight: 400, color: 'var(--prof-text-muted)', fontSize: '0.85rem' }}>(optional — can be filled later)</span> {statusPill(subjectsOk)}</h3>
-                            {!(isEditMode && hasPapers) && !isCoHandler && (
+                            {!(isEditMode && hasPapers) && (
                                 <div className="cs-input-field">
                                     <label>Search and Add Subjects</label>
                                     <div className="cq-subject-search" ref={subjectDropdownRef}>
@@ -512,7 +509,7 @@ export function CreateExam() {
                                                 <span style={{ fontSize: '14px', color: '#334155', marginRight: '8px' }}>
                                                     <strong>{subject.course_code}</strong> – {subject.course_title}
                                                 </span>
-                                                {!(isEditMode && hasPapers) && !isCoHandler && (
+                                                {!(isEditMode && hasPapers) && (
                                                     <button
                                                         type="button"
                                                         onClick={() => handleRemoveSubject(id)}

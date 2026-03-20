@@ -37,7 +37,6 @@ export interface ModuleOutcome {
 
 export interface Question {
   id: string;
-  professor_id: string;
   subject_id: string;
   course_outcome_id: string;
   module_outcome_id: string;

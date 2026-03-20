@@ -72,6 +72,27 @@ export async function updateProfessor(
     return { error: null };
 }
 
+export interface ProfessorOwnershipInfo {
+    subjects: { id: string; course_title: string; course_code: string }[];
+    exams: { id: string; title: string; code: string }[];
+}
+
+export async function checkProfessorOwnership(
+    professorId: string
+): Promise<{ data: ProfessorOwnershipInfo; error: string | null }> {
+    const [subjectsResult, examsResult] = await Promise.all([
+        supabase.from('subjects').select('id, course_title, course_code').eq('created_by', professorId),
+        supabase.from('exams').select('id, title, code').eq('created_by', professorId),
+    ]);
+    return {
+        data: {
+            subjects: (subjectsResult.data ?? []) as ProfessorOwnershipInfo['subjects'],
+            exams: (examsResult.data ?? []) as ProfessorOwnershipInfo['exams'],
+        },
+        error: subjectsResult.error?.message ?? examsResult.error?.message ?? null,
+    };
+}
+
 export async function deleteProfessor(professor_id: string): Promise<{ error: string | null }> {
     const { data, error } = await supabase.functions.invoke('create-professor', {
         body: { action: 'delete', professor_id },

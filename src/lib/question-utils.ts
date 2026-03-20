@@ -6,7 +6,6 @@ export interface QuestionData {
     choices: string[];
     correctChoice: number;
     subjectId: string;
-    professorId: string;
     coId: string;
     moId: string;
     imageUrl?: string;
@@ -22,7 +21,6 @@ export function mapToQuestionData(q: QuestionWithOutcomes): QuestionData {
         choices: q.choices,
         correctChoice: q.correct_choice,
         subjectId: q.subject_id,
-        professorId: q.professor_id,
         coId: q.course_outcome_id,
         moId: q.module_outcome_id,
         imageUrl: q.image_url ?? undefined,

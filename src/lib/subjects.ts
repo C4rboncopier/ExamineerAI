@@ -323,3 +323,15 @@ export async function deleteSubject(
 
   return { error: null };
 }
+
+export async function transferSubjectOwnership(
+  subjectId: string,
+  newOwnerId: string,
+  _oldOwnerId: string
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc('transfer_subject_ownership', {
+    p_subject_id: subjectId,
+    p_new_owner_id: newOwnerId,
+  });
+  return { error: error?.message ?? null };
+}
