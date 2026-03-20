@@ -252,7 +252,7 @@ export async function scanOMRImage(file: File, serverUrl: string): Promise<OMRRe
     const form = new FormData();
     form.append('file', file);
 
-    const res = await fetch(`${serverUrl}/scan`, { method: 'POST', body: form });
+    const res = await fetch(`${serverUrl}/scan`, { method: 'POST', headers: { 'X-OMR-Key': import.meta.env.VITE_OMR_API_KEY ?? '' }, body: form });
     if (!res.ok) {
         const text = await res.text().catch(() => res.statusText);
         throw new Error(`OMR server error: ${text}`);
@@ -272,7 +272,7 @@ export async function scanOMRBatch(
     const form = new FormData();
     form.append('file', file);
 
-    const res = await fetch(`${serverUrl}/scan-batch`, { method: 'POST', body: form });
+    const res = await fetch(`${serverUrl}/scan-batch`, { method: 'POST', headers: { 'X-OMR-Key': import.meta.env.VITE_OMR_API_KEY ?? '' }, body: form });
     if (!res.ok) {
         const text = await res.text().catch(() => res.statusText);
         throw new Error(`OMR server error: ${text}`);

@@ -12,15 +12,21 @@ import { Toast } from '../common/Toast';
 
 const ITEMS_PER_PAGE = 20;
 
+function escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function renderLatex(text: string): string {
     if (!text) return '';
-    return text.replace(/\$\$([^$]+?)\$\$/g, (match, expr) => {
-        try {
-            return katex.renderToString(expr.trim(), { displayMode: false, throwOnError: false });
-        } catch {
-            return match;
+    return text.split(/(\$\$[^$]+?\$\$)/).map(part => {
+        if (part.startsWith('$$') && part.endsWith('$$')) {
+            try {
+                return katex.renderToString(part.slice(2, -2).trim(), { displayMode: false, throwOnError: false });
+            } catch { return escapeHtml(part); }
         }
-    });
+        return escapeHtml(part);
+    }).join('');
 }
 
 function LatexText({ text }: { text: string }) {

@@ -70,6 +70,7 @@ export function AddProfessor() {
         if (!addForm.email.trim()) { setFormError('Email address is required.'); return; }
         if (!addForm.username.trim()) { setFormError('Username is required.'); return; }
         if (!addForm.password.trim()) { setFormError('Password is required.'); return; }
+        if (addForm.password.trim().length < 8) { setFormError('Password must be at least 8 characters.'); return; }
         if (!addForm.program_id) { setFormError('Program assignment is required.'); return; }
 
         setIsSubmitting(true);

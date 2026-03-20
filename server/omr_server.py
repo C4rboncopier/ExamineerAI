@@ -14,16 +14,23 @@ import asyncio
 import io
 import json
 import base64
+import os
 import zipfile
 from itertools import combinations
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 app = FastAPI(title="ExamineerAI OMR Server", version="2.0.0")
+
+OMR_API_KEY = os.environ.get('OMR_API_KEY')
+
+async def verify_api_key(x_omr_key: str | None = Header(default=None)) -> None:
+    if OMR_API_KEY and x_omr_key != OMR_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 app.add_middleware(
     CORSMiddleware,
@@ -56,7 +63,7 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/scan")
+@app.post("/scan", dependencies=[Depends(verify_api_key)])
 async def scan_single(file: UploadFile = File(...)):
     """Process a single OMR image file."""
     image_bytes = await file.read()
@@ -64,7 +71,7 @@ async def scan_single(file: UploadFile = File(...)):
     return result
 
 
-@app.post("/scan-batch")
+@app.post("/scan-batch", dependencies=[Depends(verify_api_key)])
 async def scan_batch(file: UploadFile = File(...)):
     """Process a ZIP archive of OMR images, streaming results as NDJSON.
 

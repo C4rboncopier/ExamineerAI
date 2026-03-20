@@ -35,7 +35,8 @@ export interface QuestionWithOutcomes extends Question {
 // ─── IMAGE HELPERS (private) ─────────────────────────────────
 
 function buildStoragePath(subjectId: string, questionId: string, fileName: string): string {
-  return `${subjectId}/${questionId}/${fileName}`;
+  const ext = (fileName.split('.').pop() ?? 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+  return `${subjectId}/${questionId}/image.${ext}`;
 }
 
 async function uploadImage(

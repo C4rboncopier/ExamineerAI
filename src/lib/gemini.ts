@@ -1,3 +1,5 @@
+import { supabase } from './supabase';
+
 export interface TopicAnalysis {
     coTitle: string;
     insight: string;
@@ -31,6 +33,15 @@ function getEndpoint(useAdvancedModel: boolean) {
     return `${GEMINI_BASE_ENDPOINT}/${model}:generateContent`;
 }
 
+async function callGemini(endpoint: string, payload: object): Promise<{ json: unknown; error: string | null }> {
+    const { data, error } = await supabase.functions.invoke('gemini-proxy', {
+        body: { endpoint, payload },
+    });
+    if (error) return { json: null, error: error.message };
+    if (data?.error) return { json: null, error: data.error };
+    return { json: data, error: null };
+}
+
 export async function generateQuestionVariations(
     originalQuestion: string,
     originalChoices: string[],
@@ -38,11 +49,6 @@ export async function generateQuestionVariations(
     count: number,
     useAdvancedModel = false
 ): Promise<{ data: GeneratedQuestion[]; error: string | null }> {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
-    if (!apiKey) {
-        return { data: [], error: 'Gemini API key not configured. Add VITE_GEMINI_API_KEY to your .env.local file.' };
-    }
-
     const correctAnswer = originalChoices[originalCorrectChoice] ?? '';
     const prompt = `You are an exam question writer. Generate exactly ${count} multiple-choice question variation(s) based on the following original question.
 
@@ -77,30 +83,9 @@ Rules:
         },
     };
 
-    let response: Response;
-    try {
-        response = await fetch(`${getEndpoint(useAdvancedModel)}?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        });
-    } catch (err) {
-        return { data: [], error: 'Network error: could not reach Gemini API.' };
-    }
+    const { json, error } = await callGemini(getEndpoint(useAdvancedModel), body);
+    if (error) return { data: [], error };
 
-    if (!response.ok) {
-        const text = await response.text().catch(() => response.statusText);
-        return { data: [], error: `Gemini API error (${response.status}): ${text}` };
-    }
-
-    let json: unknown;
-    try {
-        json = await response.json();
-    } catch {
-        return { data: [], error: 'Failed to parse Gemini API response.' };
-    }
-
-    // Extract the text content from the Gemini response envelope
     const candidate = (json as { candidates?: { content?: { parts?: { text?: string }[] } }[] })
         ?.candidates?.[0];
     const rawText = candidate?.content?.parts?.[0]?.text;
@@ -138,11 +123,6 @@ export async function generateStudentAnalysis(
     attemptSummary: { score: number; total: number; attemptNumber: number },
     passingRate: number
 ): Promise<{ data: AnalysisFeedback | null; error: string | null }> {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
-    if (!apiKey) {
-        return { data: null, error: 'Gemini API key not configured.' };
-    }
-
     const { score, total, attemptNumber } = attemptSummary;
     const pct = total > 0 ? ((score / total) * 100).toFixed(0) : '0';
     const passed = total > 0 && (score / total) * 100 >= passingRate;
@@ -220,28 +200,8 @@ Be specific, substantive, and constructive. Avoid generic advice. Use an encoura
         },
     };
 
-    let response: Response;
-    try {
-        response = await fetch(`${GEMINI_BASE_ENDPOINT}/${GEMINI_MODEL_LITE}:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        });
-    } catch {
-        return { data: null, error: 'Network error: could not reach Gemini API.' };
-    }
-
-    if (!response.ok) {
-        const text = await response.text().catch(() => response.statusText);
-        return { data: null, error: `Gemini API error (${response.status}): ${text}` };
-    }
-
-    let json: unknown;
-    try {
-        json = await response.json();
-    } catch {
-        return { data: null, error: 'Failed to parse Gemini API response.' };
-    }
+    const { json, error } = await callGemini(`${GEMINI_BASE_ENDPOINT}/${GEMINI_MODEL_LITE}:generateContent`, body);
+    if (error) return { data: null, error };
 
     const candidate = (json as { candidates?: { content?: { parts?: { text?: string }[] } }[] })
         ?.candidates?.[0];
