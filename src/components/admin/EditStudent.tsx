@@ -116,7 +116,7 @@ export function EditStudent() {
 
             <div className="cs-card" style={{ width: '100%' }}>
                 <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '16px' }}>
+                    <div className="admin-form-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '16px' }}>
                         {/* Full Name */}
                         <div>
                             <label style={labelStyle}>Full Complete Name</label>
@@ -144,7 +144,7 @@ export function EditStudent() {
                         </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '16px' }}>
+                    <div className="admin-form-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '16px' }}>
                         {/* Username */}
                         <div>
                             <label style={labelStyle}>Username</label>

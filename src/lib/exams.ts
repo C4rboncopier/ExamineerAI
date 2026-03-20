@@ -136,12 +136,14 @@ async function generateAndSaveSets(
     // No subjects yet — skip set generation (sets will be created when exam is edited later)
     if (subjectIds.length === 0) return { error: null };
 
-    // 1. Fetch questions for each subject
+    // 1. Fetch questions for each subject (parallel)
+    const fetchResults = await Promise.all(
+        subjectIds.map(id => fetchQuestionsBySubject(id).then(r => ({ id, ...r })))
+    );
     const questionsBySubject: Record<string, QuestionWithOutcomes[]> = {};
-    for (const subjectId of subjectIds) {
-        const { data, error } = await fetchQuestionsBySubject(subjectId);
-        if (error) return { error: `Failed to fetch questions: ${error}` };
-        questionsBySubject[subjectId] = data;
+    for (const r of fetchResults) {
+        if (r.error) return { error: `Failed to fetch questions: ${r.error}` };
+        questionsBySubject[r.id] = r.data;
     }
 
     // 2. Compute per-subject allocations (not used for per_mo mode)
@@ -194,14 +196,19 @@ async function generateAndSaveSets(
     // No questions available yet — skip set creation silently
     if (pool.length === 0) return { error: null };
 
-    // 4. For each set: shuffle the pool → save question_ids as JSONB
-    for (let setNum = 1; setNum <= numSets; setNum++) {
-        const shuffled = shuffle([...pool]);
-        const { error: setError } = await supabase
-            .from('exam_sets')
-            .insert({ exam_id: examId, set_number: setNum, attempt_number: attemptNumber, question_ids: shuffled.map(q => q.id) });
-
-        if (setError) return { error: `Failed to create set ${setNum}: ${setError.message}` };
+    // 4. For each set: shuffle the pool → save question_ids as JSONB (parallel)
+    const setResults = await Promise.all(
+        Array.from({ length: numSets }, (_, i) => {
+            const setNum = i + 1;
+            const shuffled = shuffle([...pool]);
+            return supabase
+                .from('exam_sets')
+                .insert({ exam_id: examId, set_number: setNum, attempt_number: attemptNumber, question_ids: shuffled.map(q => q.id) })
+                .then(r => ({ setNum, error: r.error }));
+        })
+    );
+    for (const r of setResults) {
+        if (r.error) return { error: `Failed to create set ${r.setNum}: ${r.error.message}` };
     }
 
     return { error: null };
@@ -339,7 +346,8 @@ export async function createExam(
     programIds: string[] = [],
     aiAnalysisEnabled: boolean = false
 ): Promise<{ data: Exam | null; error: string | null }> {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
 
     const { data: exam, error: insertError } = await supabase
         .from('exams')

@@ -72,9 +72,11 @@ export function TemplatesList() {
                     <h2 className="subjects-title">Templates</h2>
                     <p className="subjects-subtitle">Manage your exam templates.</p>
                 </div>
-                <button className="btn-primary" onClick={() => navigate('/professor/templates/create')}>
-                    + Create Template
-                </button>
+                <div className="prof-exam-header-btns">
+                    <button className="btn-primary" onClick={() => navigate('/professor/templates/create')}>
+                        + Create Template
+                    </button>
+                </div>
             </div>
 
             {isLoading ? (

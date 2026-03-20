@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect } from 'react';
+import { Fragment, useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchEnrolledExams, fetchAllStudentSubmissions } from '../../lib/studentExams';
 import type { StudentExam, StudentSubmission } from '../../lib/studentExams';
@@ -37,6 +37,8 @@ export function GradesList() {
     const [isLoading, setIsLoading] = useState(true);
     const [passingRate, setPassingRate] = useState(60);
     const [expandedExamId, setExpandedExamId] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [termFilter, setTermFilter] = useState<'all' | string>('all');
 
     useEffect(() => {
         fetchPassingRate().then(({ value }) => { if (value !== null) setPassingRate(value); });
@@ -104,6 +106,23 @@ export function GradesList() {
         load();
     }, [user, passingRate]);
 
+    const availableTerms = useMemo(() => {
+        const terms = new Set<string>();
+        summaries.forEach(s => terms.add(`${s.exam.academic_year} | ${s.exam.term}`));
+        return Array.from(terms).sort((a, b) => b.localeCompare(a));
+    }, [summaries]);
+
+    const filteredSummaries = useMemo(() => {
+        return summaries.filter(({ exam }) => {
+            const matchesSearch = searchQuery === '' ||
+                exam.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                exam.code.toLowerCase().includes(searchQuery.toLowerCase());
+            const examTermKey = `${exam.academic_year} | ${exam.term}`;
+            const matchesTerm = termFilter === 'all' || examTermKey === termFilter;
+            return matchesSearch && matchesTerm;
+        });
+    }, [summaries, searchQuery, termFilter]);
+
     if (isLoading) {
         return (
             <div className="qb-container create-question-wrapper" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -126,6 +145,33 @@ export function GradesList() {
                 </div>
             </div>
 
+            {/* Search + filter bar */}
+            {summaries.length > 0 && (
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
+                    <div style={{ position: 'relative', flex: '1 1 200px' }}>
+                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--prof-text-muted)', pointerEvents: 'none' }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                        </svg>
+                        <input
+                            type="text"
+                            placeholder="Search by title or code..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            style={{ width: '100%', padding: '9px 12px 9px 38px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff', color: 'var(--prof-text-main)', fontSize: '0.875rem', outline: 'none', boxSizing: 'border-box', boxShadow: '0 1px 2px rgba(0,0,0,0.02)', transition: 'border-color 0.2s' }}
+                        />
+                    </div>
+                    <div style={{ position: 'relative', flex: '0 1 190px', minWidth: 0 }}>
+                        <select value={termFilter} onChange={e => setTermFilter(e.target.value)} style={{ appearance: 'none', padding: '9px 36px 9px 16px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff', color: 'var(--prof-text-main)', fontSize: '0.875rem', fontWeight: 500, outline: 'none', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.02)', width: '100%' }}>
+                            <option value="all">All Terms</option>
+                            {availableTerms.map(term => <option key={term} value={term}>{term}</option>)}
+                        </select>
+                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--prof-text-muted)', pointerEvents: 'none' }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                        </svg>
+                    </div>
+                </div>
+            )}
+
             {summaries.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '60px 20px', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid var(--prof-border)' }}>
                     <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" width="44" height="44" style={{ margin: '0 auto 14px', display: 'block', opacity: 0.3 }}>
@@ -134,6 +180,11 @@ export function GradesList() {
                     <h3 style={{ margin: '0 0 6px', color: 'var(--prof-text-main)', fontSize: '1rem', fontWeight: 600 }}>No exams enrolled</h3>
                     <p style={{ margin: 0, color: 'var(--prof-text-muted)', fontSize: '0.88rem' }}>Your exam grades will appear here once you are enrolled.</p>
                 </div>
+            ) : filteredSummaries.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid var(--prof-border)' }}>
+                    <h3 style={{ margin: '0 0 6px', color: 'var(--prof-text-main)', fontSize: '1rem', fontWeight: 600 }}>No results found</h3>
+                    <p style={{ margin: 0, color: 'var(--prof-text-muted)', fontSize: '0.88rem' }}>Try adjusting your search or filter.</p>
+                </div>
             ) : (
                 <div className="cs-card" style={{ padding: 0, overflow: 'hidden' }}>
                     <div style={{ overflowX: 'auto' }}>
@@ -141,14 +192,14 @@ export function GradesList() {
                             <thead>
                                 <tr>
                                     <th style={{ textAlign: 'left', padding: '9px 10px 9px 16px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--prof-surface)' }}>Exam</th>
-                                    <th style={{ textAlign: 'left', padding: '9px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--prof-surface)', whiteSpace: 'nowrap' }}>Year / Term</th>
-                                    <th style={{ textAlign: 'center', padding: '9px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--prof-surface)' }}>Attempts</th>
+                                    <th className="grades-col-term" style={{ textAlign: 'left', padding: '9px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--prof-surface)', whiteSpace: 'nowrap' }}>Year / Term</th>
+                                    <th className="grades-col-attempts" style={{ textAlign: 'center', padding: '9px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--prof-surface)' }}>Attempts</th>
                                     <th style={{ textAlign: 'center', padding: '9px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--prof-surface)', whiteSpace: 'nowrap' }}>Best Score</th>
-                                    <th style={{ textAlign: 'center', padding: '9px 16px 9px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--prof-surface)' }}>Grade</th>
+                                    <th className="grades-col-grade" style={{ textAlign: 'center', padding: '9px 16px 9px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--prof-surface)' }}>Grade</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {summaries.map(({ exam, bestPct, bestScore, bestTotal, hasPassed, attemptsTaken, isGraded, showGrade, submissions }) => {
+                                {filteredSummaries.map(({ exam, bestPct, bestScore, bestTotal, hasPassed, attemptsTaken, isGraded, showGrade, submissions }) => {
                                     const subjects = exam.exam_subjects.filter(s => s.subjects);
                                     const gc = bestPct !== null ? getGradeColors(bestPct, passingRate) : null;
                                     const isExpanded = expandedExamId === exam.id;
@@ -177,9 +228,10 @@ export function GradesList() {
                                                             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                                                         </svg>
                                                         <div>
-                                                            <div style={{ fontWeight: 600, color: 'var(--prof-text-main)', fontSize: '0.85rem', marginBottom: subjects.length > 0 ? '5px' : 0 }}>{exam.title}</div>
+                                                            <div style={{ fontWeight: 600, color: 'var(--prof-text-main)', fontSize: '0.85rem', marginBottom: '3px' }}>{exam.title}</div>
+                                                            <div className="grades-term-mobile" style={{ fontSize: '0.72rem', color: 'var(--prof-text-muted)', marginBottom: subjects.length > 0 ? '4px' : 0 }}>{exam.academic_year} · {exam.term}</div>
                                                             {subjects.length > 0 && (
-                                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                                                <div className="grades-subj-badges" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                                                     {subjects.map(s => (
                                                                         <span key={s.subject_id} style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--prof-primary)', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '4px', padding: '1px 6px' }}>
                                                                             {s.subjects!.course_code}
@@ -190,22 +242,22 @@ export function GradesList() {
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td style={{ padding: '10px', color: 'var(--prof-text-muted)', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                                                <td className="grades-col-term" style={{ padding: '10px', color: 'var(--prof-text-muted)', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
                                                     {exam.academic_year} · {exam.term}
                                                 </td>
-                                                <td style={{ padding: '10px', textAlign: 'center', fontSize: '0.82rem', color: 'var(--prof-text-main)', fontWeight: 600 }}>
+                                                <td className="grades-col-attempts" style={{ padding: '10px', textAlign: 'center', fontSize: '0.82rem', color: 'var(--prof-text-main)', fontWeight: 600 }}>
                                                     {attemptsTaken} <span style={{ fontWeight: 400, color: 'var(--prof-text-muted)' }}>/ {exam.max_attempts}</span>
                                                 </td>
                                                 <td style={{ padding: '10px', textAlign: 'center' }}>
                                                     {isGraded && gc && bestScore !== null && bestTotal !== null ? (
                                                         <span style={{ fontSize: '0.78rem', fontWeight: 700, color: gc.text, background: gc.bg, border: `1px solid ${gc.border}`, borderRadius: '8px', padding: '2px 8px' }}>
-                                                            {bestScore}/{bestTotal} ({bestPct!.toFixed(0)}%)
+                                                            {bestScore}/{bestTotal}<span className="grades-score-pct"> ({bestPct!.toFixed(0)}%)</span>
                                                         </span>
                                                     ) : (
                                                         <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>—</span>
                                                     )}
                                                 </td>
-                                                <td style={{ padding: '10px 16px 10px 10px', textAlign: 'center' }}>
+                                                <td className="grades-col-grade" style={{ padding: '10px 16px 10px 10px', textAlign: 'center' }}>
                                                     {showGrade ? (
                                                         <span style={{ fontSize: '0.82rem', fontWeight: 800, color: hasPassed ? '#15803d' : '#b91c1c', background: hasPassed ? '#dcfce7' : '#fee2e2', border: `1px solid ${hasPassed ? '#86efac' : '#fca5a5'}`, borderRadius: '6px', padding: '2px 10px' }}>
                                                             {hasPassed ? 'P' : 'F'}
@@ -218,7 +270,7 @@ export function GradesList() {
 
                                             {isExpanded && (
                                                 <tr style={{ borderBottom: '1px solid var(--prof-border)', background: '#f8fafc' }}>
-                                                    <td colSpan={5} style={{ padding: '0 16px 14px 36px' }}>
+                                                    <td colSpan={5} className="grades-expand-td" style={{ padding: '0 16px 14px 36px' }}>
                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                                             {Array.from({ length: exam.max_attempts }, (_, i) => i + 1).map(attemptNum => {
                                                                 const sub = subByAttempt[attemptNum];
@@ -241,23 +293,23 @@ export function GradesList() {
 
                                                                 return (
                                                                     <div key={attemptNum} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 10px', background: '#fff', border: '1px solid var(--prof-border)', borderRadius: '8px', fontSize: '0.8rem' }}>
-                                                                        <span style={{ fontWeight: 600, color: 'var(--prof-text-main)', minWidth: '72px' }}>Attempt {attemptNum}</span>
+                                                                        <span className="grades-attempt-label" style={{ fontWeight: 600, color: 'var(--prof-text-main)', minWidth: '72px' }}>Attempt {attemptNum}</span>
                                                                         {setLabel && (
                                                                             <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--prof-text-muted)', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '1px 6px' }}>Set {setLabel}</span>
                                                                         )}
-                                                                        <span style={{ color: 'var(--prof-text-muted)', fontSize: '0.75rem', flex: 1 }}>
+                                                                        <span className="grades-attempt-date" style={{ color: 'var(--prof-text-muted)', fontSize: '0.75rem', flex: 1 }}>
                                                                             {formatDate(sub?.submitted_at ?? null)}
                                                                         </span>
-                                                                        <span>
+                                                                        <span style={{ flex: 1, textAlign: 'right' }}>
                                                                             {isSubmitted && gradesReleased && pct !== null && agc && sub?.score != null && sub?.total_items ? (
                                                                                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: agc.text, background: agc.bg, border: `1px solid ${agc.border}`, borderRadius: '6px', padding: '2px 8px' }}>
-                                                                                    {sub.score}/{sub.total_items} ({pct.toFixed(0)}%)
+                                                                                    {sub.score}/{sub.total_items}<span className="grades-score-pct"> ({pct.toFixed(0)}%)</span>
                                                                                 </span>
                                                                             ) : (
                                                                                 <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>—</span>
                                                                             )}
                                                                         </span>
-                                                                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: statusColor, minWidth: '64px', textAlign: 'right' }}>{statusLabel}</span>
+                                                                        <span className="grades-attempt-status" style={{ fontSize: '0.72rem', fontWeight: 700, color: statusColor, minWidth: '64px', textAlign: 'right' }}>{statusLabel}</span>
                                                                     </div>
                                                                 );
                                                             })}

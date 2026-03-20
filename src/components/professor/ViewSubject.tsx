@@ -45,6 +45,7 @@ export function ViewSubject() {
     const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
     const [passTarget, setPassTarget] = useState<{ facultyId: string; professorId: string; name: string } | null>(null);
     const [isPassing, setIsPassing] = useState(false);
+    const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
     // Faculty state
     const [faculty, setFaculty] = useState<SubjectFacultyMember[]>([]);
@@ -191,10 +192,10 @@ export function ViewSubject() {
 
             {/* Overview tab */}
             {activeTab === 'overview' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '20px', alignItems: 'start' }}>
+                <div className="vsub-overview-grid">
 
                     {/* Left column: Syllabus Outcomes */}
-                    <div className="cs-card" style={{ padding: 0, overflow: 'hidden' }}>
+                    <div className="vsub-main-col cs-card" style={{ padding: 0, overflow: 'hidden' }}>
                         <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--prof-border)' }}>
                             <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--prof-text-muted)' }}>Syllabus Outcomes</p>
                         </div>
@@ -245,7 +246,16 @@ export function ViewSubject() {
                     </div>
 
                     {/* Right column: Actions + Details + Faculty */}
-                    <div className="cs-card" style={{ padding: 0, overflow: 'hidden' }}>
+                    <div className="vsub-details-col">
+                        <div className="vsub-details-card">
+                            <button className="vsub-details-toggle" onClick={() => setIsDetailsOpen(v => !v)}>
+                                <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Subject Details</span>
+                                <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16" style={{ color: 'var(--prof-text-muted)', transform: isDetailsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', flexShrink: 0 }}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                </svg>
+                            </button>
+                        <div className={`vsub-details-body${isDetailsOpen ? ' vsub-details-open' : ''}`}>
+                        <div className="vsub-details-inner-card cs-card" style={{ padding: 0, overflow: 'hidden' }}>
                         {/* Action buttons */}
                         <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '6px', borderBottom: '1px solid var(--prof-border)' }}>
                             {canManage && (
@@ -351,6 +361,9 @@ export function ViewSubject() {
                             {faculty.length === 0 && (
                                 <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: 'var(--prof-text-muted)', fontStyle: 'italic' }}>No co-handlers invited yet.</p>
                             )}
+                        </div>
+                        </div>
+                        </div>
                         </div>
                     </div>
                 </div>

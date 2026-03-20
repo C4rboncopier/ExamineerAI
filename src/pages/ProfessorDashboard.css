@@ -18,6 +18,7 @@
 .prof-layout {
     display: flex;
     height: 100vh;
+    height: 100dvh;
     width: 100%;
     background-color: var(--prof-bg);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -607,7 +608,7 @@ select:focus {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 32px;
+    margin-bottom: 12px;
 }
 
 .subjects-title {
@@ -670,22 +671,23 @@ select:focus {
 
 .subjects-search .search-icon {
     position: absolute;
-    left: 16px;
+    left: 12px;
     top: 50%;
     transform: translateY(-50%);
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     color: var(--prof-text-muted);
     pointer-events: none;
 }
 
 .subjects-search-input {
     width: 100%;
-    padding: 12px 44px 12px 44px;
-    border: 1px solid var(--prof-border);
+    padding: 9px 40px 9px 38px;
+    border: 1.5px solid var(--prof-border);
     border-radius: var(--prof-radius-md);
-    font-size: 0.95rem;
-    background-color: var(--prof-surface);
+    font-size: 0.875rem;
+    background-color: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
     transition: var(--prof-transition);
 }
 
@@ -927,6 +929,15 @@ select:focus {
 
     .prof-content-scroll {
         padding: 24px;
+        padding-bottom: max(24px, env(safe-area-inset-bottom, 24px));
+    }
+
+    .cs-header h2 {
+        font-size: 1.4rem;
+    }
+
+    .cs-header p {
+        font-size: 0.875rem;
     }
 
     .cs-card {
@@ -2047,9 +2058,44 @@ select:focus {
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
+    .settings-sections {
+        gap: 14px;
+    }
+
+    .settings-section-heading {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    /* Keep icon + text on the same row; text shrinks before wrapping */
+    .settings-section-heading>div:not(.settings-section-icon) {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .settings-section-icon {
+        width: 34px;
+        height: 34px;
+    }
+
+    .settings-section-icon svg {
+        width: 17px;
+        height: 17px;
+    }
+
     .settings-ay-view {
         flex-direction: column;
         align-items: flex-start;
+        padding: 14px 16px;
+        gap: 10px;
+    }
+
+    .ay-display-value {
+        font-size: 1.15rem;
+    }
+
+    .ay-display-divider {
+        display: none;
     }
 
     .settings-ay-inputs {
@@ -2057,16 +2103,37 @@ select:focus {
         align-items: stretch;
     }
 
+    .settings-ay-divider-v {
+        display: none;
+    }
+
     .settings-ay-dash {
         display: none;
     }
 
-    .settings-section-heading {
-        flex-wrap: wrap;
-    }
-
     .cs-input-group.row {
         flex-direction: column;
+    }
+
+    .settings-program-form {
+        padding: 14px;
+    }
+
+    .settings-program-item {
+        align-items: flex-start;
+        padding: 10px 12px;
+    }
+
+    .program-info {
+        align-items: flex-start;
+    }
+
+    .program-name {
+        font-size: 0.85rem;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: unset;
+        word-break: break-word;
     }
 }
 
@@ -2365,5 +2432,642 @@ select:focus {
     .exam-alloc-subject-row {
         flex-direction: column;
         align-items: flex-start;
+    }
+}
+
+/* ── Student Grades Responsive ── */
+.grades-term-mobile {
+    display: none;
+}
+
+@media (max-width: 1300px) {
+    .grades-score-pct {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+
+    .grades-col-term,
+    .grades-col-attempts,
+    .grades-col-grade,
+    .grades-subj-badges {
+        display: none !important;
+    }
+
+    .grades-term-mobile {
+        display: block;
+    }
+
+    .grades-expand-td {
+        padding: 0 8px 12px 8px !important;
+    }
+
+    .grades-attempt-date {
+        display: none;
+    }
+
+    .grades-attempt-label,
+    .grades-attempt-status {
+        min-width: unset !important;
+    }
+}
+
+/* ── Student ViewExam Mobile Responsiveness ── */
+
+/* Details toggle button: hidden on desktop */
+.ve-details-toggle {
+    display: none;
+}
+
+@media (max-width: 1150px) {
+
+    /* Single-column layout: details above, main content below */
+    .ve-two-col-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .ve-details-col {
+        order: 1;
+    }
+
+    .ve-main-col {
+        order: 2;
+    }
+
+    /* Outer card wrapper becomes a single unified card on mobile */
+    .ve-details-card {
+        border: 1px solid var(--prof-border);
+        border-radius: 10px;
+        background: #fff;
+        overflow: hidden;
+    }
+
+    /* Show the toggle button as the card header */
+    .ve-details-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 12px 16px;
+        background: var(--prof-surface);
+        border: none;
+        border-radius: 0;
+        cursor: pointer;
+        color: var(--prof-text-main);
+        text-align: left;
+        box-sizing: border-box;
+    }
+
+    /* Panel body hidden by default, shown when open */
+    .ve-details-panel-body {
+        display: none;
+    }
+
+    .ve-details-panel-body.ve-details-panel-open {
+        display: block;
+        border-top: 1px solid var(--prof-border);
+    }
+
+    /* Strip the inner cs-card of its own border/shadow (parent card handles it) */
+    .ve-details-inner-card {
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+    }
+
+    /* Hide the duplicate "Exam Details" title inside the panel */
+    .ve-details-panel-title {
+        display: none !important;
+    }
+
+    /* Gradebook attempts table: hide Date only, keep Status */
+    .ve-gb-header,
+    .ve-gb-row {
+        grid-template-columns: 28px 1fr auto auto !important;
+    }
+
+    .ve-gb-col-date {
+        display: none !important;
+    }
+
+    /* Summary stat cards: single row, equal width */
+    .ve-stat-bar {
+        flex-wrap: nowrap !important;
+    }
+
+    .ve-stat-card {
+        flex: 1 !important;
+        min-width: 0 !important;
+        padding: 10px 10px !important;
+    }
+}
+
+/* ── Admin Lists Mobile Responsiveness ── */
+@media (max-width: 768px) {
+
+    /* Smaller section title */
+    .subjects-title {
+        font-size: 1.4rem;
+    }
+
+    /* Compact "Add" button in header */
+    .subjects-header .btn-primary {
+        padding: 9px 16px;
+        font-size: 0.85rem;
+        align-self: flex-start;
+        white-space: nowrap;
+    }
+
+    /* Search + filter row stacks vertically */
+    .admin-search-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    /* Program filter goes full width */
+    .admin-program-select {
+        width: 100% !important;
+    }
+
+    /* Professor list: tighter grid columns */
+    .admin-prof-list-header,
+    .admin-prof-list-row {
+        grid-template-columns: 28px 1fr 60px 88px !important;
+        gap: 8px !important;
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+
+    /* Student list: tighter grid (Student ID column hidden separately) */
+    .admin-student-list-header,
+    .admin-student-list-row {
+        grid-template-columns: 28px 1fr 60px 88px !important;
+        gap: 8px !important;
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+
+    /* Hide Student ID column on mobile */
+    .admin-hide-mobile {
+        display: none !important;
+    }
+
+    /* Slightly smaller name text in list rows */
+    .admin-list-name {
+        font-size: 0.8rem !important;
+    }
+
+    /* Subject list: tighter grid — hide Created and Questions columns */
+    .admin-subject-list-header,
+    .admin-subject-list-row {
+        grid-template-columns: 24px 1fr 100px !important;
+        gap: 8px !important;
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+
+    /* Expanded subject detail panel: reduce outer padding on mobile */
+    .admin-subject-detail-panel {
+        padding: 12px 12px 14px 12px !important;
+    }
+
+    /* MO rows: reduce left indent on mobile */
+    .admin-subject-mo-list>div {
+        padding-left: 14px !important;
+    }
+
+    /* Exam filter selects: flexible width so they wrap side-by-side below search */
+    .admin-exam-filter-select {
+        flex: 1 1 110px !important;
+        width: auto !important;
+    }
+
+    /* Exam list: tighter grid — hide Main Professor, Created, Students */
+    .admin-exam-list-header,
+    .admin-exam-list-row {
+        grid-template-columns: 24px 1fr 90px !important;
+        gap: 8px !important;
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+
+    /* Expanded exam detail panel: reduce left indent on mobile */
+    .admin-exam-detail-panel {
+        padding: 10px 12px 12px 14px !important;
+    }
+
+    /* Add/Edit Professor & Student forms: single column on mobile */
+    .admin-form-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Subjects access filter: match search bar height */
+    .subjects-access-select {
+        height: auto !important;
+        padding: 9px 12px !important;
+        align-self: stretch;
+    }
+}
+
+/* ── Professor ExamsList Mobile Responsiveness ── */
+
+/* Equal-height header buttons (Download OMR + Create Exam) */
+.prof-exam-header-btns .btn-primary,
+.prof-exam-header-btns .btn-secondary {
+    padding: 10px 20px;
+    font-size: 0.9rem;
+    box-sizing: border-box;
+    line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+
+    /* Stack search + filters vertically */
+    .prof-exam-filter-bar {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+
+    .prof-exam-filter-bar>div {
+        width: 100% !important;
+        flex-shrink: unset !important;
+    }
+
+    .prof-exam-filter-bar select {
+        width: 100% !important;
+        min-width: unset !important;
+        box-sizing: border-box;
+    }
+}
+
+/* ── Professor ViewExam Mobile Responsiveness ── */
+
+/* Tab navigation: scrollable on mobile */
+@media (max-width: 768px) {
+    .prof-tab-nav {
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .prof-tab-nav::-webkit-scrollbar {
+        display: none;
+    }
+
+    .prof-tab-nav button {
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+}
+
+/* Exam details accordion toggle: hidden on desktop */
+.pve-details-toggle {
+    display: none;
+}
+
+/* Attempt select dropdown: hidden on desktop */
+.pve-attempt-select {
+    display: none;
+}
+
+@media (max-width: 1150px) {
+
+    /* Collapse the 2-column overview grid */
+    .pve-overview-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Details panel moves above grades table */
+    .pve-main-col {
+        order: 2;
+    }
+
+    .pve-details-col {
+        order: 1;
+    }
+
+    /* Outer wrapper becomes a bordered accordion card */
+    .pve-details-card {
+        border: 1px solid var(--prof-border);
+        border-radius: 10px;
+        background: #fff;
+        overflow: hidden;
+    }
+
+    /* Show the toggle button */
+    .pve-details-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 12px 16px;
+        background: var(--prof-surface);
+        border: none;
+        border-radius: 0;
+        cursor: pointer;
+        color: var(--prof-text-main);
+        text-align: left;
+        box-sizing: border-box;
+        font-family: inherit;
+    }
+
+    /* Panel body hidden by default */
+    .pve-details-body {
+        display: none;
+    }
+
+    /* Panel body shown when open */
+    .pve-details-body.pve-details-open {
+        display: block;
+        border-top: 1px solid var(--prof-border);
+    }
+
+    /* Strip the inner cs-card of its own border/shadow */
+    .pve-details-inner-card {
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+    }
+}
+
+@media (max-width: 640px) {
+
+    /* Hide attempt pills, show select dropdown */
+    .pve-attempt-pills {
+        display: none !important;
+    }
+
+    .pve-attempt-select {
+        display: block;
+        padding: 4px 10px;
+        border-radius: 8px;
+        border: 1.5px solid var(--prof-border);
+        background: #fff;
+        color: var(--prof-text-main);
+        font-size: 0.8rem;
+        font-weight: 600;
+        outline: none;
+        cursor: pointer;
+        font-family: inherit;
+    }
+
+    /* Hide non-essential grade table columns */
+    .pve-col-id,
+    .pve-col-scanned,
+    .pve-col-pct {
+        display: none !important;
+    }
+}
+
+@media (max-width: 768px) {
+
+    /* Stack answer grid + pie chart vertically in expanded student row */
+    .pve-grade-detail-flex {
+        flex-direction: column !important;
+        gap: 16px !important;
+    }
+
+    .pve-answer-grid-wrap {
+        width: 100%;
+        overflow-x: hidden;
+    }
+
+    /* Fit answer grid within mobile width — 10 equal columns, no min-width */
+    .pve-answer-grid {
+        grid-template-columns: repeat(10, 1fr) !important;
+        min-width: unset !important;
+        width: 100%;
+    }
+
+    /* Shrink cell dimensions to fit */
+    .pve-answer-cell {
+        width: 100% !important;
+        height: 36px !important;
+    }
+
+    .pve-answer-cell span:first-child {
+        font-size: 0.45rem !important;
+    }
+
+    .pve-answer-cell span:nth-child(2) {
+        font-size: 0.72rem !important;
+    }
+
+    .pve-answer-cell span:last-child {
+        font-size: 0.45rem !important;
+    }
+
+    /* Pie chart: stack SVG and legend vertically on narrow screens */
+    .mini-pie-legend-row {
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 12px !important;
+    }
+
+    /* Action buttons: allow wrapping on mobile */
+    .pve-action-btns {
+        flex-wrap: wrap !important;
+        justify-content: flex-end;
+    }
+
+    .pve-action-btns .btn-secondary,
+    .pve-action-btns .btn-primary {
+        padding: 3px 8px !important;
+        font-size: 0.72rem !important;
+        height: 24px !important;
+    }
+}
+
+/* Prevent horizontal page overflow on mobile */
+@media (max-width: 768px) {
+    .prof-content-scroll {
+        overflow-x: hidden;
+    }
+}
+
+/* Extra-small screens: tighter padding */
+@media (max-width: 480px) {
+    .prof-content-scroll {
+        padding: 12px !important;
+    }
+}
+
+/* "Did Not Take" label: full text on desktop, abbreviation on mobile */
+.dnt-short {
+    display: none;
+}
+
+@media (max-width: 640px) {
+    .dnt-long {
+        display: none;
+    }
+
+    .dnt-short {
+        display: inline;
+    }
+}
+
+/* Hide Print Exam button on mobile (desktop only) */
+@media (max-width: 768px) {
+    .pve-print-btn {
+        display: none !important;
+    }
+}
+
+/* Hide "Best on mobile" notice when already on mobile */
+@media (max-width: 768px) {
+    .omr-best-on-mobile-notice {
+        display: none !important;
+    }
+}
+
+/* Smaller score value in OMR scan results on mobile */
+@media (max-width: 640px) {
+    .omr-score-value {
+        font-size: 0.85rem !important;
+    }
+}
+
+/* ExamStudents — stack cards to single column on mobile */
+@media (max-width: 640px) {
+    .es-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* ExamAnalysis — responsive grids */
+@media (max-width: 640px) {
+    .ea-stat-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    .ea-charts-row,
+    .ea-trend-row {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* ExamAnalysis — attempt filter: buttons on desktop, select on mobile */
+.ea-attempt-select {
+    display: none;
+}
+
+@media (max-width: 640px) {
+    .ea-attempt-buttons {
+        display: none !important;
+    }
+
+    .ea-attempt-select {
+        display: block !important;
+        flex: 1;
+        padding: 6px 12px;
+        border-radius: 8px;
+        border: 1.5px solid var(--prof-border);
+        background: #fff;
+        color: var(--prof-text-main);
+        font-size: 0.8rem;
+        font-weight: 600;
+        outline: none;
+        cursor: pointer;
+        min-width: 0;
+    }
+}
+
+/* ExamAnalysis — MUI X charts: prevent card overflow, enable responsiveness */
+.ea-charts-row .cs-card,
+.ea-trend-row .cs-card,
+.ea-charts-row .cs-card *,
+.ea-trend-row .cs-card * {
+    min-width: 0;
+}
+
+.ea-charts-row .cs-card,
+.ea-trend-row .cs-card {
+    overflow: hidden;
+}
+
+@media (max-width: 640px) {
+
+    .ea-charts-row .cs-card,
+    .ea-trend-row .cs-card {
+        overflow: hidden;
+    }
+
+    /* Force MUI chart SVGs to not exceed card width */
+    .ea-charts-row .cs-card svg,
+    .ea-trend-row .cs-card svg {
+        max-width: 100%;
+    }
+}
+
+/* ── ViewSubject Details Panel ── */
+
+/* Desktop: plain 2-column grid, toggle hidden */
+.vsub-overview-grid {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 20px;
+    align-items: start;
+}
+
+.vsub-details-toggle {
+    display: none;
+}
+
+.vsub-details-body {
+    display: block;
+}
+
+/* ≤1150px: stack to single column, enable accordion */
+@media (max-width: 1150px) {
+    .vsub-overview-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .vsub-main-col {
+        order: 2;
+    }
+
+    .vsub-details-col {
+        order: 1;
+    }
+
+    .vsub-details-card {
+        border: 1px solid var(--prof-border);
+        border-radius: 10px;
+        background: #fff;
+        overflow: hidden;
+    }
+
+    .vsub-details-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 12px 16px;
+        background: var(--prof-surface);
+        border: none;
+        border-radius: 0;
+        cursor: pointer;
+        color: var(--prof-text-main);
+        text-align: left;
+        box-sizing: border-box;
+        font-family: inherit;
+    }
+
+    .vsub-details-body {
+        display: none;
+    }
+
+    .vsub-details-body.vsub-details-open {
+        display: block;
+        border-top: 1px solid var(--prof-border);
+    }
+
+    .vsub-details-inner-card {
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
     }
 }

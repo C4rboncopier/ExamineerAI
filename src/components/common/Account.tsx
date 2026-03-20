@@ -146,7 +146,7 @@ export function Account() {
                                         <span style={{ minWidth: '120px', fontSize: '0.82rem', fontWeight: 600, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', paddingTop: '2px' }}>
                                             {row.label}
                                         </span>
-                                        <span style={{ fontSize: '0.9rem', color: 'var(--prof-text-main)', wordBreak: 'break-all' }}>
+                                        <span style={{ fontSize: '0.9rem', color: 'var(--prof-text-main)', overflowWrap: 'break-word', minWidth: 0 }}>
                                             {row.value || <span style={{ color: 'var(--prof-text-muted)', fontStyle: 'italic' }}>Not set</span>}
                                         </span>
                                     </div>

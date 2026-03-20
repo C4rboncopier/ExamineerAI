@@ -75,7 +75,7 @@ export function ExamsList() {
                     <h2 className="subjects-title">Exams</h2>
                     <p className="subjects-subtitle">Manage your generated exam sets.</p>
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div className="prof-exam-header-btns" style={{ display: 'flex', gap: '8px' }}>
                     <button className="btn-secondary" onClick={() => printOMR()}>
                         Download OMR
                     </button>
@@ -87,7 +87,7 @@ export function ExamsList() {
 
             {/* Search + filter bar */}
             {!isLoading && exams.length > 0 && (
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '24px', flexWrap: 'nowrap' }}>
+                <div className="prof-exam-filter-bar" style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap' }}>
                     <div style={{ position: 'relative', flex: '1', minWidth: '0' }}>
                         <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--prof-text-muted)', pointerEvents: 'none' }}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />

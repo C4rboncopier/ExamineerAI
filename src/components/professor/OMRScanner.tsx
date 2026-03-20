@@ -516,6 +516,7 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
             // All items done
             setReviewQueue([]);
             setReviewIndex(0);
+            if (pending.source === 'camera') startCamera();
         }
 
         setIsSaving(false);
@@ -612,9 +613,15 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
     async function handleProcessZip() {
         if (!zipFile || isProcessing) return;
         setIsProcessing(true);
-        setZipProgress({ phase: 'Sending to scanner server…', done: 0, total: 0 });
+        setZipProgress({ phase: 'Uploading ZIP…', done: 0, total: 0 });
         try {
-            const omrResults = await scanOMRBatch(zipFile, serverUrl);
+            const omrResults = await scanOMRBatch(zipFile, serverUrl, (done, total) => {
+                if (done === 0) {
+                    setZipProgress({ phase: 'Scanning sheets…', done: 0, total });
+                } else {
+                    setZipProgress({ phase: `Scanning sheet ${done} of ${total}…`, done, total });
+                }
+            });
             if (omrResults.length === 0) {
                 setZipProgress(null);
                 setIsProcessing(false);
@@ -708,18 +715,6 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
 
     // ── Styles ────────────────────────────────────────────────────────────────
 
-    function statusBadge(status: GradeStatus) {
-        const cfg: Record<GradeStatus, { label: string; bg: string; color: string }> = {
-            verified:     { label: 'Verified',         bg: '#dcfce7', color: '#16a34a' },
-            partial:      { label: 'Partial',          bg: '#fef3c7', color: '#b45309' },
-            no_match:     { label: 'No student match', bg: '#fef3c7', color: '#b45309' },
-            no_set:       { label: 'Set not found',    bg: '#f5f3ff', color: '#9333ea' },
-            server_error: { label: 'Server error',     bg: '#fee2e2', color: '#dc2626' },
-            omr_error:    { label: 'OMR error',        bg: '#fee2e2', color: '#dc2626' },
-        };
-        const { label, bg, color } = cfg[status];
-        return <span style={{ fontSize: '0.78rem', fontWeight: 600, padding: '2px 9px', borderRadius: '99px', background: bg, color }}>{label}</span>;
-    }
 
     const modeTabStyle = (active: boolean): React.CSSProperties => ({
         padding: '8px 18px', borderRadius: '8px',
@@ -799,7 +794,7 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                             {/* Viewport */}
                             <div
                                 ref={imgContainerRef}
-                                style={{ position: 'relative', overflow: 'hidden', minHeight: isMobile ? '220px' : '300px', flex: 1, cursor: 'grab' }}
+                                style={{ position: 'relative', overflow: 'hidden', minHeight: isMobile ? '420px' : '300px', flex: 1, cursor: 'grab' }}
                                 onMouseDown={onImgMouseDown}
                                 onMouseMove={onImgMouseMove}
                                 onMouseUp={onImgMouseUp}
@@ -924,7 +919,7 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                                 {currentPending.isComputing ? (
                                     <span style={{ fontSize: '0.85rem', color: 'var(--prof-text-muted, #94a3b8)' }}>Computing…</span>
                                 ) : currentPending.computed ? (
-                                    <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>{currentPending.computed.score} / {currentPending.computed.totalItems}</span>
+                                    <span className="omr-score-value" style={{ fontWeight: 700, fontSize: '1.1rem' }}>{currentPending.computed.score} / {currentPending.computed.totalItems}</span>
                                 ) : (
                                     <span style={{ fontSize: '0.85rem', color: 'var(--prof-text-muted, #94a3b8)' }}>—</span>
                                 )}
@@ -1125,6 +1120,16 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                     {/* ── Camera mode ── */}
                     {mode === 'camera' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                            {/* Mobile recommendation notice */}
+                            <div className="omr-best-on-mobile-notice" style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 14px', background: '#eff6ff', border: '1px solid #93c5fd', borderRadius: '8px' }}>
+                                <svg fill="none" strokeWidth="2" stroke="#2563eb" viewBox="0 0 24 24" width="16" height="16" style={{ flexShrink: 0, marginTop: '1px' }}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 8.25h3m-3 3h3m-3 3h3" />
+                                </svg>
+                                <span style={{ fontSize: '0.82rem', color: '#1e40af', lineHeight: 1.5 }}>
+                                    <strong>Best on mobile.</strong> Camera mode is recommended for mobile devices where you can point directly at the sheet. On desktop, <strong>Upload Image</strong> or <strong>Batch ZIP</strong> gives better scanning accuracy.
+                                </span>
+                            </div>
+
                             {/* Camera toggle */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                                 <button
@@ -1168,8 +1173,8 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                             )}
 
                             {cameraActive && !cameraError && (
-                                <div style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--prof-border, #e2e8f0)', background: '#0f172a' }}>
-                                    <video ref={videoRef} style={{ width: '100%', maxHeight: '340px', objectFit: 'cover', display: 'block' }} muted playsInline />
+                                <div style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--prof-border, #e2e8f0)', background: '#0f172a', aspectRatio: '3/4', maxWidth: '360px', margin: '0 auto', width: '100%' }}>
+                                    <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} muted playsInline />
                                     <div style={{ position: 'absolute', inset: 0, border: '3px solid rgba(255,255,255,0.15)', borderRadius: '10px', pointerEvents: 'none' }} />
                                 </div>
                             )}
@@ -1478,8 +1483,8 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                             <thead>
                                 <tr>
-                                    {(['Student', 'Roll No.', 'Set', 'Score', 'Status'] as const).map(h => (
-                                        <th key={h} style={{ textAlign: h === 'Student' || h === 'Status' ? 'left' : 'center', padding: '8px 10px', fontWeight: 600, fontSize: '0.78rem', color: 'var(--prof-text-muted, #64748b)', borderBottom: '1px solid var(--prof-border, #e2e8f0)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                                    {(['Student', 'Roll No.', 'Set', 'Score'] as const).map(h => (
+                                        <th key={h} style={{ textAlign: h === 'Student' ? 'left' : 'center', padding: '8px 10px', fontWeight: 600, fontSize: '0.78rem', color: 'var(--prof-text-muted, #64748b)', borderBottom: '1px solid var(--prof-border, #e2e8f0)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
                                     ))}
                                 </tr>
                             </thead>
@@ -1497,12 +1502,6 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                                         </td>
                                         <td style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 600 }}>
                                             {row.score != null ? `${row.score} / ${row.totalItems}` : <span style={{ color: '#94a3b8' }}>—</span>}
-                                        </td>
-                                        <td style={{ padding: '9px 10px' }}>
-                                            {row.omrResult.error
-                                                ? <span style={{ fontSize: '0.78rem', fontWeight: 600, padding: '2px 9px', borderRadius: '99px', background: '#fee2e2', color: '#dc2626' }}>{row.omrResult.error}</span>
-                                                : statusBadge(row.gradeStatus)
-                                            }
                                         </td>
                                     </tr>
                                 ))}

@@ -207,53 +207,41 @@ export function ProfessorsList() {
             </div>
 
             {/* Search + Program Filter */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
-                <div className="subjects-search" style={{ flex: '1 1 0', minWidth: 0, marginBottom: 0 }}>
-                    <svg className="search-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24">
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', flex: '1 1 200px' }}>
+                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--prof-text-muted)', pointerEvents: 'none' }}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                     </svg>
                     <input
                         type="text"
-                        className="subjects-search-input"
                         placeholder="Search by name or username..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
+                        style={{ width: '100%', padding: '9px 12px 9px 38px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff', color: 'var(--prof-text-main)', fontSize: '0.875rem', outline: 'none', boxSizing: 'border-box', boxShadow: '0 1px 2px rgba(0,0,0,0.02)', transition: 'border-color 0.2s', fontFamily: 'inherit' }}
                     />
                     {searchQuery && (
-                        <button className="search-clear-btn" onClick={() => setSearchQuery('')}>
+                        <button onClick={() => setSearchQuery('')} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--prof-text-muted)', display: 'flex', padding: '4px' }}>
                             <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </button>
                     )}
                 </div>
-                <select
-                    value={programFilter}
-                    onChange={e => setProgramFilter(e.target.value)}
-                    style={{
-                        padding: '8px 32px 8px 12px',
-                        borderRadius: '8px',
-                        border: '1.5px solid var(--prof-border)',
-                        background: '#fff',
-                        color: programFilter ? 'var(--prof-text-main)' : 'var(--prof-text-muted)',
-                        fontSize: '0.875rem',
-                        cursor: 'pointer',
-                        appearance: 'none',
-                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
-                        backgroundRepeat: 'no-repeat',
-                        backgroundPosition: 'right 8px center',
-                        backgroundSize: '16px',
-                        width: '280px',
-                        flexShrink: 0,
-                        flexGrow: 0,
-                        alignSelf: 'stretch',
-                    }}
-                >
-                    <option value="">All Programs</option>
-                    {programs.map(p => (
-                        <option key={p.id} value={p.id}>{p.code}</option>
-                    ))}
-                </select>
+                <div style={{ position: 'relative', flex: '0 0 155px' }}>
+                    <select
+                        value={programFilter}
+                        onChange={e => setProgramFilter(e.target.value)}
+                        style={{ appearance: 'none', padding: '9px 36px 9px 16px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff', color: programFilter ? 'var(--prof-text-main)' : 'var(--prof-text-muted)', fontSize: '0.875rem', fontWeight: 500, outline: 'none', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.02)', width: '100%', fontFamily: 'inherit' }}
+                    >
+                        <option value="">All Programs</option>
+                        {programs.map(p => (
+                            <option key={p.id} value={p.id}>{p.code}</option>
+                        ))}
+                    </select>
+                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--prof-text-muted)', pointerEvents: 'none' }}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </div>
             </div>
 
             {/* Selection Banner */}
@@ -298,7 +286,7 @@ export function ProfessorsList() {
             ) : (
                 <div className="templates-simple-list" style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--prof-border)' }}>
                     {/* Table Header */}
-                    <div style={{
+                    <div className="admin-prof-list-header" style={{
                         display: 'grid', gridTemplateColumns: '36px 1fr 80px 100px',
                         alignItems: 'center', padding: '8px 14px',
                         background: 'var(--prof-bg)', borderBottom: '1px solid var(--prof-border)',
@@ -324,6 +312,7 @@ export function ProfessorsList() {
                         return (
                             <div
                                 key={prof.id}
+                                className="admin-prof-list-row"
                                 style={{
                                     display: 'grid', gridTemplateColumns: '36px 1fr 80px 100px',
                                     alignItems: 'center', padding: '9px 14px', gap: '12px',
@@ -343,7 +332,7 @@ export function ProfessorsList() {
                                 </div>
 
                                 {/* Name */}
-                                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--prof-text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <span className="admin-list-name" style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--prof-text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                     {prof.full_name ?? '—'}
                                 </span>
 

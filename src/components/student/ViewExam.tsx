@@ -85,6 +85,16 @@ function TopicBreakdownList({ topics, subjects }: {
     topics: TopicStat[];
     subjects?: { id: string; courseCode: string; courseTitle: string }[];
 }) {
+    const [openSubjects, setOpenSubjects] = useState<Set<string>>(new Set());
+
+    const toggleSubject = (id: string) => {
+        setOpenSubjects(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+
     if (topics.length === 0) {
         return <p style={{ fontSize: '0.82rem', color: 'var(--prof-text-muted)', margin: 0 }}>No topic data available.</p>;
     }
@@ -122,16 +132,29 @@ function TopicBreakdownList({ topics, subjects }: {
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {subjects.map(subj => {
                 const subjectTopics = topics.filter(t => t.subjectId === subj.id);
                 if (subjectTopics.length === 0) return null;
+                const isOpen = openSubjects.has(subj.id);
                 return (
-                    <div key={subj.id}>
-                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-primary)', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '5px', padding: '4px 8px', marginBottom: '6px' }}>
-                            {subj.courseCode} — {subj.courseTitle}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>{renderCOs(subjectTopics)}</div>
+                    <div key={subj.id} style={{ border: '1px solid #bae6fd', borderRadius: '8px', overflow: 'hidden' }}>
+                        <button
+                            onClick={() => toggleSubject(subj.id)}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '7px 10px', background: '#f0f9ff', border: 'none', cursor: 'pointer', textAlign: 'left', gap: '8px' }}
+                        >
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-primary)' }}>
+                                {subj.courseCode} — {subj.courseTitle}
+                            </span>
+                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="12" height="12" style={{ color: 'var(--prof-primary)', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', flexShrink: 0 }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </button>
+                        {isOpen && (
+                            <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {renderCOs(subjectTopics)}
+                            </div>
+                        )}
                     </div>
                 );
             })}
@@ -196,8 +219,11 @@ function SubjectPieChart({ subjects, topics, passingRate }: {
     return (
         <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
             <svg
-                viewBox="0 0 180 180" width="180" height="180"
+                viewBox="0 0 180 180"
                 style={{
+                    width: '100%',
+                    maxWidth: '180px',
+                    height: 'auto',
                     flexShrink: 0,
                     filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.12))',
                     transform: 'perspective(600px) rotateX(12deg)',
@@ -239,7 +265,7 @@ function SubjectPieChart({ subjects, topics, passingRate }: {
                             <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: sliceColor, flexShrink: 0, transform: isHov ? 'scale(1.2)' : 'scale(1)', transition: 'transform 0.15s' }} />
                             <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--prof-text-main)' }}>{d.courseCode}</div>
-                                <div style={{ fontSize: '0.7rem', color: 'var(--prof-text-muted)', lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.courseTitle}</div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--prof-text-muted)', lineHeight: '1.3', overflowWrap: 'break-word' }}>{d.courseTitle}</div>
                             </div>
                             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', flexShrink: 0 }}>
                                 {d.correct} correct
@@ -264,41 +290,59 @@ function SubjectPieChart({ subjects, topics, passingRate }: {
 }
 
 function AIAnalysisCard({ feedback }: { feedback: AnalysisFeedback }) {
+    const [openSubjects, setOpenSubjects] = useState<Set<number>>(new Set());
+
+    const toggleSubject = (idx: number) => {
+        setOpenSubjects(prev => {
+            const next = new Set(prev);
+            if (next.has(idx)) next.delete(idx); else next.add(idx);
+            return next;
+        });
+    };
+
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'block', overflow: 'hidden', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
             {/* Summary */}
-            <p style={{ fontSize: '0.88rem', color: '#166534', margin: 0, lineHeight: '1.6' }}>{feedback.summary}</p>
+            <p style={{ fontSize: '0.82rem', color: '#374151', margin: '0 0 8px', lineHeight: '1.65' }}>{feedback.summary}</p>
 
-            {/* Per-subject sections */}
-            {feedback.subjectAnalyses.map((subj, si) => (
-                <div key={si} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: '999px', padding: '2px 10px', fontSize: '0.75rem', fontWeight: 700 }}>
-                            {subj.courseCode} — {subj.courseTitle}
-                        </span>
-                    </div>
-                    <p style={{ fontSize: '0.83rem', color: '#15803d', margin: 0, fontStyle: 'italic', lineHeight: '1.5' }}>{subj.overallComment}</p>
-                    {subj.weakTopics.map((topic, ti) => (
-                        <div key={ti} style={{ background: '#fff', border: '1px solid #bbf7d0', borderRadius: '7px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#166534' }}>
-                                {topic.coTitle}
+            {/* Per-subject sections — each collapsible */}
+            {feedback.subjectAnalyses.map((subj, si) => {
+                const isOpen = openSubjects.has(si);
+                return (
+                    <div key={si} style={{ border: '1px solid var(--prof-border)', borderRadius: '8px', overflow: 'hidden', marginBottom: '8px' }}>
+                        <button
+                            onClick={() => toggleSubject(si)}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '8px 12px', background: 'var(--prof-surface)', border: 'none', cursor: 'pointer', textAlign: 'left', gap: '8px', boxSizing: 'border-box' }}
+                        >
+                            <div style={{ overflow: 'hidden', minWidth: 0, flex: 1 }}>
+                                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{subj.courseCode} </span>
+                                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--prof-text-main)' }}>{subj.courseTitle}</span>
                             </div>
-                            <p style={{ fontSize: '0.82rem', color: '#374151', margin: 0, lineHeight: '1.55' }}>{topic.insight}</p>
-                            {topic.studyTips.length > 0 && (
-                                <div>
-                                    <p style={{ fontSize: '0.73rem', fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '4px 0 4px' }}>Study Tips</p>
-                                    <ul style={{ margin: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                        {topic.studyTips.map((tip, ti2) => (
-                                            <li key={ti2} style={{ fontSize: '0.81rem', color: '#166534', lineHeight: '1.45' }}>{tip}</li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            ))}
-
+                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13" style={{ color: 'var(--prof-text-muted)', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', flexShrink: 0 }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </button>
+                        {isOpen && (
+                            <div style={{ padding: '10px 12px', borderTop: '1px solid var(--prof-border)', overflow: 'hidden' }}>
+                                <p style={{ fontSize: '0.79rem', color: 'var(--prof-text-muted)', margin: '0 0 8px', lineHeight: '1.55' }}>{subj.overallComment}</p>
+                                {subj.weakTopics.map((topic, ti) => (
+                                    <div key={ti} style={{ borderLeft: '2px solid #16a34a', paddingLeft: '10px', marginBottom: '8px', overflow: 'hidden' }}>
+                                        <div style={{ fontSize: '0.77rem', fontWeight: 700, color: 'var(--prof-text-main)', marginBottom: '3px' }}>{topic.coTitle}</div>
+                                        <p style={{ fontSize: '0.78rem', color: '#374151', margin: '0 0 4px', lineHeight: '1.5' }}>{topic.insight}</p>
+                                        {topic.studyTips.length > 0 && (
+                                            <ul style={{ margin: '2px 0 0', paddingLeft: '14px' }}>
+                                                {topic.studyTips.map((tip, ti2) => (
+                                                    <li key={ti2} style={{ fontSize: '0.75rem', color: 'var(--prof-text-muted)', lineHeight: '1.5', marginBottom: '2px' }}>{tip}</li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
         </div>
     );
 }
@@ -328,6 +372,10 @@ export function ViewExam() {
     const [selectedAttempt, setSelectedAttempt] = useState<number | null>(null);
     const [analysisLoaded, setAnalysisLoaded] = useState(false);
     const [analysisLoading, setAnalysisLoading] = useState(false);
+
+    // Mobile accordion state for exam details panel
+    const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+    const [isSubjectsOpen, setIsSubjectsOpen] = useState(false);
 
     const loadData = useCallback(async () => {
         if (!examId || !user) return;
@@ -575,8 +623,8 @@ export function ViewExam() {
 
     // Exam details panel (right side)
     const ExamDetailsPanel = () => (
-        <div className="cs-card" style={{ padding: '16px' }}>
-            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>Exam Details</div>
+        <div className="cs-card ve-details-inner-card" style={{ padding: '16px' }}>
+            <div className="ve-details-panel-title" style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>Exam Details</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: 'var(--prof-text-muted)' }}>Code</span>
@@ -613,15 +661,25 @@ export function ViewExam() {
             {subjectTags.length > 0 && (
                 <>
                     <div style={{ borderTop: '1px solid var(--prof-border)', margin: '12px 0' }} />
-                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Subjects</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {subjectTags.map(s => (
-                            <div key={s.subject_id} style={{ fontSize: '0.82rem', color: 'var(--prof-text-main)' }}>
-                                <span style={{ fontWeight: 700, color: 'var(--prof-primary)' }}>{s.subjects!.course_code}</span>
-                                <span style={{ color: 'var(--prof-text-muted)' }}> — {s.subjects!.course_title}</span>
-                            </div>
-                        ))}
-                    </div>
+                    <button
+                        onClick={() => setIsSubjectsOpen(v => !v)}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: isSubjectsOpen ? '8px' : 0 }}
+                    >
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subjects ({subjectTags.length})</span>
+                        <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13" style={{ color: 'var(--prof-text-muted)', transform: isSubjectsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', flexShrink: 0 }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                        </svg>
+                    </button>
+                    {isSubjectsOpen && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {subjectTags.map(s => (
+                                <div key={s.subject_id} style={{ fontSize: '0.82rem', color: 'var(--prof-text-main)' }}>
+                                    <span style={{ fontWeight: 700, color: 'var(--prof-primary)' }}>{s.subjects!.course_code}</span>
+                                    <span style={{ color: 'var(--prof-text-muted)' }}> — {s.subjects!.course_title}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </>
             )}
 
@@ -710,28 +768,28 @@ export function ViewExam() {
             </div>
 
             {/* Two-column layout */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '20px', alignItems: 'start' }}>
+            <div className="ve-two-col-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '20px', alignItems: 'start' }}>
 
                 {/* ── LEFT: Tab content ── */}
-                <div>
+                <div className="ve-main-col">
                     {/* ══ GRADEBOOK TAB ══ */}
                     {activeTab === 'gradebook' && (
                         <div>
                             {/* Summary stats */}
-                            <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
-                                <div style={{ background: '#fff', border: '1px solid var(--prof-border)', borderRadius: '10px', padding: '12px 16px', minWidth: '120px' }}>
+                            <div className="ve-stat-bar" style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                                <div className="ve-stat-card" style={{ background: '#fff', border: '1px solid var(--prof-border)', borderRadius: '10px', padding: '12px 16px', minWidth: '120px' }}>
                                     <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>Attempts</div>
                                     <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>
                                         {submissions.length} <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--prof-text-muted)' }}>/ {exam.max_attempts}</span>
                                     </div>
                                 </div>
-                                <div style={{ background: '#fff', border: '1px solid var(--prof-border)', borderRadius: '10px', padding: '12px 16px', minWidth: '120px' }}>
+                                <div className="ve-stat-card" style={{ background: '#fff', border: '1px solid var(--prof-border)', borderRadius: '10px', padding: '12px 16px', minWidth: '120px' }}>
                                     <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>Best Score</div>
                                     <div style={{ fontSize: '1.3rem', fontWeight: 700, color: bestScore !== null ? getGradeColors(bestScore, passingRate).text : 'var(--prof-text-muted)' }}>
                                         {bestScore !== null ? `${bestScore.toFixed(0)}%` : '—'}
                                     </div>
                                 </div>
-                                <div style={{ background: '#fff', border: '1px solid var(--prof-border)', borderRadius: '10px', padding: '12px 16px', minWidth: '100px' }}>
+                                <div className="ve-stat-card" style={{ background: '#fff', border: '1px solid var(--prof-border)', borderRadius: '10px', padding: '12px 16px', minWidth: '100px' }}>
                                     <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>Grade</div>
                                     {showGrade ? (
                                         <div style={{ fontSize: '1.5rem', fontWeight: 800, color: hasPassed ? '#15803d' : '#b91c1c' }}>
@@ -745,12 +803,12 @@ export function ViewExam() {
 
                             {/* Attempts table */}
                             <div className="cs-card" style={{ padding: 0, overflow: 'hidden' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 110px 110px 110px', gap: '0 10px', padding: '9px 16px', background: 'var(--prof-surface)', borderBottom: '1px solid var(--prof-border)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', alignItems: 'center' }}>
+                                <div className="ve-gb-header" style={{ display: 'grid', gridTemplateColumns: '28px 1fr 110px 110px 110px', gap: '0 10px', padding: '9px 16px', background: 'var(--prof-surface)', borderBottom: '1px solid var(--prof-border)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', alignItems: 'center' }}>
                                     <div />
                                     <div>Item</div>
-                                    <div>Date</div>
+                                    <div className="ve-gb-col-date">Date</div>
                                     <div>Grade</div>
-                                    <div>Status</div>
+                                    <div className="ve-gb-col-status">Status</div>
                                 </div>
 
                                 {Array.from({ length: exam.max_attempts }, (_, i) => i + 1).map(attemptNum => {
@@ -775,6 +833,7 @@ export function ViewExam() {
                                     return (
                                         <div
                                             key={attemptNum}
+                                            className="ve-gb-row"
                                             style={{ display: 'grid', gridTemplateColumns: '28px 1fr 110px 110px 110px', gap: '0 10px', padding: '12px 16px', borderBottom: '1px solid var(--prof-border)', alignItems: 'center', fontSize: '0.85rem' }}
                                         >
                                             <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -786,7 +845,7 @@ export function ViewExam() {
                                                     <div style={{ fontSize: '0.75rem', color: 'var(--prof-text-muted)', marginTop: '1px' }}>Set {setLabel}</div>
                                                 )}
                                             </div>
-                                            <div style={{ color: 'var(--prof-text-muted)', fontSize: '0.8rem' }}>
+                                            <div className="ve-gb-col-date" style={{ color: 'var(--prof-text-muted)', fontSize: '0.8rem' }}>
                                                 {formatDate(sub?.submitted_at ?? null)}
                                             </div>
                                             <div>
@@ -797,7 +856,7 @@ export function ViewExam() {
                                                         : <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>—</span>
                                                 }
                                             </div>
-                                            <div>
+                                            <div className="ve-gb-col-status">
                                                 <span style={{ fontWeight: 600, fontSize: '0.75rem', color: rowStatusColor }}>
                                                     {rowStatus}
                                                 </span>
@@ -900,17 +959,17 @@ export function ViewExam() {
 
                                                         {/* Attempt selector */}
                                                         {gradedSubs.length > 1 && (
-                                                            <div style={{ display: 'flex', gap: '3px', background: '#f1f5f9', borderRadius: '8px', padding: '3px' }}>
+                                                            <select
+                                                                value={activeAttemptNum ?? ''}
+                                                                onChange={e => setSelectedAttempt(Number(e.target.value))}
+                                                                style={{ fontSize: '0.78rem', fontWeight: 600, padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--prof-border)', background: '#fff', color: 'var(--prof-text-main)', cursor: 'pointer', outline: 'none' }}
+                                                            >
                                                                 {gradedSubs.map(s => (
-                                                                    <button
-                                                                        key={s.attempt_number}
-                                                                        onClick={() => setSelectedAttempt(s.attempt_number)}
-                                                                        style={{ fontSize: '0.73rem', fontWeight: 600, padding: '3px 9px', borderRadius: '5px', border: 'none', cursor: 'pointer', background: s.attempt_number === activeAttemptNum ? '#fff' : 'transparent', color: s.attempt_number === activeAttemptNum ? 'var(--prof-text-main)' : 'var(--prof-text-muted)', boxShadow: s.attempt_number === activeAttemptNum ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.15s' }}
-                                                                    >
+                                                                    <option key={s.attempt_number} value={s.attempt_number}>
                                                                         Attempt {s.attempt_number}
-                                                                    </button>
+                                                                    </option>
                                                                 ))}
-                                                            </div>
+                                                            </select>
                                                         )}
 
                                                         {/* View toggle */}
@@ -951,35 +1010,38 @@ export function ViewExam() {
                                                     )}
                                                 </div>
 
-                                                {/* ── Separate AI Analysis card ── */}
+                                                {/* ── AI Analysis card ── */}
                                                 {exam.ai_analysis_enabled && analysis && activeAttemptNum !== null && (
-                                                    <div className="cs-card" style={{ background: '#f0fdf4', border: '1px solid #86efac' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
-                                                            <svg fill="none" strokeWidth="2" stroke="#16a34a" viewBox="0 0 24 24" width="15" height="15">
+                                                    <div className="cs-card" style={{ padding: '12px 14px', border: '1px solid var(--prof-border)', background: '#fff', overflow: 'hidden', minWidth: 0 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', paddingBottom: '10px', marginBottom: '10px', borderBottom: '1px solid var(--prof-border)' }}>
+                                                            <svg fill="none" strokeWidth="2" stroke="#16a34a" viewBox="0 0 24 24" width="13" height="13">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
                                                             </svg>
-                                                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.05em' }}>AI Analysis</span>
+                                                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.06em' }}>AI Analysis</span>
                                                         </div>
                                                         {analysis.aiFeedback ? (
                                                             <AIAnalysisCard feedback={analysis.aiFeedback} />
                                                         ) : analysis.isLoadingAI ? (
-                                                            <div style={{ fontSize: '0.82rem', color: '#15803d', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                                <svg style={{ animation: 'spin 1s linear infinite' }} fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
+                                                            <div style={{ fontSize: '0.8rem', color: 'var(--prof-text-muted)', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                                                                <svg style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} fill="none" strokeWidth="2" stroke="#16a34a" viewBox="0 0 24 24" width="13" height="13">
                                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                                                                 </svg>
-                                                                Generating AI analysis...
+                                                                Generating analysis...
                                                             </div>
                                                         ) : analysis.aiError ? (
-                                                            <p style={{ fontSize: '0.82rem', color: '#b91c1c', margin: 0 }}>{analysis.aiError}</p>
+                                                            <p style={{ fontSize: '0.79rem', color: '#b91c1c', margin: 0 }}>{analysis.aiError}</p>
                                                         ) : hasWeakTopics ? (
                                                             <button
                                                                 onClick={() => loadAttemptAI(activeAttemptNum)}
-                                                                style={{ fontSize: '0.8rem', fontWeight: 600, color: '#15803d', background: '#dcfce7', border: '1px solid #86efac', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer' }}
+                                                                style={{ fontSize: '0.78rem', fontWeight: 600, color: '#15803d', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', padding: '5px 12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                                                             >
-                                                                Generate AI Analysis
+                                                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="12" height="12">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                                                                </svg>
+                                                                Generate Analysis
                                                             </button>
                                                         ) : (
-                                                            <p style={{ fontSize: '0.82rem', color: '#15803d', margin: 0, fontStyle: 'italic' }}>No weak areas to analyze.</p>
+                                                            <p style={{ fontSize: '0.79rem', color: 'var(--prof-text-muted)', margin: 0 }}>No weak areas detected.</p>
                                                         )}
                                                     </div>
                                                 )}
@@ -993,8 +1055,21 @@ export function ViewExam() {
                 </div>
 
                 {/* ── RIGHT: Exam details panel ── */}
-                <div>
-                    <ExamDetailsPanel />
+                <div className="ve-details-col">
+                    <div className="ve-details-card">
+                        <button
+                            className="ve-details-toggle"
+                            onClick={() => setIsDetailsOpen(v => !v)}
+                        >
+                            <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Exam Details</span>
+                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16" style={{ color: 'var(--prof-text-muted)', transform: isDetailsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', flexShrink: 0 }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </button>
+                        <div className={`ve-details-panel-body${isDetailsOpen ? ' ve-details-panel-open' : ''}`}>
+                            <ExamDetailsPanel />
+                        </div>
+                    </div>
                 </div>
             </div>
 

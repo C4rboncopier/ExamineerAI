@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useLayoutEffect, useCallback } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { LineChart } from '@mui/x-charts/LineChart';
@@ -21,6 +21,21 @@ const PIE_COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#14b8a6', '#f43
 const APP_FONT = "'Inter', system-ui, -apple-system, sans-serif";
 
 const chartTheme = createTheme({ typography: { fontFamily: APP_FONT } });
+
+function useContainerWidth() {
+    const [node, setNode] = useState<HTMLDivElement | null>(null);
+    const [width, setWidth] = useState(0);
+    const ref = useCallback((el: HTMLDivElement | null) => { setNode(el); }, []);
+    useLayoutEffect(() => {
+        if (!node) return;
+        const update = () => { if (node.offsetWidth > 0) setWidth(node.offsetWidth); };
+        const ro = new ResizeObserver(update);
+        ro.observe(node);
+        update();
+        return () => ro.disconnect();
+    }, [node]);
+    return { ref, width };
+}
 
 const CHART_SX = {
     '& .MuiChartsAxis-tickLabel': { fontSize: '0.7rem !important' },
@@ -121,9 +136,12 @@ function GradeDistributionChart({ gradeDist, totalSubmissions, isAllAttempts }: 
     isAllAttempts: boolean;
 }) {
     const [chartType, setChartType] = useState<'bar' | 'line'>('bar');
+    const { ref: containerRef, width } = useContainerWidth();
     const unit = isAllAttempts ? 'submission' : 'student';
     const unitPlural = isAllAttempts ? 'submissions' : 'students';
     const yLabel = isAllAttempts ? 'Submissions' : 'Students';
+    // Show just the lower bound "0%", "10%", … to keep labels compact
+    const shortLabel = (v: string) => { const m = v.match(/^(\d+)/); return m ? `${m[1]}%` : v; };
 
     return (
         <ThemeProvider theme={chartTheme}>
@@ -144,38 +162,51 @@ function GradeDistributionChart({ gradeDist, totalSubmissions, isAllAttempts }: 
                     </ChartToggleBtn>
                 </div>
 
-                {chartType === 'bar' ? (
-                    <BarChart
-                        series={[{
-                            data: gradeDist.map(b => b.count),
-                            valueFormatter: (v) => v !== null
-                                ? `${v} ${v !== 1 ? unitPlural : unit} (${totalSubmissions > 0 ? ((v / totalSubmissions) * 100).toFixed(0) : 0}%)`
-                                : '',
-                        }]}
-                        xAxis={[{ data: gradeDist.map(b => b.label), scaleType: 'band', colorMap: { type: 'ordinal', colors: gradeDist.map(b => b.solid) } }]}
-                        yAxis={[{ min: 0, label: yLabel }]}
-                        height={220}
-                        margin={{ top: 16, bottom: 36, left: 52, right: 10 }}
-                        slots={{ legend: () => null }}
-                        sx={CHART_SX}
-                    />
-                ) : (
-                    <LineChart
-                        series={[{
-                            data: gradeDist.map(b => b.count),
-                            area: true,
-                            showMark: true,
-                            color: '#2563eb',
-                            valueFormatter: (v) => v !== null ? `${v} ${v !== 1 ? unitPlural : unit}` : '',
-                        }]}
-                        xAxis={[{ data: gradeDist.map(b => b.label), scaleType: 'band' }]}
-                        yAxis={[{ min: 0, label: yLabel }]}
-                        height={220}
-                        margin={{ top: 16, bottom: 36, left: 52, right: 10 }}
-                        slots={{ legend: () => null }}
-                        sx={CHART_SX}
-                    />
-                )}
+                <div ref={containerRef} style={{ width: '100%' }}>
+                    {width > 0 && (chartType === 'bar' ? (
+                        <BarChart
+                            series={[{
+                                data: gradeDist.map(b => b.count),
+                                valueFormatter: (v) => v !== null
+                                    ? `${v} ${v !== 1 ? unitPlural : unit} (${totalSubmissions > 0 ? ((v / totalSubmissions) * 100).toFixed(0) : 0}%)`
+                                    : '',
+                            }]}
+                            xAxis={[{
+                                data: gradeDist.map(b => b.label),
+                                scaleType: 'band',
+                                colorMap: { type: 'ordinal', colors: gradeDist.map(b => b.solid) },
+                                valueFormatter: shortLabel,
+                            }]}
+                            yAxis={[{ min: 0, label: yLabel }]}
+                            width={width}
+                            height={220}
+                            margin={{ top: 16, bottom: 36, left: 38, right: 10 }}
+                            slots={{ legend: () => null }}
+                            sx={CHART_SX}
+                        />
+                    ) : (
+                        <LineChart
+                            series={[{
+                                data: gradeDist.map(b => b.count),
+                                area: true,
+                                showMark: true,
+                                color: '#2563eb',
+                                valueFormatter: (v) => v !== null ? `${v} ${v !== 1 ? unitPlural : unit}` : '',
+                            }]}
+                            xAxis={[{
+                                data: gradeDist.map(b => b.label),
+                                scaleType: 'band',
+                                valueFormatter: shortLabel,
+                            }]}
+                            yAxis={[{ min: 0, label: yLabel }]}
+                            width={width}
+                            height={220}
+                            margin={{ top: 16, bottom: 36, left: 38, right: 10 }}
+                            slots={{ legend: () => null }}
+                            sx={CHART_SX}
+                        />
+                    ))}
+                </div>
             </div>
         </ThemeProvider>
     );
@@ -191,6 +222,7 @@ function SubjectAccuracyChart({ subjectStats, avgPct, passingRate, subjectDistri
 }) {
     const [chartType, setChartType] = useState<'donut' | 'line'>('donut');
     const [hovered, setHovered] = useState<string | null>(null);
+    const { ref: lineContainerRef, width: lineWidth } = useContainerWidth();
 
     const toggle = (
         <div style={{
@@ -317,25 +349,31 @@ function SubjectAccuracyChart({ subjectStats, avgPct, passingRate, subjectDistri
 
         return (
             <ThemeProvider theme={chartTheme}>
-                <LineChart
-                    series={subjectStats.map((subj, i) => ({
-                        data: subjectDistribution[subj.subjectId] ?? Array(10).fill(0),
-                        label: subj.code,
-                        color: PIE_COLORS[i % PIE_COLORS.length],
-                        showMark: true,
-                        curve: 'linear' as const,
-                        valueFormatter: (v: number | null) => v !== null ? `${v} student${v !== 1 ? 's' : ''}` : '',
-                    }))}
-                    xAxis={[{
-                        data: xLabels,
-                        scaleType: 'band',
-                        label: 'Score Range',
-                    }]}
-                    yAxis={[{ min: 0, label: 'Students' }]}
-                    height={270}
-                    margin={{ top: 16, bottom: 56, left: 56, right: 16 }}
-                    sx={CHART_SX}
-                />
+                <div ref={lineContainerRef} style={{ width: '100%' }}>
+                    {lineWidth > 0 && (
+                        <LineChart
+                            series={subjectStats.map((subj, i) => ({
+                                data: subjectDistribution[subj.subjectId] ?? Array(10).fill(0),
+                                label: subj.code,
+                                color: PIE_COLORS[i % PIE_COLORS.length],
+                                showMark: true,
+                                curve: 'linear' as const,
+                                valueFormatter: (v: number | null) => v !== null ? `${v} student${v !== 1 ? 's' : ''}` : '',
+                            }))}
+                            xAxis={[{
+                                data: xLabels,
+                                scaleType: 'band',
+                                label: 'Score Range',
+                                valueFormatter: (v: string) => { const m = v.match(/^(\d+)/); return m ? `${m[1]}%` : v; },
+                            }]}
+                            yAxis={[{ min: 0, label: 'Students' }]}
+                            width={lineWidth}
+                            height={270}
+                            margin={{ top: 16, bottom: 56, left: 38, right: 16 }}
+                            sx={CHART_SX}
+                        />
+                    )}
+                </div>
             </ThemeProvider>
         );
     };
@@ -355,33 +393,46 @@ function AttemptTrendLine({ attemptTrend }: {
     attemptTrend: { attemptNum: number; avgPct: number; count: number }[];
     passingRate: number;
 }) {
+    const { ref: containerRef, width } = useContainerWidth();
     if (attemptTrend.length < 2) return null;
 
     return (
         <ThemeProvider theme={chartTheme}>
-            <LineChart
-                series={[{
-                    data: attemptTrend.map(d => parseFloat(d.avgPct.toFixed(1))),
-                    area: true,
-                    showMark: true,
-                    color: '#3b82f6',
-                    valueFormatter: (v) => v !== null ? `${v.toFixed(1)}%` : '',
-                }]}
-                xAxis={[{
-                    data: attemptTrend.map(d => `Attempt ${d.attemptNum} (n=${d.count})`),
-                    scaleType: 'band',
-                }]}
-                yAxis={[{
-                    min: 0,
-                    max: 100,
-                    valueFormatter: (v: number) => `${v}%`,
-                    label: 'Avg Score',
-                }]}
-                height={200}
-                margin={{ top: 16, bottom: 48, left: 60, right: 16 }}
-                slots={{ legend: () => null }}
-                sx={CHART_SX}
-            />
+            <div ref={containerRef} style={{ width: '100%' }}>
+                {width > 0 && (
+                    <LineChart
+                        series={[{
+                            data: attemptTrend.map(d => parseFloat(d.avgPct.toFixed(1))),
+                            area: true,
+                            showMark: true,
+                            color: '#3b82f6',
+                            valueFormatter: (v) => v !== null ? `${v.toFixed(1)}%` : '',
+                        }]}
+                        xAxis={[{
+                            data: attemptTrend.map(d => d.attemptNum),
+                            scaleType: 'band',
+                            valueFormatter: (v, context) => {
+                                const d = attemptTrend.find(a => a.attemptNum === v);
+                                if (!d) return `Att.${v}`;
+                                return context.location === 'tick'
+                                    ? `Att.${d.attemptNum}`
+                                    : `Attempt ${d.attemptNum} (n=${d.count})`;
+                            },
+                        }]}
+                        yAxis={[{
+                            min: 0,
+                            max: 100,
+                            valueFormatter: (v: number) => `${v}%`,
+                            label: 'Avg Score',
+                        }]}
+                        width={width}
+                        height={200}
+                        margin={{ top: 16, bottom: 36, left: 44, right: 16 }}
+                        slots={{ legend: () => null }}
+                        sx={CHART_SX}
+                    />
+                )}
+            </div>
         </ThemeProvider>
     );
 }
@@ -708,7 +759,7 @@ export function ExamAnalysis({ exam, gradesData, questionMap, passingRate, isLoa
             {/* ── Attempt filter bar ── */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--prof-surface)', border: '1px solid var(--prof-border)', borderRadius: '10px', padding: '8px 14px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.69rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--prof-text-muted)', marginRight: '4px', whiteSpace: 'nowrap' }}>Filter by Attempt</span>
-                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                <div className="ea-attempt-buttons" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                     {[null, ...availableAttempts].map(a => {
                         const isActive = attemptFilter === a;
                         return (
@@ -720,10 +771,22 @@ export function ExamAnalysis({ exam, gradesData, questionMap, passingRate, isLoa
                         );
                     })}
                 </div>
+                <select
+                    className="ea-attempt-select"
+                    value={attemptFilter === null ? 'all' : String(attemptFilter)}
+                    onChange={e => {
+                        const val = e.target.value;
+                        setAttemptFilter(val === 'all' ? null : Number(val));
+                        setDrilldown(null);
+                    }}
+                >
+                    <option value="all">All Attempts</option>
+                    {availableAttempts.map(a => <option key={a} value={String(a)}>Attempt {a}</option>)}
+                </select>
             </div>
 
             {/* ── KPI cards ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+            <div className="ea-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
                 {[
                     { label: 'Total Students', value: analysis.totalStudents.toString(), color: '#2563eb' },
                     { label: 'Avg Accuracy', value: `${analysis.avgPct.toFixed(1)}%`, color: getGradeColors(analysis.avgPct, passingRate).solid },
@@ -742,7 +805,7 @@ export function ExamAnalysis({ exam, gradesData, questionMap, passingRate, isLoa
             </div>
 
             {/* ── Charts row ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="ea-charts-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
 
                 {/* Grade Distribution */}
                 <div className="cs-card" style={{ padding: '20px 22px', marginBottom: 0 }}>
@@ -872,7 +935,7 @@ export function ExamAnalysis({ exam, gradesData, questionMap, passingRate, isLoa
             </div>
 
             {/* ── Attempt Trend + Class Insights row ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: analysis.attemptTrend.length >= 2 ? '1fr 1fr' : '1fr', gap: '16px' }}>
+            <div className="ea-trend-row" style={{ display: 'grid', gridTemplateColumns: analysis.attemptTrend.length >= 2 ? '1fr 1fr' : '1fr', gap: '16px' }}>
 
                 {/* Attempt Trend */}
                 {analysis.attemptTrend.length >= 2 && (

@@ -88,9 +88,11 @@ export function SubjectsList() {
                     <h2 className="subjects-title">Subjects</h2>
                     <p className="subjects-subtitle">Manage your course subjects and their syllabi.</p>
                 </div>
-                <button className="btn-primary" onClick={() => navigate('/professor/subjects/create')}>
-                    + Create Subject
-                </button>
+                <div className="prof-exam-header-btns">
+                    <button className="btn-primary" onClick={() => navigate('/professor/subjects/create')}>
+                        + Create Subject
+                    </button>
+                </div>
             </div>
 
             {error && <p className="cs-error">{error}</p>}
@@ -129,6 +131,7 @@ export function SubjectsList() {
                             )}
                         </div>
                         <select
+                            className="subjects-access-select"
                             value={accessFilter}
                             onChange={e => setAccessFilter(e.target.value as AccessFilter)}
                             style={{

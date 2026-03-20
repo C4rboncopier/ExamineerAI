@@ -86,12 +86,12 @@ export function AdminExamsList() {
                         </button>
                     )}
                 </div>
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...filterSelectStyle, color: statusFilter ? 'var(--prof-text-main)' : 'var(--prof-text-muted)', width: '160px' }}>
+                <select className="admin-exam-filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...filterSelectStyle, color: statusFilter ? 'var(--prof-text-main)' : 'var(--prof-text-muted)', width: '160px' }}>
                     <option value="">All Statuses</option>
                     <option value="unlocked">Unlocked</option>
                     <option value="locked">Locked</option>
                 </select>
-                <select value={yearFilter} onChange={e => setYearFilter(e.target.value)} style={{ ...filterSelectStyle, color: yearFilter ? 'var(--prof-text-main)' : 'var(--prof-text-muted)', width: '180px' }}>
+                <select className="admin-exam-filter-select" value={yearFilter} onChange={e => setYearFilter(e.target.value)} style={{ ...filterSelectStyle, color: yearFilter ? 'var(--prof-text-main)' : 'var(--prof-text-muted)', width: '180px' }}>
                     <option value="">All Academic Years</option>
                     {academicYears.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
@@ -110,10 +110,16 @@ export function AdminExamsList() {
             ) : (
                 <div className="templates-simple-list" style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--prof-border)' }}>
                     {/* Header */}
-                    <div style={{ display: 'grid', gridTemplateColumns: GRID, alignItems: 'center', padding: '8px 14px', background: 'var(--prof-bg)', borderBottom: '1px solid var(--prof-border)', gap: '12px' }}>
+                    <div className="admin-exam-list-header" style={{ display: 'grid', gridTemplateColumns: GRID, alignItems: 'center', padding: '8px 14px', background: 'var(--prof-bg)', borderBottom: '1px solid var(--prof-border)', gap: '12px' }}>
                         <div />
-                        {['Exam', 'Main Professor', 'Created', 'Students', 'Status'].map(label => (
-                            <span key={label} style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
+                        {[
+                            { label: 'Exam', cls: '' },
+                            { label: 'Main Professor', cls: 'admin-hide-mobile' },
+                            { label: 'Created', cls: 'admin-hide-mobile' },
+                            { label: 'Students', cls: 'admin-hide-mobile' },
+                            { label: 'Status', cls: '' },
+                        ].map(({ label, cls }) => (
+                            <span key={label} className={cls || undefined} style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
                         ))}
                     </div>
 
@@ -125,6 +131,7 @@ export function AdminExamsList() {
                             <div key={exam.id}>
                                 {/* Main row */}
                                 <div
+                                    className="admin-exam-list-row"
                                     style={{ display: 'grid', gridTemplateColumns: GRID, alignItems: 'center', padding: '10px 14px', gap: '12px', background: isExpanded ? '#f8fafc' : idx % 2 === 0 ? '#fff' : 'var(--prof-bg)', borderBottom: (!isExpanded && !isLast) ? '1px solid var(--prof-border)' : isExpanded ? '1px solid var(--prof-border)' : 'none', transition: 'background 0.1s', cursor: 'pointer' }}
                                     onClick={() => toggleExpand(exam.id)}
                                 >
@@ -140,13 +147,13 @@ export function AdminExamsList() {
                                         <p style={{ margin: 0, fontSize: '0.775rem', color: 'var(--prof-text-muted)' }}>{exam.code}</p>
                                     </div>
 
-                                    <span style={{ fontSize: '0.85rem', color: 'var(--prof-text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <span className="admin-hide-mobile" style={{ fontSize: '0.85rem', color: 'var(--prof-text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                         {exam.creator_name || exam.creator_email || '—'}
                                     </span>
 
-                                    <span style={{ fontSize: '0.825rem', color: 'var(--prof-text-muted)' }}>{formatDate(exam.created_at)}</span>
+                                    <span className="admin-hide-mobile" style={{ fontSize: '0.825rem', color: 'var(--prof-text-muted)' }}>{formatDate(exam.created_at)}</span>
 
-                                    <span style={{ fontSize: '0.875rem', color: 'var(--prof-text-main)', fontWeight: 500 }}>{exam.enrollment_count}</span>
+                                    <span className="admin-hide-mobile" style={{ fontSize: '0.875rem', color: 'var(--prof-text-main)', fontWeight: 500 }}>{exam.enrollment_count}</span>
 
                                     <div>
                                         <span style={{
@@ -162,7 +169,7 @@ export function AdminExamsList() {
 
                                 {/* Expanded detail panel */}
                                 {isExpanded && (
-                                    <div style={{ background: '#f8fafc', borderBottom: !isLast ? '1px solid var(--prof-border)' : 'none', padding: '10px 20px 12px 60px' }}>
+                                    <div className="admin-exam-detail-panel" style={{ background: '#f8fafc', borderBottom: !isLast ? '1px solid var(--prof-border)' : 'none', padding: '10px 20px 12px 60px' }}>
                                         {/* Metadata strip */}
                                         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', marginBottom: '9px', rowGap: '4px' }}>
                                             <span style={{

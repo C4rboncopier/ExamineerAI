@@ -189,7 +189,7 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
 
     return (
         <div className="subjects-container">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', alignItems: 'start' }}>
+            <div className="es-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', alignItems: 'start' }}>
                 {/* ── Enrolled Students ── */}
                 <div className="cs-card" style={{ padding: '20px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>

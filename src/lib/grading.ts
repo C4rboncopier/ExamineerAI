@@ -260,8 +260,15 @@ export async function scanOMRImage(file: File, serverUrl: string): Promise<OMRRe
     return res.json() as Promise<OMRResult>;
 }
 
-/** Send a ZIP file to the OMR server for batch processing. */
-export async function scanOMRBatch(file: File, serverUrl: string): Promise<OMRResult[]> {
+/** Send a ZIP file to the OMR server for batch processing.
+ *  Reads the NDJSON stream so results arrive progressively — no 100 MB response blob.
+ *  onProgress(done, total) is called after each image is received.
+ */
+export async function scanOMRBatch(
+    file: File,
+    serverUrl: string,
+    onProgress?: (done: number, total: number) => void,
+): Promise<OMRResult[]> {
     const form = new FormData();
     form.append('file', file);
 
@@ -270,7 +277,37 @@ export async function scanOMRBatch(file: File, serverUrl: string): Promise<OMRRe
         const text = await res.text().catch(() => res.statusText);
         throw new Error(`OMR server error: ${text}`);
     }
-    return res.json() as Promise<OMRResult[]>;
+    if (!res.body) throw new Error('No response body from OMR server');
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    const results: OMRResult[] = [];
+    let buffer = '';
+    let total = 0;
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';   // keep any incomplete trailing line
+
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            const msg = JSON.parse(line) as { type: string; total?: number } & Partial<OMRResult>;
+            if (msg.type === 'total') {
+                total = msg.total ?? 0;
+                onProgress?.(0, total);
+            } else if (msg.type === 'result') {
+                const { type: _t, ...result } = msg;
+                results.push(result as OMRResult);
+                onProgress?.(results.length, total);
+            }
+        }
+    }
+
+    return results;
 }
 
 /** Test connection to the OMR server. */

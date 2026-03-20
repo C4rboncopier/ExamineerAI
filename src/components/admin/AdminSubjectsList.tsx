@@ -62,8 +62,8 @@ export function AdminSubjectsList() {
             </div>
 
             {/* Search */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
-                <div className="subjects-search" style={{ flex: '1 1 0', minWidth: 0, marginBottom: 0 }}>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="subjects-search" style={{ flex: '1 1 200px', minWidth: 0, marginBottom: 0 }}>
                     <svg className="search-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                     </svg>
@@ -89,10 +89,15 @@ export function AdminSubjectsList() {
             ) : (
                 <div className="templates-simple-list" style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--prof-border)' }}>
                     {/* Header */}
-                    <div style={{ display: 'grid', gridTemplateColumns: GRID, alignItems: 'center', padding: '8px 14px', background: 'var(--prof-bg)', borderBottom: '1px solid var(--prof-border)', gap: '12px' }}>
+                    <div className="admin-subject-list-header" style={{ display: 'grid', gridTemplateColumns: GRID, alignItems: 'center', padding: '8px 14px', background: 'var(--prof-bg)', borderBottom: '1px solid var(--prof-border)', gap: '12px' }}>
                         <div />
-                        {['Subject', 'Main Professor', 'Created', 'Questions'].map(label => (
-                            <span key={label} style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
+                        {[
+                            { label: 'Subject', cls: '' },
+                            { label: 'Main Professor', cls: '' },
+                            { label: 'Created', cls: 'admin-hide-mobile' },
+                            { label: 'Questions', cls: 'admin-hide-mobile' },
+                        ].map(({ label, cls }) => (
+                            <span key={label} className={cls || undefined} style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
                         ))}
                     </div>
 
@@ -108,6 +113,7 @@ export function AdminSubjectsList() {
                             <div key={subject.id}>
                                 {/* Main row */}
                                 <div
+                                    className="admin-subject-list-row"
                                     style={{ display: 'grid', gridTemplateColumns: GRID, alignItems: 'center', padding: '10px 14px', gap: '12px', background: isExpanded ? '#f8fafc' : idx % 2 === 0 ? '#fff' : 'var(--prof-bg)', borderBottom: (!isExpanded && !isLast) ? '1px solid var(--prof-border)' : isExpanded ? '1px solid var(--prof-border)' : 'none', transition: 'background 0.1s', cursor: 'pointer' }}
                                     onClick={() => handleToggleExpand(subject.id)}
                                 >
@@ -133,14 +139,14 @@ export function AdminSubjectsList() {
                                         {subject.creator_name || subject.creator_email || '—'}
                                     </span>
 
-                                    <span style={{ fontSize: '0.825rem', color: 'var(--prof-text-muted)' }}>{formatDate(subject.created_at)}</span>
+                                    <span className="admin-hide-mobile" style={{ fontSize: '0.825rem', color: 'var(--prof-text-muted)' }}>{formatDate(subject.created_at)}</span>
 
-                                    <span style={{ fontSize: '0.875rem', color: 'var(--prof-text-main)', fontWeight: 500 }}>{questionCount}</span>
+                                    <span className="admin-hide-mobile" style={{ fontSize: '0.875rem', color: 'var(--prof-text-main)', fontWeight: 500 }}>{questionCount}</span>
                                 </div>
 
                                 {/* Expanded detail panel */}
                                 {isExpanded && (
-                                    <div style={{ background: '#f8fafc', borderBottom: !isLast ? '1px solid var(--prof-border)' : 'none', padding: '16px 20px 18px 20px' }}>
+                                    <div className="admin-subject-detail-panel" style={{ background: '#f8fafc', borderBottom: !isLast ? '1px solid var(--prof-border)' : 'none', padding: '16px 20px 18px 20px' }}>
                                         {isLoadingThis || !detail ? (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--prof-text-muted)', fontSize: '0.875rem' }}>
                                                 <svg style={{ animation: 'spin 1s linear infinite' }} fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
@@ -214,7 +220,7 @@ export function AdminSubjectsList() {
                                                                             </div>
                                                                             {/* MOs */}
                                                                             {co.module_outcomes.length > 0 && (
-                                                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                                                <div className="admin-subject-mo-list" style={{ display: 'flex', flexDirection: 'column' }}>
                                                                                     {[...co.module_outcomes]
                                                                                         .sort((a, b) => a.order_index - b.order_index)
                                                                                         .map((mo, moIdx) => {

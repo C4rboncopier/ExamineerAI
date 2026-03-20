@@ -154,7 +154,7 @@ function MiniSubjectPieChart({ subjects, questionIds, questionMap, answers, pass
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
             {/* Pie + legend row */}
-            <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <div className="mini-pie-legend-row" style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
                 <svg viewBox="0 0 180 180" width="180" height="180"
                     style={{ flexShrink: 0, filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.12))', transform: 'perspective(600px) rotateX(12deg)', animation: 'pieIn 0.45s ease', transformOrigin: 'center' }}>
                     {allSlices.map(s => {
@@ -355,6 +355,7 @@ export function ViewExam() {
     const [gradePageMap, setGradePageMap] = useState<Record<number, number>>({});
     const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
     const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+    const [isProfDetailsOpen, setIsProfDetailsOpen] = useState(false);
 
     useEffect(() => {
         fetchSchoolInfo().then(({ name, logoUrl }) => {
@@ -422,7 +423,7 @@ export function ViewExam() {
     }, [exam]);
 
     useEffect(() => {
-        if (exam && !questionsLoadedRef.current && (activeTab === 'papers' || activeTab === 'analysis')) {
+        if (exam && !questionsLoadedRef.current && (activeTab === 'papers' || activeTab === 'analysis' || activeTab === 'overview')) {
             loadQuestions();
         }
     }, [exam, activeTab, loadQuestions]);
@@ -718,6 +719,8 @@ export function ViewExam() {
                 : { mode: 'per_mo', mo_counts: { ...genPerMOCounts } };
         const { error } = await generateExamPapersForAttempt(exam.id, attemptNumber, subjectIds, allocationConfig, exam.num_sets);
         if (error) { setGenerateError(error); setIsGenerating(false); return; }
+        questionsLoadedRef.current = false;
+        setQuestionMap({});
         await loadExam();
         setIsGenerating(false);
         setShowGenerateForm(null);
@@ -728,6 +731,8 @@ export function ViewExam() {
         if (!exam) return;
         setIsDeletingAttempt(attemptNumber);
         await deleteAttemptPapers(exam.id, attemptNumber);
+        questionsLoadedRef.current = false;
+        setQuestionMap({});
         await loadExam();
         setIsDeletingAttempt(null);
         setActiveSet(0);
@@ -920,7 +925,7 @@ export function ViewExam() {
             </div>
 
             {/* ── Tab nav ── */}
-            <div style={{ display: 'flex', borderBottom: '2px solid var(--prof-border)', marginBottom: '24px' }}>
+            <div className="prof-tab-nav" style={{ display: 'flex', borderBottom: '2px solid var(--prof-border)', marginBottom: '24px' }}>
                 {(['overview', 'papers', 'scan', 'analysis', 'students'] as Tab[]).map(t => {
                     const isActive = activeTab === t;
                     return (
@@ -961,10 +966,10 @@ export function ViewExam() {
                 OVERVIEW TAB
             ══════════════════════════════════════════════ */}
             {activeTab === 'overview' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '20px', alignItems: 'start' }}>
+                <div className="pve-overview-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '20px', alignItems: 'start' }}>
 
                     {/* ── Left column: Student Grades ── */}
-                    <div>
+                    <div className="pve-main-col">
                         {deployedAttempts.length === 0 ? (
                             <div className="cs-card" style={{ padding: '48px 24px', textAlign: 'center' }}>
                                 <p style={{ margin: '0 0 6px', fontSize: '0.92rem', color: 'var(--prof-text-muted)' }}>No grades yet.</p>
@@ -1006,7 +1011,30 @@ export function ViewExam() {
                                         <>
                                             {/* Filter pills + action buttons */}
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 16px', background: '#f8fafc', borderBottom: '1px solid var(--prof-border)', flexWrap: 'wrap', gap: '6px' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                {/* Mobile attempt selector — hidden on desktop */}
+                                                <select
+                                                    className="pve-attempt-select"
+                                                    value={gradesSummaryMode ? 'summary' : String(activeNum)}
+                                                    onChange={e => {
+                                                        if (e.target.value === 'summary') {
+                                                            setGradesSummaryMode(true);
+                                                            setSelectModeAttempt(null); setSelectedGradeKeys(new Set()); setExpandedGradeKey(null); setEditingGradeKey(null);
+                                                        } else {
+                                                            const n = Number(e.target.value);
+                                                            setGradesAttemptFilter(n); setGradesSummaryMode(false);
+                                                            setSelectModeAttempt(null); setSelectedGradeKeys(new Set()); setExpandedGradeKey(null); setEditingGradeKey(null);
+                                                        }
+                                                    }}
+                                                >
+                                                    {Array.from({ length: exam.max_attempts }, (_, i) => i + 1).map(n => {
+                                                        const nStatus = attemptStatusMap[n] ?? 'draft';
+                                                        const isDeployed = nStatus === 'deployed' || nStatus === 'done';
+                                                        return <option key={n} value={String(n)} disabled={!isDeployed}>Attempt {n}</option>;
+                                                    })}
+                                                    <option value="summary">Summary</option>
+                                                </select>
+                                                {/* Desktop attempt pills — hidden on mobile */}
+                                                <div className="pve-attempt-pills" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                                     {Array.from({ length: exam.max_attempts }, (_, i) => i + 1).map(n => {
                                                         const isActive = activeNum === n;
                                                         const nStatus = attemptStatusMap[n] ?? 'draft';
@@ -1034,7 +1062,7 @@ export function ViewExam() {
                                                         </span>
                                                     )}
                                                 </div>
-                                                <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                                                <div className="pve-action-btns" style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                                                     {isSelecting ? (
                                                         <>
                                                             {selectedCount > 0 && (
@@ -1223,11 +1251,11 @@ export function ViewExam() {
                                                                         </th>
                                                                     )}
                                                                     <th style={{ textAlign: 'left', padding: '6px 10px 6px 16px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Student</th>
-                                                                    <th style={{ textAlign: 'left', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ID</th>
+                                                                    <th className="pve-col-id" style={{ textAlign: 'left', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ID</th>
                                                                     <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Set</th>
-                                                                    <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scanned</th>
+                                                                    <th className="pve-col-scanned" style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scanned</th>
                                                                     <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Score</th>
-                                                                    <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>%</th>
+                                                                    <th className="pve-col-pct" style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>%</th>
                                                                     <th style={{ padding: '6px 16px 6px 10px', borderBottom: '1px solid var(--prof-border)' }}></th>
                                                                 </tr>
                                                             </thead>
@@ -1255,21 +1283,21 @@ export function ViewExam() {
                                                                                     </td>
                                                                                 )}
                                                                                 <td style={{ padding: '7px 10px 7px 16px', fontSize: '0.83rem' }}>{enrollment.student?.full_name ?? '—'}</td>
-                                                                                <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: '0.77rem', color: 'var(--prof-text-muted)' }}>{enrollment.student?.student_id ?? '—'}</td>
+                                                                                <td className="pve-col-id" style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: '0.77rem', color: 'var(--prof-text-muted)' }}>{enrollment.student?.student_id ?? '—'}</td>
                                                                                 <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.83rem' }}>
                                                                                     {submission ? <strong style={{ color: 'var(--prof-text-main)' }}>{setNumberToLetter(submission.set_number)}</strong> : <span style={{ color: '#cbd5e1' }}>—</span>}
                                                                                 </td>
-                                                                                <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.78rem', color: 'var(--prof-text-muted)' }}>
+                                                                                <td className="pve-col-scanned" style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.78rem', color: 'var(--prof-text-muted)' }}>
                                                                                     {submission?.submitted_at ? new Date(submission.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : <span style={{ color: '#cbd5e1' }}>—</span>}
                                                                                 </td>
                                                                                 <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.82rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>
                                                                                     {submission?.score != null
                                                                                         ? `${submission.score} / ${submission.total_items}`
                                                                                         : !submission && isDone
-                                                                                            ? <span style={{ fontSize: '0.74rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '2px 7px' }}>Did Not Take</span>
+                                                                                            ? <span style={{ fontSize: '0.74rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '2px 7px' }}><span className="dnt-long">Did Not Take</span><span className="dnt-short">DNT</span></span>
                                                                                             : <span style={{ color: '#cbd5e1' }}>—</span>}
                                                                                 </td>
-                                                                                <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                                                                                <td className="pve-col-pct" style={{ padding: '7px 10px', textAlign: 'center' }}>
                                                                                     {submission?.score != null ? (() => {
                                                                                         const pct = (submission.total_items ?? 0) > 0 ? Math.round((submission.score / submission.total_items!) * 100) : 0;
                                                                                         const gc = getGradeColors(pct, passingRate);
@@ -1332,9 +1360,9 @@ export function ViewExam() {
                                                                                                             </div>
                                                                                                         </div>
                                                                                                         {/* ── Answer grid + Pie chart ── */}
-                                                                                                        <div style={{ display: 'flex', gap: '24px', padding: '12px 16px', alignItems: 'stretch' }}>
-                                                                                                        <div style={{ overflowX: 'auto', flexShrink: 0 }}>
-                                                                                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 36px)', gap: '4px', minWidth: '400px' }}>
+                                                                                                        <div className="pve-grade-detail-flex" style={{ display: 'flex', gap: '24px', padding: '12px 16px', alignItems: 'stretch' }}>
+                                                                                                        <div className="pve-answer-grid-wrap" style={{ overflowX: 'auto' }}>
+                                                                                                            <div className="pve-answer-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 36px)', gap: '4px', minWidth: '400px' }}>
                                                                                                                 {answerKey.questionIds.map((qId, qi) => {
                                                                                                                     const rawChoice = isEditing ? (editingAnswers[qId] ?? -1) : (submission.answers[qId] ?? -1);
                                                                                                                     const letter = rawChoice >= 0 ? (GRADE_ANSWER_LETTERS[rawChoice] ?? '') : '';
@@ -1345,6 +1373,7 @@ export function ViewExam() {
                                                                                                                     return (
                                                                                                                         <button
                                                                                                                             key={qId}
+                                                                                                                            className="pve-answer-cell"
                                                                                                                             onClick={() => isEditing && handleToggleAnswerCell(qId)}
                                                                                                                             title={`Q${qi + 1}${correctLetter ? ` · Correct: ${correctLetter}` : ''}${isEditing ? ' · Click to change' : ''}`}
                                                                                                                             style={{
@@ -1406,7 +1435,17 @@ export function ViewExam() {
                     </div>
 
                     {/* ── Right column: Actions + Details ── */}
-                    <div className="cs-card" style={{ padding: 0, overflow: 'hidden' }}>
+                    <div className="pve-details-col">
+                        <div className="pve-details-card">
+                            {/* Toggle button — only visible on mobile */}
+                            <button className="pve-details-toggle" onClick={() => setIsProfDetailsOpen(v => !v)}>
+                                <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Exam Details</span>
+                                <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16" style={{ color: 'var(--prof-text-muted)', transform: isProfDetailsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', flexShrink: 0 }}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                </svg>
+                            </button>
+                            <div className={`pve-details-body${isProfDetailsOpen ? ' pve-details-open' : ''}`}>
+                        <div className="pve-details-inner-card cs-card" style={{ padding: 0, overflow: 'hidden' }}>
 
                         {/* Status header strip */}
                         <div style={{
@@ -1752,6 +1791,9 @@ export function ViewExam() {
                             );
                         })()}
 
+                        </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -2322,7 +2364,7 @@ export function ViewExam() {
                                             Re-arrange
                                         </button>
                                         <button
-                                            className="btn-primary"
+                                            className="btn-primary pve-print-btn"
                                             style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '0.85rem', fontWeight: 600, borderRadius: '8px' }}
                                             onClick={() => handlePrint()}
                                         >

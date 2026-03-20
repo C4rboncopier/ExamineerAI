@@ -10,7 +10,9 @@ modelled after main-copy.py. Bubbles are located by circularity + area, then
 fill is measured by counting dark pixels inside each detected circle.
 """
 
+import asyncio
 import io
+import json
 import base64
 import zipfile
 from itertools import combinations
@@ -19,6 +21,7 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 app = FastAPI(title="ExamineerAI OMR Server", version="2.0.0")
 
@@ -58,26 +61,39 @@ async def scan_single(file: UploadFile = File(...)):
 
 @app.post("/scan-batch")
 async def scan_batch(file: UploadFile = File(...)):
-    """Process a ZIP archive of OMR images."""
+    """Process a ZIP archive of OMR images, streaming results as NDJSON.
+
+    Each line is a JSON object:
+      {"type": "total",  "total": N}          — sent first
+      {"type": "result", ...omr_fields}        — sent per image
+    """
     zip_bytes = await file.read()
-    results = []
+
+    # Validate ZIP and collect image names before streaming starts
     try:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            image_names = [
+            image_names = sorted([
                 n for n in zf.namelist()
                 if n.lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".tiff"))
                 and not n.startswith("__MACOSX")
-            ]
-            if not image_names:
-                raise HTTPException(status_code=400, detail="No image files found in ZIP")
-            for name in sorted(image_names):
-                img_bytes = zf.read(name)
-                result = process_omr_image(img_bytes, filename=name)
-                result["filename"] = name
-                results.append(result)
+            ])
     except zipfile.BadZipFile:
         raise HTTPException(status_code=400, detail="Invalid ZIP file")
-    return results
+
+    if not image_names:
+        raise HTTPException(status_code=400, detail="No image files found in ZIP")
+
+    async def generate():
+        yield json.dumps({"type": "total", "total": len(image_names)}) + "\n"
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            for name in image_names:
+                img_bytes = zf.read(name)
+                result = await asyncio.to_thread(process_omr_image, img_bytes, name)
+                result["filename"] = name
+                result["type"] = "result"
+                yield json.dumps(result) + "\n"
+
+    return StreamingResponse(generate(), media_type="application/x-ndjson")
 
 
 # ──────────────────────────────────────────────

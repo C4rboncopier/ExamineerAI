@@ -107,7 +107,8 @@ export interface SubjectWithAccess extends SubjectWithCounts {
 }
 
 export async function fetchProfessorSubjectsWithAccess(): Promise<{ data: SubjectWithAccess[]; error: string | null }> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) return { data: [], error: 'Not authenticated' };
 
   const [subjectsResult, coHandlerResult] = await Promise.all([
