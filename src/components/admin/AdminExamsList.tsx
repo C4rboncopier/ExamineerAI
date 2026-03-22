@@ -143,7 +143,7 @@ export function AdminExamsList() {
                                     </div>
 
                                     <div style={{ overflow: 'hidden' }}>
-                                        <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: 'var(--prof-text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{exam.title}</p>
+                                        <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: 'var(--prof-text-main)', overflow: 'hidden', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2 }}>{exam.title}</p>
                                         <p style={{ margin: 0, fontSize: '0.775rem', color: 'var(--prof-text-muted)' }}>{exam.code}</p>
                                     </div>
 

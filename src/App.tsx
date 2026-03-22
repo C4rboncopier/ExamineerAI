@@ -3,6 +3,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RoleDashboardRedirect } from './components/RoleDashboardRedirect';
 import { Login } from './pages/Login';
+import { ResetPassword } from './pages/ResetPassword';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { ProfessorDashboard } from './pages/ProfessorDashboard';
 import { StudentDashboard } from './pages/StudentDashboard';
@@ -41,6 +42,7 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<RoleDashboardRedirect />} />
