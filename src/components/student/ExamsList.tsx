@@ -177,7 +177,7 @@ export function ExamsList() {
                                             <div style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                                 {exam.code}
                                             </div>
-                                            <h3 style={{ margin: '0 0 16px 0', fontSize: '1.2rem', color: '#0f172a', fontWeight: 700, lineHeight: 1.3 }}>
+                                            <h3 style={{ margin: '0 0 16px 0', fontSize: '1.2rem', color: '#0f172a', fontWeight: 700, lineHeight: 1.3, minHeight: 'calc(1.2rem * 1.3 * 2)' }}>
                                                 {exam.title}
                                             </h3>
 

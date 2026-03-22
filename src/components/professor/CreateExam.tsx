@@ -57,6 +57,7 @@ export function CreateExam() {
     const [isLoadingExam, setIsLoadingExam] = useState(isEditMode);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [hasPapers, setHasPapers] = useState(false);
+    const [attemptsWithSets, setAttemptsWithSets] = useState<Set<number>>(new Set());
 
     const [toast, setToast] = useState<ToastState>({ open: false, message: '', type: 'success' });
     const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') =>
@@ -108,6 +109,7 @@ export function CreateExam() {
                     setSelectedProgramIds(data.program_ids ?? []);
                     setAiAnalysisEnabled(data.ai_analysis_enabled ?? false);
                     setHasPapers((data.exam_sets?.length ?? 0) > 0);
+                    setAttemptsWithSets(new Set((data.exam_sets ?? []).map((s: { attempt_number: number }) => s.attempt_number)));
                     setExamCreatedBy(data.created_by);
                 }
                 setIsLoadingExam(false);
@@ -185,6 +187,8 @@ export function CreateExam() {
         </span>
     );
 
+    const minAllowedAttempts = attemptsWithSets.size > 0 ? Math.max(...attemptsWithSets) : 1;
+
     // ── Validation ────────────────────────────────────────────
     const isFormValid = useMemo(() => {
         if (!title.trim() || !code.trim()) return false;
@@ -198,6 +202,11 @@ export function CreateExam() {
         setIsSubmitting(true);
 
         if (isEditMode && examId) {
+            if (maxAttempts < minAllowedAttempts) {
+                setSubmitError(`Cannot reduce attempts below ${minAllowedAttempts} — attempt ${minAllowedAttempts} already has generated papers.`);
+                setIsSubmitting(false);
+                return;
+            }
             const { error } = await updateExam(examId, title, code, selectedSubjectIds, numSets, maxAttempts, academicYear, term, selectedProgramIds, aiAnalysisEnabled, false);
             if (error) { setSubmitError(error); setIsSubmitting(false); return; }
             showToast('Exam updated.');
@@ -240,7 +249,7 @@ export function CreateExam() {
                     </svg>
                     <div>
                         <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: '#92400e' }}>Some fields are locked</p>
-                        <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#a16207' }}>Exam papers have been generated. Template, sets, max attempts, and subjects cannot be changed. Delete exam papers in the Papers tab to unlock these fields.</p>
+                        <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#a16207' }}>Exam papers have been generated. Template, sets, and subjects cannot be changed. Max attempts can be increased, or reduced only if the removed attempts have no generated papers.</p>
                     </div>
                 </div>
             )}
@@ -327,16 +336,20 @@ export function CreateExam() {
                                 </div>
                                 <div className="cs-input-field" style={{ minWidth: '150px' }}>
                                     <label>Max Attempts</label>
-                                    {(isEditMode && hasPapers) || isCoHandler ? (
-                                        <div style={{ padding: '9px 12px', background: '#f1f5f9', border: '1px solid var(--prof-border)', borderRadius: '8px', fontSize: '0.9rem', color: 'var(--prof-text-main)', fontWeight: 600 }}>
-                                            {maxAttempts} attempt{maxAttempts !== 1 ? 's' : ''}
-                                        </div>
-                                    ) : (
-                                        <select value={maxAttempts} onChange={e => setMaxAttempts(Number(e.target.value))}>
-                                            {[1, 2, 3, 4, 5].map(n => (
-                                                <option key={n} value={n}>{n} attempt{n !== 1 ? 's' : ''}</option>
-                                            ))}
-                                        </select>
+                                    <select value={maxAttempts} onChange={e => setMaxAttempts(Number(e.target.value))}>
+                                        {[1, 2, 3, 4, 5].map(n => {
+                                            const isDisabled = isEditMode && n < minAllowedAttempts;
+                                            return (
+                                                <option key={n} value={n} disabled={isDisabled}>
+                                                    {n} attempt{n !== 1 ? 's' : ''}
+                                                </option>
+                                            );
+                                        })}
+                                    </select>
+                                    {isEditMode && minAllowedAttempts > 1 && (
+                                        <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: 'var(--prof-text-muted)' }}>
+                                            Cannot go below {minAllowedAttempts} — attempt {minAllowedAttempts} has existing papers.
+                                        </p>
                                     )}
                                 </div>
                             </div>

@@ -27,9 +27,9 @@ export interface Exam {
     max_attempts: number;
     academic_year: string;
     term: string;
-    question_allocation: AllocationConfig;
     created_at: string;
     status: 'locked' | 'unlocked';
+    is_completed: boolean;
     program_ids: string[];
     exam_subjects: ExamSubject[];
     ai_analysis_enabled: boolean;
@@ -231,6 +231,7 @@ export interface AdminExam {
     academic_year: string;
     term: string;
     status: 'locked' | 'unlocked';
+    is_completed: boolean;
     program_ids: string[];
     created_at: string;
     created_by: string;
@@ -245,7 +246,7 @@ export interface AdminExam {
 export async function fetchAdminExams(): Promise<{ data: AdminExam[]; error: string | null }> {
     const { data, error } = await supabase
         .from('exams')
-        .select('id, title, code, num_sets, max_attempts, academic_year, term, created_at, status, program_ids, ai_analysis_enabled, created_by, exam_subjects(subject_id, subjects(course_code, course_title)), exam_enrollments(count)')
+        .select('id, title, code, num_sets, max_attempts, academic_year, term, created_at, status, is_completed, program_ids, ai_analysis_enabled, created_by, exam_subjects(subject_id, subjects(course_code, course_title)), exam_enrollments(count)')
         .order('created_at', { ascending: false });
 
     if (error) return { data: [], error: error.message };
@@ -293,6 +294,7 @@ export async function fetchAdminExams(): Promise<{ data: AdminExam[]; error: str
         academic_year: e.academic_year,
         term: e.term,
         status: e.status,
+        is_completed: e.is_completed ?? false,
         program_ids: e.program_ids ?? [],
         created_at: e.created_at,
         created_by: e.created_by,
@@ -312,7 +314,7 @@ export async function fetchAdminExams(): Promise<{ data: AdminExam[]; error: str
 export async function fetchExams(): Promise<{ data: Exam[]; error: string | null }> {
     const { data, error } = await supabase
         .from('exams')
-        .select('id, title, code, num_sets, max_attempts, academic_year, term, question_allocation, created_at, status, program_ids, ai_analysis_enabled, exam_subjects(subject_id, subjects(course_code, course_title))')
+        .select('id, title, code, num_sets, max_attempts, academic_year, term, created_at, status, is_completed, program_ids, ai_analysis_enabled, exam_subjects(subject_id, subjects(course_code, course_title))')
         .order('created_at', { ascending: false });
 
     if (error) return { data: [], error: error.message };
@@ -323,7 +325,7 @@ export async function fetchExamById(id: string): Promise<{ data: ExamWithSets | 
     const { data, error } = await supabase
         .from('exams')
         .select(`
-            id, title, code, num_sets, max_attempts, academic_year, term, question_allocation, created_at, status, program_ids, ai_analysis_enabled, created_by,
+            id, title, code, num_sets, max_attempts, academic_year, term, created_at, status, is_completed, program_ids, ai_analysis_enabled, created_by,
             exam_subjects(subject_id, subjects(course_code, course_title)),
             exam_sets(id, set_number, attempt_number, question_ids),
             exam_attempts(id, exam_id, attempt_number, status, grades_released)
@@ -351,7 +353,7 @@ export async function createExam(
 
     const { data: exam, error: insertError } = await supabase
         .from('exams')
-        .insert({ title, code, created_by: user?.id, num_sets: numSets, question_allocation: {}, max_attempts: maxAttempts, academic_year: academicYear, term, program_ids: programIds, ai_analysis_enabled: aiAnalysisEnabled })
+        .insert({ title, code, created_by: user?.id, num_sets: numSets, max_attempts: maxAttempts, academic_year: academicYear, term, program_ids: programIds, ai_analysis_enabled: aiAnalysisEnabled })
         .select('id')
         .single();
 

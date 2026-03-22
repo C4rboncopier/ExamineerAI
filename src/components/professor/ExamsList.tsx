@@ -152,8 +152,8 @@ export function ExamsList() {
                             </h3>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
                                 {group.exams.map(exam => {
-                                    const statusColor = exam.status === 'unlocked' ? '#16a34a' : '#f59e0b';
-                                    const statusLabel = exam.status === 'unlocked' ? 'Unlocked' : 'Locked';
+                                    const statusColor = exam.is_completed ? '#475569' : exam.status === 'unlocked' ? '#16a34a' : '#f59e0b';
+                                    const statusLabel = exam.is_completed ? 'Completed' : exam.status === 'unlocked' ? 'Unlocked' : 'Locked';
                                     const hasSubjects = exam.exam_subjects.length > 0;
 
                                     return (

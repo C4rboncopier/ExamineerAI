@@ -8,6 +8,7 @@ export interface StudentExam {
     academic_year: string;
     term: string;
     status: 'locked' | 'unlocked';
+    is_completed: boolean;
     max_attempts: number;
     num_sets: number;
     program_ids: string[];
@@ -68,7 +69,7 @@ export async function fetchEnrolledExams(studentId: string): Promise<{ data: Stu
         .from('exam_enrollments')
         .select(`
             exam:exams(
-                id, title, code, academic_year, term, status, max_attempts, num_sets, program_ids, ai_analysis_enabled,
+                id, title, code, academic_year, term, status, is_completed, max_attempts, num_sets, program_ids, ai_analysis_enabled,
                 exam_subjects(subject_id, subjects(course_code, course_title)),
                 exam_attempts(attempt_number, status, grades_released)
             )

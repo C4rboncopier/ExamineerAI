@@ -920,6 +920,9 @@ export function ViewExam() {
                     <p style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', margin: 0 }}>
                         <span className="subject-code" style={{ marginBottom: 0 }}>{exam.code}</span>
                         <span style={{ fontWeight: 600, fontSize: '0.85rem', color: statusColor }}>{statusLabel}</span>
+                        {exam.is_completed && (
+                            <span style={{ fontWeight: 600, fontSize: '0.8rem', color: '#475569', background: '#f1f5f9', padding: '2px 8px', borderRadius: '10px', border: '1px solid #cbd5e1' }}>Completed</span>
+                        )}
                     </p>
                 </div>
             </div>
@@ -1464,6 +1467,25 @@ export function ViewExam() {
                             </span>
                             <span style={{ fontSize: '0.75rem', color: exam.status === 'unlocked' ? '#16a34a' : '#a16207', marginLeft: '2px' }}>
                                 {exam.status === 'unlocked' ? '— visible to students' : '— hidden from students'}
+                            </span>
+                        </div>
+                        {/* Completion strip */}
+                        <div style={{
+                            padding: '10px 16px',
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            background: exam.is_completed ? '#f8fafc' : '#fff',
+                            borderBottom: '1px solid var(--prof-border)',
+                        }}>
+                            {exam.is_completed ? (
+                                <svg fill="none" strokeWidth="2" stroke="#475569" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            ) : (
+                                <svg fill="none" strokeWidth="2" stroke="#94a3b8" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            )}
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: exam.is_completed ? '#475569' : '#94a3b8', letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                                {exam.is_completed ? 'Completed' : 'In Progress'}
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: exam.is_completed ? '#64748b' : '#94a3b8', marginLeft: '2px' }}>
+                                {exam.is_completed ? '— all attempts closed' : '— attempts still open'}
                             </span>
                         </div>
 

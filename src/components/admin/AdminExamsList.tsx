@@ -155,7 +155,7 @@ export function AdminExamsList() {
 
                                     <span className="admin-hide-mobile" style={{ fontSize: '0.875rem', color: 'var(--prof-text-main)', fontWeight: 500 }}>{exam.enrollment_count}</span>
 
-                                    <div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                         <span style={{
                                             display: 'inline-flex', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
                                             background: exam.status === 'unlocked' ? '#f0fdf4' : '#fffbeb',
@@ -164,6 +164,14 @@ export function AdminExamsList() {
                                         }}>
                                             {exam.status === 'unlocked' ? 'Unlocked' : 'Locked'}
                                         </span>
+                                        {exam.is_completed && (
+                                            <span style={{
+                                                display: 'inline-flex', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
+                                                background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1',
+                                            }}>
+                                                Completed
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
 
@@ -174,7 +182,7 @@ export function AdminExamsList() {
                                         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', marginBottom: '9px', rowGap: '4px' }}>
                                             <span style={{
                                                 display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 7px', borderRadius: '99px',
-                                                fontSize: '0.72rem', fontWeight: 600, marginRight: '10px', flexShrink: 0,
+                                                fontSize: '0.72rem', fontWeight: 600, marginRight: '6px', flexShrink: 0,
                                                 background: exam.status === 'unlocked' ? '#f0fdf4' : '#fffbeb',
                                                 color: exam.status === 'unlocked' ? '#15803d' : '#b45309',
                                                 border: `1px solid ${exam.status === 'unlocked' ? '#bbf7d0' : '#fde68a'}`,
@@ -182,6 +190,16 @@ export function AdminExamsList() {
                                                 <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
                                                 {exam.status === 'unlocked' ? 'Unlocked' : 'Locked'}
                                             </span>
+                                            {exam.is_completed && (
+                                                <span style={{
+                                                    display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 7px', borderRadius: '99px',
+                                                    fontSize: '0.72rem', fontWeight: 600, marginRight: '10px', flexShrink: 0,
+                                                    background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1',
+                                                }}>
+                                                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
+                                                    Completed
+                                                </span>
+                                            )}
                                             {[
                                                 exam.academic_year,
                                                 exam.term,
