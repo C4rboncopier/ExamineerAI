@@ -58,13 +58,28 @@ export function ResetPassword() {
   const allChecksMet = Object.values(checks).every(Boolean);
 
   useEffect(() => {
-    const hash = window.location.hash.substring(1);
-    const params = new URLSearchParams(hash);
-    const accessToken = params.get('access_token');
-    const refreshToken = params.get('refresh_token');
-    const type = params.get('type');
+    // Flow 1: token_hash in query params (from custom Resend email)
+    const searchParams = new URLSearchParams(window.location.search);
+    const tokenHash = searchParams.get('token_hash');
+    const type = searchParams.get('type');
 
-    if (type === 'recovery' && accessToken && refreshToken) {
+    if (tokenHash && type === 'recovery') {
+      supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' })
+        .then(({ error }) => {
+          if (error) setStage('invalid');
+          else setStage('form');
+        });
+      return;
+    }
+
+    // Flow 2: access_token in URL hash (from Supabase default email)
+    const hash = window.location.hash.substring(1);
+    const hashParams = new URLSearchParams(hash);
+    const accessToken = hashParams.get('access_token');
+    const refreshToken = hashParams.get('refresh_token');
+    const hashType = hashParams.get('type');
+
+    if (hashType === 'recovery' && accessToken && refreshToken) {
       supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
         .then(({ error }) => {
           if (error) setStage('invalid');
