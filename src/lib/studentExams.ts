@@ -14,6 +14,7 @@ export interface StudentExam {
     program_ids: string[];
     ai_analysis_enabled: boolean;
     created_by: string;
+    cover_image_url: string | null;
     created_by_profile: { id: string; full_name: string | null; email: string | null } | null;
     exam_subjects: {
         subject_id: string;
@@ -70,7 +71,7 @@ export async function fetchEnrolledExams(studentId: string): Promise<{ data: Stu
         .from('exam_enrollments')
         .select(`
             exam:exams(
-                id, title, code, academic_year, term, status, is_completed, max_attempts, num_sets, program_ids, ai_analysis_enabled,
+                id, title, code, academic_year, term, status, is_completed, max_attempts, num_sets, program_ids, ai_analysis_enabled, cover_image_url,
                 exam_subjects(subject_id, subjects(course_code, course_title)),
                 exam_attempts(attempt_number, status, grades_released)
             )

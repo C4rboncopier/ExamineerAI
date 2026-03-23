@@ -34,6 +34,7 @@ export interface Exam {
     exam_subjects: ExamSubject[];
     ai_analysis_enabled: boolean;
     created_by: string;
+    cover_image_url: string | null;
 }
 
 export interface ExamSetDetail {
@@ -54,6 +55,17 @@ export interface ExamAttemptRecord {
 export interface ExamWithSets extends Exam {
     exam_sets: ExamSetDetail[];
     exam_attempts: ExamAttemptRecord[];
+}
+
+// ─── Random exam cover image ──────────────────────────────────
+
+async function pickRandomCoverUrl(): Promise<string | null> {
+    const { data } = await supabase.storage.from('exam-covers').list('', { limit: 100 });
+    if (!data || data.length === 0) return null;
+    const images = data.filter(f => /\.(png|jpe?g|webp)$/i.test(f.name));
+    if (images.length === 0) return null;
+    const pick = images[Math.floor(Math.random() * images.length)];
+    return supabase.storage.from('exam-covers').getPublicUrl(pick.name).data.publicUrl;
 }
 
 // ─── Shuffle (Fisher-Yates) ───────────────────────────────────
@@ -314,7 +326,7 @@ export async function fetchAdminExams(): Promise<{ data: AdminExam[]; error: str
 export async function fetchExams(): Promise<{ data: Exam[]; error: string | null }> {
     const { data, error } = await supabase
         .from('exams')
-        .select('id, title, code, num_sets, max_attempts, academic_year, term, created_at, status, is_completed, program_ids, ai_analysis_enabled, exam_subjects(subject_id, subjects(course_code, course_title))')
+        .select('id, title, code, num_sets, max_attempts, academic_year, term, created_at, status, is_completed, program_ids, ai_analysis_enabled, cover_image_url, exam_subjects(subject_id, subjects(course_code, course_title))')
         .order('created_at', { ascending: false });
 
     if (error) return { data: [], error: error.message };
@@ -351,9 +363,11 @@ export async function createExam(
     const { data: { session } } = await supabase.auth.getSession();
     const user = session?.user;
 
+    const coverImageUrl = await pickRandomCoverUrl();
+
     const { data: exam, error: insertError } = await supabase
         .from('exams')
-        .insert({ title, code, created_by: user?.id, num_sets: numSets, max_attempts: maxAttempts, academic_year: academicYear, term, program_ids: programIds, ai_analysis_enabled: aiAnalysisEnabled })
+        .insert({ title, code, created_by: user?.id, num_sets: numSets, max_attempts: maxAttempts, academic_year: academicYear, term, program_ids: programIds, ai_analysis_enabled: aiAnalysisEnabled, cover_image_url: coverImageUrl })
         .select('id')
         .single();
 

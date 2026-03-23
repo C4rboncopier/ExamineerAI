@@ -161,7 +161,7 @@ export function ExamsList() {
                                         <div
                                             key={exam.id}
                                             className="subject-card"
-                                            style={{ cursor: isLocked ? 'not-allowed' : 'pointer', display: 'flex', flexDirection: 'column', padding: '20px', backgroundColor: isLocked ? '#f8fafc' : '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', borderTop: `4px solid ${topBorderColor}`, boxShadow: '0 1px 3px rgba(0,0,0,0.05)', transition: 'all 0.2s ease', minHeight: 'auto', opacity: isLocked ? 0.65 : 1 }}
+                                            style={{ cursor: isLocked ? 'not-allowed' : 'pointer', display: 'flex', flexDirection: 'column', padding: 0, backgroundColor: isLocked ? '#f8fafc' : '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', transition: 'all 0.2s ease', minHeight: 'auto', opacity: isLocked ? 0.65 : 1 }}
                                             onClick={() => { if (!isLocked) navigate(`/student/exams/${exam.id}`); }}
                                             onMouseEnter={e => {
                                                 if (isLocked) return;
@@ -174,6 +174,13 @@ export function ExamsList() {
                                                 e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
                                             }}
                                         >
+                                            <div style={{ height: '120px', overflow: 'hidden', background: '#f1f5f9', flexShrink: 0 }}>
+                                                {exam.cover_image_url
+                                                    ? <img src={exam.cover_image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                                    : <div style={{ width: '100%', height: '100%', background: topBorderColor, opacity: 0.18 }} />
+                                                }
+                                            </div>
+                                            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
                                             <div style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                                 {exam.code}
                                             </div>
@@ -201,6 +208,7 @@ export function ExamsList() {
                                                     View details
                                                 </div>
                                             )}
+                                            </div>
                                         </div>
                                     );
                                 })}

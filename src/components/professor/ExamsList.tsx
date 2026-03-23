@@ -180,7 +180,12 @@ export function ExamsList() {
                                                 (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--prof-border)';
                                             }}
                                         >
-                                            <div style={{ height: '4px', background: statusColor }} />
+                                            <div style={{ height: '120px', overflow: 'hidden', background: '#f1f5f9', flexShrink: 0 }}>
+                                                {exam.cover_image_url
+                                                    ? <img src={exam.cover_image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                                    : <div style={{ width: '100%', height: '100%', background: statusColor, opacity: 0.18 }} />
+                                                }
+                                            </div>
                                             <div style={{ padding: '20px', flex: 1, display: 'flex', flexDirection: 'column' }}>
                                                 <p style={{ margin: '0 0 4px', fontSize: '0.75rem', color: 'var(--prof-text-muted)', fontWeight: 600, letterSpacing: '0.05em' }}>
                                                     {exam.code}
