@@ -68,6 +68,7 @@ export function GradesList() {
                 exam.exam_attempts.forEach(a => { gradesReleasedMap[a.attempt_number] = a.grades_released; });
 
                 const gradedSubs = subs.filter(s =>
+                    s.status !== 'did_not_take' &&
                     s.score !== null && s.total_items !== null && s.total_items > 0 &&
                     (gradesReleasedMap[s.attempt_number] ?? false)
                 );
@@ -87,6 +88,8 @@ export function GradesList() {
                     && ((lastAttemptSub.score / lastAttemptSub.total_items!) * 100) < passingRate;
                 const showGrade = hasPassed || (allAttemptsDone && gradedSubs.length > 0) || failedLastAttempt;
 
+                const realSubs = subs.filter(s => s.status !== 'did_not_take');
+
                 return {
                     exam,
                     submissions: subs,
@@ -94,7 +97,7 @@ export function GradesList() {
                     bestScore: bestSub?.score ?? null,
                     bestTotal: bestSub?.total_items ?? null,
                     hasPassed,
-                    attemptsTaken: subs.length,
+                    attemptsTaken: realSubs.length,
                     isGraded: gradedSubs.length > 0,
                     showGrade,
                 };
@@ -278,10 +281,12 @@ export function GradesList() {
                                                                 const gradesReleased = gradesReleasedMap[attemptNum] ?? false;
                                                                 const isSubmitted = !!sub?.submitted_at;
                                                                 const isScored = sub?.score != null && sub?.total_items != null;
+                                                                const isDNT = sub?.status === 'did_not_take';
 
                                                                 let statusLabel = 'Not Available';
                                                                 let statusColor = '#94a3b8';
-                                                                if (attemptStatus === 'deployed' && !isSubmitted) { statusLabel = 'Open'; statusColor = '#16a34a'; }
+                                                                if (isDNT) { statusLabel = 'Did Not Take'; statusColor = '#94a3b8'; }
+                                                                else if (attemptStatus === 'deployed' && !isSubmitted) { statusLabel = 'Open'; statusColor = '#16a34a'; }
                                                                 else if (isSubmitted && isScored && gradesReleased) { statusLabel = 'Graded'; statusColor = '#2563eb'; }
                                                                 else if (isSubmitted && isScored && !gradesReleased) { statusLabel = 'Pending'; statusColor = '#9333ea'; }
                                                                 else if (isSubmitted) { statusLabel = 'Submitted'; statusColor = '#f59e0b'; }

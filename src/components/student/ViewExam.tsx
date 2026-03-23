@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchEnrolledExamById, fetchStudentSubmissions, saveSubmissionAiAnalysis, getStudentExamStatus, fetchExamRoster } from '../../lib/studentExams';
 import type { StudentExam, StudentSubmission, ExamRosterEntry } from '../../lib/studentExams';
+import { fetchExamFormEnrollments } from '../../lib/studentForms';
+import type { ExamFormEnrollment } from '../../lib/studentForms';
 import { fetchPassingRate } from '../../lib/settings';
 import { fetchQuestionsWithOutcomesByIds } from '../../lib/questions';
 import { generateStudentAnalysis } from '../../lib/gemini';
@@ -373,15 +375,19 @@ export function ViewExam() {
     const [analysisLoaded, setAnalysisLoaded] = useState(false);
     const [analysisLoading, setAnalysisLoading] = useState(false);
 
+    // Form enrollment per attempt
+    const [formEnrollments, setFormEnrollments] = useState<Record<number, ExamFormEnrollment>>({});
+
     // Mobile accordion state for exam details panel
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const [isSubjectsOpen, setIsSubjectsOpen] = useState(false);
 
     const loadData = useCallback(async () => {
         if (!examId || !user) return;
-        const [examResult, subsResult] = await Promise.all([
+        const [examResult, subsResult, formEnrollResult] = await Promise.all([
             fetchEnrolledExamById(examId),
             fetchStudentSubmissions(examId, user.id),
+            fetchExamFormEnrollments(examId, user.id),
         ]);
         if (examResult.error || !examResult.data) {
             setError('Failed to load exam.');
@@ -390,6 +396,7 @@ export function ViewExam() {
         }
         setExam(examResult.data);
         setSubmissions(subsResult.data);
+        setFormEnrollments(formEnrollResult.data);
         setIsLoading(false);
     }, [examId, user]);
 
@@ -471,6 +478,7 @@ export function ViewExam() {
         const gradesReleasedMap: Record<number, boolean> = {};
         exam.exam_attempts.forEach(a => { gradesReleasedMap[a.attempt_number] = a.grades_released; });
         const gradedSubs = submissions.filter(s =>
+            s.status !== 'did_not_take' &&
             s.score !== null && s.total_items !== null && s.total_items > 0 &&
             (gradesReleasedMap[s.attempt_number] ?? false)
         );
@@ -483,6 +491,7 @@ export function ViewExam() {
             const attemptGradesReleasedMap: Record<number, boolean> = {};
             exam.exam_attempts.forEach(a => { attemptGradesReleasedMap[a.attempt_number] = a.grades_released; });
             const gradedSubs = submissions.filter(s =>
+                s.status !== 'did_not_take' &&
                 s.score !== null && s.total_items !== null && s.total_items > 0 &&
                 (attemptGradesReleasedMap[s.attempt_number] ?? false)
             );
@@ -591,6 +600,7 @@ export function ViewExam() {
     submissions.forEach(s => { submissionByAttempt[s.attempt_number] = s; });
 
     const gradedSubs = submissions.filter(s =>
+        s.status !== 'did_not_take' &&
         s.score !== null && s.total_items !== null && s.total_items > 0 &&
         (attemptGradesReleasedMap[s.attempt_number] ?? false)
     );
@@ -803,11 +813,12 @@ export function ViewExam() {
 
                             {/* Attempts table */}
                             <div className="cs-card" style={{ padding: 0, overflow: 'hidden' }}>
-                                <div className="ve-gb-header" style={{ display: 'grid', gridTemplateColumns: '28px 1fr 110px 110px 110px', gap: '0 10px', padding: '9px 16px', background: 'var(--prof-surface)', borderBottom: '1px solid var(--prof-border)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', alignItems: 'center' }}>
+                                <div className="ve-gb-header" style={{ display: 'grid', gridTemplateColumns: '28px 1fr 110px 110px 90px 110px', gap: '0 10px', padding: '9px 16px', background: 'var(--prof-surface)', borderBottom: '1px solid var(--prof-border)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', alignItems: 'center' }}>
                                     <div />
                                     <div>Item</div>
                                     <div className="ve-gb-col-date">Date</div>
                                     <div>Grade</div>
+                                    <div className="ve-gb-col-form">Form</div>
                                     <div className="ve-gb-col-status">Status</div>
                                 </div>
 
@@ -817,10 +828,12 @@ export function ViewExam() {
                                     const gradesReleased = attemptGradesReleasedMap[attemptNum] ?? false;
                                     const isSubmitted = !!sub?.submitted_at;
                                     const isGraded = sub?.score !== null && sub?.total_items !== null;
+                                    const isDNT = sub?.status === 'did_not_take';
 
                                     let rowStatus = 'Not available';
                                     let rowStatusColor = '#94a3b8';
-                                    if (hasPassed && passingAttemptNum !== null && attemptNum > passingAttemptNum && !isSubmitted) { rowStatus = 'N/A'; rowStatusColor = '#94a3b8'; }
+                                    if (isDNT) { rowStatus = 'Did Not Take'; rowStatusColor = '#94a3b8'; }
+                                    else if (hasPassed && passingAttemptNum !== null && attemptNum > passingAttemptNum && !isSubmitted) { rowStatus = 'N/A'; rowStatusColor = '#94a3b8'; }
                                     else if (attemptStatus === 'deployed' && !isSubmitted) { rowStatus = 'Open'; rowStatusColor = '#16a34a'; }
                                     else if (isSubmitted && isGraded && gradesReleased) { rowStatus = 'Graded'; rowStatusColor = '#2563eb'; }
                                     else if (isSubmitted && isGraded && !gradesReleased) { rowStatus = 'Pending'; rowStatusColor = '#9333ea'; }
@@ -834,7 +847,7 @@ export function ViewExam() {
                                         <div
                                             key={attemptNum}
                                             className="ve-gb-row"
-                                            style={{ display: 'grid', gridTemplateColumns: '28px 1fr 110px 110px 110px', gap: '0 10px', padding: '12px 16px', borderBottom: '1px solid var(--prof-border)', alignItems: 'center', fontSize: '0.85rem' }}
+                                            style={{ display: 'grid', gridTemplateColumns: '28px 1fr 110px 110px 90px 110px', gap: '0 10px', padding: '12px 16px', borderBottom: '1px solid var(--prof-border)', alignItems: 'center', fontSize: '0.85rem' }}
                                         >
                                             <div style={{ display: 'flex', alignItems: 'center' }}>
                                                 <StatusDot submitted={isSubmitted} score={gradesReleased ? (sub?.score ?? null) : null} total={gradesReleased ? (sub?.total_items ?? null) : null} passingRate={passingRate} />
@@ -855,6 +868,18 @@ export function ViewExam() {
                                                         ? <span style={{ color: '#9333ea', fontSize: '0.78rem', fontWeight: 600 }}>Pending</span>
                                                         : <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>—</span>
                                                 }
+                                            </div>
+                                            <div className="ve-gb-col-form">
+                                                {formEnrollments[attemptNum] ? (
+                                                    <span title={formEnrollments[attemptNum].form_title} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 600, color: '#15803d' }}>
+                                                        <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                                        </svg>
+                                                        Enrolled
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>—</span>
+                                                )}
                                             </div>
                                             <div className="ve-gb-col-status">
                                                 <span style={{ fontWeight: 600, fontSize: '0.75rem', color: rowStatusColor }}>

@@ -1215,6 +1215,9 @@ export function ViewExam() {
                                                                                     </td>
                                                                                 );
                                                                             }
+                                                                            if (sub.status === 'did_not_take') {
+                                                                                return <td key={a.attempt_number} style={{ padding: '7px 10px', textAlign: 'center' }}><span style={{ fontSize: '0.74rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '2px 7px' }}>DNT</span></td>;
+                                                                            }
                                                                             if (sub.score == null || !sub.total_items) {
                                                                                 return <td key={a.attempt_number} style={{ padding: '7px 10px', textAlign: 'center' }}><span style={{ color: '#cbd5e1' }}>—</span></td>;
                                                                             }
@@ -1268,7 +1271,8 @@ export function ViewExam() {
                                                                     const isExpanded = expandedGradeKey === gradeKey;
                                                                     const isEditing = editingGradeKey === gradeKey;
                                                                     const isSelected = selectedGradeKeys.has(gradeKey);
-                                                                    const cacheKey = submission ? `${attempt_number}-${submission.set_number}` : null;
+                                                                    const isStudentDNT = submission?.status === 'did_not_take';
+                                                                    const cacheKey = submission && !isStudentDNT ? `${attempt_number}-${submission.set_number}` : null;
                                                                     const answerKey = cacheKey ? (answerKeyCache[cacheKey] ?? null) : null;
                                                                     const isLoadingKey = cacheKey ? loadingAnswerKey === cacheKey : false;
                                                                     return (
@@ -1288,31 +1292,31 @@ export function ViewExam() {
                                                                                 <td style={{ padding: '7px 10px 7px 16px', fontSize: '0.83rem' }}>{enrollment.student?.full_name ?? '—'}</td>
                                                                                 <td className="pve-col-id" style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: '0.77rem', color: 'var(--prof-text-muted)' }}>{enrollment.student?.student_id ?? '—'}</td>
                                                                                 <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.83rem' }}>
-                                                                                    {submission ? <strong style={{ color: 'var(--prof-text-main)' }}>{setNumberToLetter(submission.set_number)}</strong> : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                                                                    {submission && !isStudentDNT ? <strong style={{ color: 'var(--prof-text-main)' }}>{setNumberToLetter(submission.set_number)}</strong> : <span style={{ color: '#cbd5e1' }}>—</span>}
                                                                                 </td>
                                                                                 <td className="pve-col-scanned" style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.78rem', color: 'var(--prof-text-muted)' }}>
-                                                                                    {submission?.submitted_at ? new Date(submission.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                                                                    {submission?.submitted_at && !isStudentDNT ? new Date(submission.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : <span style={{ color: '#cbd5e1' }}>—</span>}
                                                                                 </td>
                                                                                 <td style={{ padding: '7px 10px', textAlign: 'center', fontSize: '0.82rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>
-                                                                                    {submission?.score != null
+                                                                                    {submission?.score != null && !isStudentDNT
                                                                                         ? `${submission.score} / ${submission.total_items}`
-                                                                                        : !submission && isDone
+                                                                                        : (isStudentDNT || (!submission && isDone))
                                                                                             ? <span style={{ fontSize: '0.74rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '2px 7px' }}><span className="dnt-long">Did Not Take</span><span className="dnt-short">DNT</span></span>
                                                                                             : <span style={{ color: '#cbd5e1' }}>—</span>}
                                                                                 </td>
                                                                                 <td className="pve-col-pct" style={{ padding: '7px 10px', textAlign: 'center' }}>
-                                                                                    {submission?.score != null ? (() => {
+                                                                                    {submission?.score != null && !isStudentDNT ? (() => {
                                                                                         const pct = (submission.total_items ?? 0) > 0 ? Math.round((submission.score / submission.total_items!) * 100) : 0;
                                                                                         const gc = getGradeColors(pct, passingRate);
                                                                                         return <span style={{ fontSize: '0.78rem', fontWeight: 600, color: gc.text, background: gc.bg, border: `1px solid ${gc.border}`, borderRadius: '8px', padding: '2px 7px' }}>{pct}%</span>;
                                                                                     })() : <span style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>—</span>}
                                                                                 </td>
                                                                                 <td style={{ padding: '7px 16px 7px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                                                                                    {submission && !isSelecting ? (
+                                                                                    {submission && !isStudentDNT && !isSelecting ? (
                                                                                         <button onClick={e => { e.stopPropagation(); handleToggleGradeView(gradeKey, attempt_number, submission.set_number); }} style={{ padding: '3px 10px', borderRadius: '6px', border: '1px solid var(--prof-border)', background: isExpanded ? '#eff6ff' : '#fff', color: isExpanded ? '#2563eb' : 'var(--prof-text-main)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500 }}>
                                                                                             {isExpanded ? 'Hide' : 'View'}
                                                                                         </button>
-                                                                                    ) : !submission && isDone && !isSelecting ? (
+                                                                                    ) : (isStudentDNT || (!submission && isDone)) && !isSelecting ? (
                                                                                         <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontStyle: 'italic' }}>not submitted</span>
                                                                                     ) : null}
                                                                                 </td>

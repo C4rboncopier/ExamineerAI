@@ -8,7 +8,7 @@ function formatDate(dateStr: string): string {
     return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-const GRID = '24px 1fr 150px 110px 90px 90px';
+const GRID = '24px 1fr 150px 110px 90px 90px 100px';
 
 export function AdminExamsList() {
     const [exams, setExams] = useState<AdminExam[]>([]);
@@ -118,6 +118,7 @@ export function AdminExamsList() {
                             { label: 'Created', cls: 'admin-hide-mobile' },
                             { label: 'Students', cls: 'admin-hide-mobile' },
                             { label: 'Status', cls: '' },
+                            { label: 'Progress', cls: 'admin-hide-mobile' },
                         ].map(({ label, cls }) => (
                             <span key={label} className={cls || undefined} style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
                         ))}
@@ -155,24 +156,23 @@ export function AdminExamsList() {
 
                                     <span className="admin-hide-mobile" style={{ fontSize: '0.875rem', color: 'var(--prof-text-main)', fontWeight: 500 }}>{exam.enrollment_count}</span>
 
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                        <span style={{
-                                            display: 'inline-flex', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
-                                            background: exam.status === 'unlocked' ? '#f0fdf4' : '#fffbeb',
-                                            color: exam.status === 'unlocked' ? '#15803d' : '#b45309',
-                                            border: `1px solid ${exam.status === 'unlocked' ? '#bbf7d0' : '#fde68a'}`,
-                                        }}>
-                                            {exam.status === 'unlocked' ? 'Unlocked' : 'Locked'}
-                                        </span>
-                                        {exam.is_completed && (
-                                            <span style={{
-                                                display: 'inline-flex', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
-                                                background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1',
-                                            }}>
-                                                Completed
-                                            </span>
-                                        )}
-                                    </div>
+                                    <span style={{
+                                        display: 'inline-flex', justifySelf: 'start', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
+                                        background: exam.status === 'unlocked' ? '#f0fdf4' : '#fffbeb',
+                                        color: exam.status === 'unlocked' ? '#15803d' : '#b45309',
+                                        border: `1px solid ${exam.status === 'unlocked' ? '#bbf7d0' : '#fde68a'}`,
+                                    }}>
+                                        {exam.status === 'unlocked' ? 'Unlocked' : 'Locked'}
+                                    </span>
+
+                                    <span className="admin-hide-mobile" style={{
+                                        display: 'inline-flex', justifySelf: 'start', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
+                                        background: exam.is_completed ? '#f1f5f9' : '#eff6ff',
+                                        color: exam.is_completed ? '#475569' : '#1d4ed8',
+                                        border: `1px solid ${exam.is_completed ? '#cbd5e1' : '#bfdbfe'}`,
+                                    }}>
+                                        {exam.is_completed ? 'Completed' : 'In Progress'}
+                                    </span>
                                 </div>
 
                                 {/* Expanded detail panel */}
@@ -190,16 +190,16 @@ export function AdminExamsList() {
                                                 <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
                                                 {exam.status === 'unlocked' ? 'Unlocked' : 'Locked'}
                                             </span>
-                                            {exam.is_completed && (
-                                                <span style={{
-                                                    display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 7px', borderRadius: '99px',
-                                                    fontSize: '0.72rem', fontWeight: 600, marginRight: '10px', flexShrink: 0,
-                                                    background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1',
-                                                }}>
-                                                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
-                                                    Completed
-                                                </span>
-                                            )}
+                                            <span style={{
+                                                display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 7px', borderRadius: '99px',
+                                                fontSize: '0.72rem', fontWeight: 600, marginRight: '10px', flexShrink: 0,
+                                                background: exam.is_completed ? '#f1f5f9' : '#eff6ff',
+                                                color: exam.is_completed ? '#475569' : '#1d4ed8',
+                                                border: `1px solid ${exam.is_completed ? '#cbd5e1' : '#bfdbfe'}`,
+                                            }}>
+                                                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
+                                                {exam.is_completed ? 'Completed' : 'In Progress'}
+                                            </span>
                                             {[
                                                 exam.academic_year,
                                                 exam.term,

@@ -53,6 +53,7 @@ export interface StudentSubmission {
     submitted_at: string | null;
     created_at: string;
     ai_analysis: AnalysisFeedback | null;
+    status: 'submitted' | 'did_not_take';
 }
 
 export function getStudentExamStatus(exam: StudentExam): 'available' | 'upcoming' | 'completed' | 'locked' {
@@ -118,7 +119,7 @@ export async function fetchStudentSubmissions(
 ): Promise<{ data: StudentSubmission[]; error: string | null }> {
     const { data, error } = await supabase
         .from('student_submissions')
-        .select('id, exam_id, student_id, attempt_number, set_number, answers, score, total_items, submitted_at, created_at, ai_analysis')
+        .select('id, exam_id, student_id, attempt_number, set_number, answers, score, total_items, submitted_at, created_at, ai_analysis, status')
         .eq('exam_id', examId)
         .eq('student_id', studentId)
         .order('attempt_number', { ascending: true });
@@ -132,7 +133,7 @@ export async function fetchAllStudentSubmissions(
 ): Promise<{ data: StudentSubmission[]; error: string | null }> {
     const { data, error } = await supabase
         .from('student_submissions')
-        .select('id, exam_id, student_id, attempt_number, set_number, score, total_items, submitted_at, created_at')
+        .select('id, exam_id, student_id, attempt_number, set_number, score, total_items, submitted_at, created_at, status')
         .eq('student_id', studentId)
         .order('attempt_number', { ascending: true });
 

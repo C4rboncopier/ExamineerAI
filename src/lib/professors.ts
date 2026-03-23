@@ -35,7 +35,8 @@ export async function fetchProfessors(): Promise<{ data: Professor[]; error: str
 
 export async function createProfessor(payload: {
     email: string;
-    full_name: string;
+    first_name: string;
+    last_name: string;
     username: string;
     password: string;
     program_id: string | null;

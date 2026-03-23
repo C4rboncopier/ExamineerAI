@@ -494,3 +494,24 @@ export async function transferExamOwnership(
     });
     return { error: error?.message ?? null };
 }
+
+export async function markAttemptDidNotTake(
+    examId: string,
+    studentId: string,
+    attemptNumber: number
+): Promise<{ error: string | null }> {
+    const { error } = await supabase
+        .from('student_submissions')
+        .upsert({
+            exam_id: examId,
+            student_id: studentId,
+            attempt_number: attemptNumber,
+            set_number: 0,
+            answers: {},
+            score: null,
+            total_items: null,
+            submitted_at: null,
+            status: 'did_not_take',
+        }, { onConflict: 'exam_id,student_id,attempt_number' });
+    return { error: error?.message ?? null };
+}

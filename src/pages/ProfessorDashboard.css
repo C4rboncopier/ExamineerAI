@@ -2541,13 +2541,14 @@ select:focus {
         display: none !important;
     }
 
-    /* Gradebook attempts table: hide Date only, keep Status */
+    /* Gradebook attempts table: hide Date + Form on mobile, keep Grade + Status */
     .ve-gb-header,
     .ve-gb-row {
         grid-template-columns: 28px 1fr auto auto !important;
     }
 
-    .ve-gb-col-date {
+    .ve-gb-col-date,
+    .ve-gb-col-form {
         display: none !important;
     }
 

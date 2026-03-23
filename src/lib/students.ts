@@ -23,7 +23,8 @@ export async function fetchStudents(): Promise<{ data: Student[]; error: string 
 
 export async function createStudent(payload: {
     email: string;
-    full_name: string;
+    first_name: string;
+    last_name: string;
     username: string;
     password: string;
     program_id: string | null;

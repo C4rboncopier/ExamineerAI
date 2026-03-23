@@ -12,9 +12,24 @@ function generateUsername(fullName: string): string {
     return initials + last[0].toUpperCase() + last.slice(1).toLowerCase();
 }
 
+function generateRandomPassword(): string {
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lower = 'abcdefghijkmnpqrstuvwxyz';
+    const digits = '23456789';
+    const special = '!@#$';
+    const all = upper + lower + digits + special;
+    let pw = upper[Math.floor(Math.random() * upper.length)]
+           + lower[Math.floor(Math.random() * lower.length)]
+           + digits[Math.floor(Math.random() * digits.length)]
+           + special[Math.floor(Math.random() * special.length)];
+    for (let i = 0; i < 8; i++) pw += all[Math.floor(Math.random() * all.length)];
+    return pw.split('').sort(() => Math.random() - 0.5).join('');
+}
+
 interface AddForm {
     email: string;
-    full_name: string;
+    first_name: string;
+    last_name: string;
     username: string;
     program_id: string;
     password: string;
@@ -23,7 +38,7 @@ interface AddForm {
 export function AddProfessor() {
     const navigate = useNavigate();
     const [programs, setPrograms] = useState<Program[]>([]);
-    const [addForm, setAddForm] = useState<AddForm>({ email: '', full_name: '', username: '', program_id: '', password: '' });
+    const [addForm, setAddForm] = useState<AddForm>({ email: '', first_name: '', last_name: '', username: '', program_id: '', password: '' });
     const [showPassword, setShowPassword] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
@@ -59,25 +74,32 @@ export function AddProfessor() {
         return prog ? `${prog.code} — ${prog.name}` : 'Unknown';
     }, [addForm.program_id, programs]);
 
-    function handleFullNameChange(val: string) {
-        setAddForm(f => ({ ...f, full_name: val, username: generateUsername(val) }));
+    function handleNameChange(field: 'first_name' | 'last_name', val: string) {
+        setAddForm(f => {
+            const updated = { ...f, [field]: val };
+            const combined = `${updated.first_name.trim()} ${updated.last_name.trim()}`.trim();
+            return { ...updated, username: generateUsername(combined) };
+        });
     }
 
     async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
         setFormError(null);
-        if (!addForm.full_name.trim()) { setFormError('Full name is required.'); return; }
+        if (!addForm.first_name.trim()) { setFormError('First name is required.'); return; }
+        if (!addForm.last_name.trim()) { setFormError('Last name is required.'); return; }
         if (!addForm.email.trim()) { setFormError('Email address is required.'); return; }
         if (!addForm.username.trim()) { setFormError('Username is required.'); return; }
         if (!addForm.password.trim()) { setFormError('Password is required.'); return; }
         if (addForm.password.trim().length < 8) { setFormError('Password must be at least 8 characters.'); return; }
         if (!addForm.program_id) { setFormError('Program assignment is required.'); return; }
 
+        const fullName = `${addForm.first_name.trim()} ${addForm.last_name.trim()}`;
         setIsSubmitting(true);
         try {
             const { error, emailError } = await createProfessor({
                 email: addForm.email,
-                full_name: addForm.full_name,
+                first_name: addForm.first_name.trim(),
+                last_name: addForm.last_name.trim(),
                 username: addForm.username,
                 password: addForm.password,
                 program_id: addForm.program_id,
@@ -91,8 +113,8 @@ export function AddProfessor() {
                 return;
             }
             const toastMessage = emailError
-                ? `Professor "${addForm.full_name}" added, but email notification failed: ${emailError}`
-                : `Professor "${addForm.full_name}" added and notified by email.`;
+                ? `Professor "${fullName}" added, but email notification failed: ${emailError}`
+                : `Professor "${fullName}" added and notified by email.`;
             navigate('/admin/professors', { state: { toastMessage } });
         } catch {
             setFormError('An unexpected error occurred. Please try again.');
@@ -128,12 +150,20 @@ export function AddProfessor() {
             <div className="cs-card" style={{ width: '100%' }}>
                 <form onSubmit={handleAdd} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                     <div className="admin-form-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '16px' }}>
-                        {/* Full Name */}
+                        {/* First Name */}
                         <div>
-                            <label style={labelStyle}>Full Name</label>
-                            <input type="text" required style={inputStyle} placeholder="e.g. John Mark Doe" value={addForm.full_name} onChange={e => handleFullNameChange(e.target.value)} />
+                            <label style={labelStyle}>First Name</label>
+                            <input type="text" required style={inputStyle} placeholder="e.g. John Mark" value={addForm.first_name} onChange={e => handleNameChange('first_name', e.target.value)} />
                         </div>
 
+                        {/* Last Name */}
+                        <div>
+                            <label style={labelStyle}>Last Name</label>
+                            <input type="text" required style={inputStyle} placeholder="e.g. Doe" value={addForm.last_name} onChange={e => handleNameChange('last_name', e.target.value)} />
+                        </div>
+                    </div>
+
+                    <div className="admin-form-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '16px' }}>
                         {/* Email */}
                         <div>
                             <label style={labelStyle}>Email Address</label>
@@ -170,7 +200,12 @@ export function AddProfessor() {
                                     )}
                                 </button>
                             </div>
-                            <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: 'var(--prof-text-muted)' }}>The professor can change this in their settings.</p>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                                <button type="button" onClick={() => { setAddForm(f => ({ ...f, password: generateRandomPassword() })); setShowPassword(true); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: 'var(--prof-primary)', padding: 0, textDecoration: 'underline' }}>
+                                    Generate random password
+                                </button>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--prof-text-muted)' }}>The professor can change this in their settings.</span>
+                            </div>
                         </div>
                     </div>
 

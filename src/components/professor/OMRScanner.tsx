@@ -39,6 +39,7 @@ interface PendingReview {
     computeError?: string;
     isComputing?: boolean;
     alreadyGraded?: boolean;    // student already has a submission for this attempt
+    isDNT?: boolean;            // student was marked Did Not Take (didn't fill out form)
 }
 
 interface ScanRow {
@@ -408,6 +409,9 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
         const alreadyGraded = !!(student && existingGrades?.find(
             g => g.enrollment.student_id === student.student_id && g.submission != null
         ));
+        const isDNT = !!(student && existingGrades?.find(
+            g => g.enrollment.student_id === student.student_id && g.submission?.status === 'did_not_take'
+        ));
 
         // Use CURRENT editAnswers (may have been edited since the async call started)
         setReviewQueue(prev => {
@@ -415,7 +419,7 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
             const item = next[idx];
             if (!item) return prev;
             const { score, totalItems, answers } = gradeOMR(answerKey.questionIds, item.editAnswers, answerKey.questions);
-            next[idx] = { ...item, isComputing: false, alreadyGraded, computed: { student, setNumber, answerKey, score, totalItems, answers } };
+            next[idx] = { ...item, isComputing: false, alreadyGraded, isDNT, computed: { student, setNumber, answerKey, score, totalItems, answers } };
             return next;
         });
     }
@@ -1044,8 +1048,16 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                         </div>{/* end right column */}
                     </div>{/* end two-column grid */}
 
+                    {/* Did Not Take warning */}
+                    {currentPending.isDNT && (
+                        <div style={{ marginTop: '16px', padding: '10px 14px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', color: '#b91c1c', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                            <span><strong>Warning:</strong> This student was marked as <em>Did Not Take</em> — they did not submit a form for this attempt. Saving will overwrite their DNT record.</span>
+                        </div>
+                    )}
+
                     {/* Already graded warning */}
-                    {currentPending.alreadyGraded && (
+                    {currentPending.alreadyGraded && !currentPending.isDNT && (
                         <div style={{ marginTop: '16px', padding: '10px 14px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '8px', color: '#92400e', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
                             This student already has a saved grade for this attempt. Clicking Check will overwrite it.
@@ -1351,8 +1363,16 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                             {/* Answer grid + submit */}
                             {manualAnswerKey && (
                                 <>
+                                    {/* Did Not Take warning */}
+                                    {manualStudentId && existingGrades?.find(g => g.enrollment.student_id === manualStudentId && g.submission?.status === 'did_not_take') && (
+                                        <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', color: '#b91c1c', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                                            <span><strong>Warning:</strong> This student was marked as <em>Did Not Take</em> — they did not submit a form for this attempt. Saving will overwrite their DNT record.</span>
+                                        </div>
+                                    )}
+
                                     {/* Duplicate warning */}
-                                    {manualStudentId && existingGrades?.find(g => g.enrollment.student_id === manualStudentId && g.submission != null) && (
+                                    {manualStudentId && existingGrades?.find(g => g.enrollment.student_id === manualStudentId && g.submission != null && g.submission.status !== 'did_not_take') && (
                                         <div style={{ padding: '10px 14px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '8px', color: '#92400e', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
                                             This student already has a saved grade. Submitting will overwrite it.

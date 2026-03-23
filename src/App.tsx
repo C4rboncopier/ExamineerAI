@@ -29,11 +29,16 @@ import { EditStudent } from './components/admin/EditStudent';
 import { Settings as AdminSettings } from './components/admin/Settings';
 import { AdminExamsList } from './components/admin/AdminExamsList';
 import { AdminSubjectsList } from './components/admin/AdminSubjectsList';
+import { FormsList as AdminFormsList } from './components/admin/FormsList';
+import { CreateForm } from './components/admin/CreateForm';
+import { AdminViewForm } from './components/admin/ViewForm';
 
 import { ExamsList as StudentExamsList } from './components/student/ExamsList';
 import { ViewExam as StudentViewExam } from './components/student/ViewExam';
 import { GradesList as StudentGradesList } from './components/student/GradesList';
 import { Settings as StudentSettings } from './components/student/Settings';
+import { StudentFormsList } from './components/student/FormsList';
+import { StudentViewForm } from './components/student/ViewForm';
 import { Account } from './components/common/Account';
 
 function App() {
@@ -59,6 +64,10 @@ function App() {
               <Route path="students/editstudent/:id" element={<EditStudent />} />
               <Route path="exams" element={<AdminExamsList />} />
               <Route path="subjects" element={<AdminSubjectsList />} />
+              <Route path="forms" element={<AdminFormsList />} />
+              <Route path="forms/create" element={<CreateForm />} />
+              <Route path="forms/edit/:formId" element={<CreateForm />} />
+              <Route path="forms/:formId" element={<AdminViewForm />} />
               <Route path="settings" element={<AdminSettings />} />
               <Route path="account" element={<Account />} />
             </Route>
@@ -95,6 +104,8 @@ function App() {
               <Route path="exams/:examId" element={<Navigate to="gradebook" replace />} />
               <Route path="exams/:examId/:tab" element={<StudentViewExam />} />
               <Route path="grades" element={<StudentGradesList />} />
+              <Route path="forms" element={<StudentFormsList />} />
+              <Route path="forms/:formId" element={<StudentViewForm />} />
               <Route path="settings" element={<StudentSettings />} />
               <Route path="account" element={<Account />} />
             </Route>
