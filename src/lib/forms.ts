@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { markAttemptDidNotTake } from './exams';
-import { enrollStudent, fetchExamEnrollments } from './examEnrollments';
+import { fetchExamEnrollments } from './examEnrollments';
 
 // ─── Types ────────────────────────────────────────────────────
 
