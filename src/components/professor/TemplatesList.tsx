@@ -126,37 +126,51 @@ export function TemplatesList() {
                     <p>No templates match your search.</p>
                 </div>
             ) : (
-                <div className="templates-simple-list">
-                    {filtered.map(template => {
+                <div style={{ borderRadius: '8px', border: '1px solid var(--prof-border)', overflow: 'hidden' }}>
+                    {filtered.map((template, idx) => {
                         const subjectTags = template.subject_ids
                             .map(id => subjectMap[id])
                             .filter(Boolean)
                             .sort((a, b) => a.course_code.localeCompare(b.course_code));
+                        const isLast = idx === filtered.length - 1;
 
                         return (
                             <div
                                 key={template.id}
-                                className="template-list-item subject-card"
-                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', marginBottom: '12px' }}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: '12px',
+                                    padding: '12px 16px', background: '#fff',
+                                    borderLeft: '3px solid var(--prof-primary)',
+                                    borderBottom: isLast ? 'none' : '1px solid var(--prof-border)',
+                                    transition: 'background 0.12s',
+                                }}
+                                onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--prof-surface)'}
+                                onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = '#fff'}
                             >
-                                <div className="template-info">
-                                    <h3 className="subject-name" style={{ margin: '0 0 4px 0' }}>{template.title}</h3>
-                                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                        <span className="subject-code" style={{ marginBottom: 0 }}>{template.code}</span>
-                                        <span className="subject-meta" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                                            {subjectTags.length > 0 ? (
-                                                subjectTags.map(s => (
-                                                    <span key={s.id} style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', color: '#475569' }}>
-                                                        {s.course_code}
-                                                    </span>
-                                                ))
-                                            ) : (
-                                                <span style={{ fontSize: '12px', color: '#94a3b8' }}>No subjects assigned</span>
-                                            )}
-                                        </span>
+                                {/* Left column: code + title + subjects stacked */}
+                                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <div>
+                                        <p style={{ margin: '0 0 2px', fontSize: '0.72rem', color: 'var(--prof-text-muted)', fontWeight: 600, letterSpacing: '0.05em' }}>
+                                            {template.code}
+                                        </p>
+                                        <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--prof-text-main)', fontWeight: 600, lineHeight: 1.4 }}>
+                                            {template.title}
+                                        </p>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                        {subjectTags.length > 0 ? (
+                                            subjectTags.map(s => (
+                                                <span key={s.id} style={{ fontSize: '0.75rem', background: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', color: '#475569', whiteSpace: 'nowrap' }}>
+                                                    {s.course_code}
+                                                </span>
+                                            ))
+                                        ) : (
+                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>No subjects</span>
+                                        )}
                                     </div>
                                 </div>
-                                <div className="subject-card-actions" style={{ marginTop: 0 }}>
+                                {/* Right column: action buttons */}
+                                <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
                                     <button className="btn-icon" onClick={() => handleEdit(template.id)} title="Edit Template">
                                         <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"></path></svg>
                                     </button>
