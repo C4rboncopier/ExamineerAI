@@ -49,6 +49,118 @@ function MathPreview({ text }: { text: string }) {
     );
 }
 
+function KatexPreview({ formula }: { formula: string }) {
+    const html = useMemo(() => {
+        try {
+            return katex.renderToString(formula, { displayMode: false, throwOnError: false });
+        } catch {
+            return escapeHtml(formula);
+        }
+    }, [formula]);
+    return <span style={{ fontSize: '1em' }} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+const KATEX_GUIDE = [
+    {
+        title: 'Superscript & Subscript',
+        items: [
+            { syntax: 'x^2', label: 'Squared' },
+            { syntax: 'x_n', label: 'Subscript' },
+            { syntax: 'x^{2n}', label: 'Multi-char exponent' },
+            { syntax: 'x_{i,j}', label: 'Multi-char subscript' },
+        ],
+    },
+    {
+        title: 'Fractions & Roots',
+        items: [
+            { syntax: '\\frac{a}{b}', label: 'Fraction' },
+            { syntax: '\\frac{1}{2}', label: 'One half' },
+            { syntax: '\\sqrt{x}', label: 'Square root' },
+            { syntax: '\\sqrt[3]{x}', label: 'Cube root' },
+        ],
+    },
+    {
+        title: 'Greek Letters',
+        items: [
+            { syntax: '\\alpha', label: 'Alpha' },
+            { syntax: '\\beta', label: 'Beta' },
+            { syntax: '\\gamma', label: 'Gamma' },
+            { syntax: '\\theta', label: 'Theta' },
+            { syntax: '\\lambda', label: 'Lambda' },
+            { syntax: '\\mu', label: 'Mu' },
+            { syntax: '\\pi', label: 'Pi' },
+            { syntax: '\\sigma', label: 'Sigma' },
+            { syntax: '\\omega', label: 'Omega' },
+            { syntax: '\\Sigma', label: 'Capital Sigma' },
+            { syntax: '\\Delta', label: 'Capital Delta' },
+            { syntax: '\\Omega', label: 'Capital Omega' },
+        ],
+    },
+    {
+        title: 'Arithmetic Operators',
+        items: [
+            { syntax: '\\times', label: 'Multiply' },
+            { syntax: '\\div', label: 'Divide' },
+            { syntax: '\\pm', label: 'Plus-minus' },
+            { syntax: '\\cdot', label: 'Dot product' },
+            { syntax: '\\neq', label: 'Not equal' },
+            { syntax: '\\approx', label: 'Approximately' },
+            { syntax: '\\leq', label: 'Less or equal' },
+            { syntax: '\\geq', label: 'Greater or equal' },
+            { syntax: '\\infty', label: 'Infinity' },
+        ],
+    },
+    {
+        title: 'Summation & Integrals',
+        items: [
+            { syntax: '\\sum', label: 'Sum' },
+            { syntax: '\\sum_{i=1}^{n}', label: 'Sum with bounds' },
+            { syntax: '\\prod', label: 'Product' },
+            { syntax: '\\int', label: 'Integral' },
+            { syntax: '\\int_a^b', label: 'Definite integral' },
+        ],
+    },
+    {
+        title: 'Trigonometry & Logarithms',
+        items: [
+            { syntax: '\\sin', label: 'Sine' },
+            { syntax: '\\cos', label: 'Cosine' },
+            { syntax: '\\tan', label: 'Tangent' },
+            { syntax: '\\log', label: 'Logarithm' },
+            { syntax: '\\ln', label: 'Natural log' },
+            { syntax: '\\sin^2 x', label: 'Sin squared' },
+        ],
+    },
+    {
+        title: 'Sets & Logic',
+        items: [
+            { syntax: '\\in', label: 'Element of' },
+            { syntax: '\\notin', label: 'Not in set' },
+            { syntax: '\\subset', label: 'Subset' },
+            { syntax: '\\cup', label: 'Union' },
+            { syntax: '\\cap', label: 'Intersection' },
+            { syntax: '\\emptyset', label: 'Empty set' },
+        ],
+    },
+    {
+        title: 'Vectors & Accents',
+        items: [
+            { syntax: '\\vec{v}', label: 'Vector' },
+            { syntax: '\\hat{x}', label: 'Hat' },
+            { syntax: '\\bar{x}', label: 'Bar' },
+            { syntax: '\\dot{x}', label: 'Dot over' },
+        ],
+    },
+    {
+        title: 'Brackets',
+        items: [
+            { syntax: '\\left( x \\right)', label: 'Auto-sized parens' },
+            { syntax: '\\left[ x \\right]', label: 'Auto-sized brackets' },
+            { syntax: '\\lvert x \\rvert', label: 'Absolute value' },
+        ],
+    },
+];
+
 export function CreateQuestion() {
     const { subjectId, questionId } = useParams<{ subjectId?: string; questionId?: string }>();
     const navigate = useNavigate();
@@ -86,6 +198,17 @@ export function CreateQuestion() {
     const [generatedVariations, setGeneratedVariations] = useState<GeneratedQuestion[]>([]);
     const [includedVariations, setIncludedVariations] = useState<Set<number>>(new Set());
     const [showAiDisableConfirm, setShowAiDisableConfirm] = useState(false);
+    const [showKatexGuide, setShowKatexGuide] = useState(false);
+
+    // Lock body scroll when KaTeX guide is open
+    useEffect(() => {
+        if (showKatexGuide) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => { document.body.style.overflow = ''; };
+    }, [showKatexGuide]);
 
     // AI daily limit
     const [aiDailyLimit, setAiDailyLimit] = useState<number | null>(null);
@@ -350,7 +473,26 @@ export function CreateQuestion() {
 
             <div className="cs-header">
                 <h2>{isEditMode ? 'Edit Question' : 'Create New Question'}</h2>
-                <p>Fill in the details below. Use <code>$$...$$</code> for math equations.</p>
+                <p>
+                    Fill in the details below. Use <code>$$...$$</code> for math equations.{' '}
+                    <button
+                        type="button"
+                        onClick={() => setShowKatexGuide(true)}
+                        title="View KaTeX math syntax guide"
+                        style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            width: '18px', height: '18px', borderRadius: '50%',
+                            border: '1.5px solid var(--prof-primary)', background: 'transparent',
+                            color: 'var(--prof-primary)', cursor: 'pointer', fontSize: '11px',
+                            fontWeight: 700, lineHeight: 1, padding: 0, verticalAlign: 'middle',
+                            marginBottom: '1px', transition: 'background 0.15s, color 0.15s',
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--prof-primary)'; (e.currentTarget as HTMLButtonElement).style.color = '#fff'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--prof-primary)'; }}
+                    >
+                        i
+                    </button>
+                </p>
             </div>
 
             {submitError && <p className="cs-error">{submitError}</p>}
@@ -753,6 +895,133 @@ export function CreateQuestion() {
                 type={toastType}
                 onClose={() => setToastMessage(null)}
             />
+
+            {showKatexGuide && (
+                <div
+                    onClick={() => setShowKatexGuide(false)}
+                    style={{
+                        position: 'fixed', inset: 0, zIndex: 2000,
+                        background: 'rgba(15,37,84,0.45)', backdropFilter: 'blur(4px)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: '20px',
+                    }}
+                >
+                    <div
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                            background: '#fff', borderRadius: '16px', width: '100%',
+                            maxWidth: '580px', boxShadow: '0 25px 50px -12px rgba(15,37,84,0.25)',
+                            overflow: 'hidden', display: 'flex', flexDirection: 'column',
+                            maxHeight: '90vh',
+                        }}
+                    >
+                        {/* Header */}
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '16px 20px', borderBottom: '1px solid var(--prof-border)',
+                            background: 'linear-gradient(to right, #f8fafc, #ffffff)',
+                            flexShrink: 0,
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{
+                                    width: '32px', height: '32px', borderRadius: '50%',
+                                    background: 'rgba(15,37,84,0.08)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    color: 'var(--prof-primary)', fontWeight: 700, fontSize: '0.95rem',
+                                    flexShrink: 0,
+                                }}>
+                                    i
+                                </div>
+                                <div>
+                                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>
+                                        KaTeX Math Guide
+                                    </h3>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--prof-text-muted)' }}>
+                                        Quick reference for math equation syntax
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowKatexGuide(false)}
+                                style={{
+                                    background: 'transparent', border: 'none', cursor: 'pointer',
+                                    color: 'var(--prof-text-muted)', padding: '6px', display: 'flex',
+                                    borderRadius: '8px', flexShrink: 0,
+                                }}
+                            >
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {/* Usage tip */}
+                        <div style={{
+                            padding: '10px 20px', background: 'rgba(15,37,84,0.04)',
+                            borderBottom: '1px solid var(--prof-border)', flexShrink: 0,
+                        }}>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--prof-text-muted)', lineHeight: 1.5 }}>
+                                <strong style={{ color: 'var(--prof-text-main)' }}>How to use:</strong>{' '}
+                                Wrap any formula with{' '}
+                                <code style={{ background: '#e8edf7', padding: '1px 5px', borderRadius: '4px', fontSize: '0.77rem', color: 'var(--prof-primary)', fontWeight: 600 }}>{'$$'}...{'$$'}</code>
+                                {' '}in your question text. Example:{' '}
+                                <code style={{ background: '#e8edf7', padding: '1px 5px', borderRadius: '4px', fontSize: '0.77rem', color: 'var(--prof-primary)', fontWeight: 600 }}>{'$$\\frac{a}{b}$$'}</code>
+                                {' '}renders as{' '}
+                                <KatexPreview formula="\frac{a}{b}" />
+                            </p>
+                        </div>
+
+                        {/* Scrollable body */}
+                        <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1 }}>
+                            {KATEX_GUIDE.map((group, gi) => (
+                                <div key={gi} style={{ marginBottom: gi < KATEX_GUIDE.length - 1 ? '18px' : 0 }}>
+                                    <h4 style={{
+                                        fontSize: '0.7rem', fontWeight: 700, color: 'var(--prof-primary)',
+                                        textTransform: 'uppercase', letterSpacing: '0.06em',
+                                        margin: '0 0 8px', paddingBottom: '5px',
+                                        borderBottom: '1.5px solid var(--prof-border)',
+                                    }}>
+                                        {group.title}
+                                    </h4>
+                                    <div style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                                        gap: '5px',
+                                    }}>
+                                        {group.items.map((item, ii) => (
+                                            <div key={ii} style={{
+                                                display: 'flex', alignItems: 'center',
+                                                justifyContent: 'space-between', gap: '8px',
+                                                padding: '6px 10px', borderRadius: '7px',
+                                                background: 'var(--prof-bg)',
+                                                border: '1px solid var(--prof-border)',
+                                            }}>
+                                                <code style={{
+                                                    fontSize: '0.72rem',
+                                                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                                                    color: '#0f2554', background: '#e8edf7',
+                                                    padding: '2px 6px', borderRadius: '4px',
+                                                    whiteSpace: 'nowrap', overflow: 'hidden',
+                                                    textOverflow: 'ellipsis', maxWidth: '60%',
+                                                    flexShrink: 0,
+                                                }}>
+                                                    {item.syntax}
+                                                </code>
+                                                <span style={{
+                                                    fontSize: '0.95rem', color: 'var(--prof-text-main)',
+                                                    textAlign: 'right', flexShrink: 0,
+                                                }}>
+                                                    <KatexPreview formula={item.syntax} />
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {showAiDisableConfirm && (
                 <div className="ql-summary-overlay" onClick={() => setShowAiDisableConfirm(false)} style={{ zIndex: 2000 }}>

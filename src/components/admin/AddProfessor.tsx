@@ -200,11 +200,26 @@ export function AddProfessor() {
                                     )}
                                 </button>
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                                <button type="button" onClick={() => { setAddForm(f => ({ ...f, password: generateRandomPassword() })); setShowPassword(true); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: 'var(--prof-primary)', padding: 0, textDecoration: 'underline' }}>
-                                    Generate random password
+                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginTop: '6px' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => { setAddForm(f => ({ ...f, password: generateRandomPassword() })); setShowPassword(true); }}
+                                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--prof-primary)'; (e.currentTarget as HTMLButtonElement).style.color = '#fff'; }}
+                                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--prof-primary)'; }}
+                                    style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                        padding: '5px 10px', borderRadius: '6px',
+                                        border: '1.5px solid var(--prof-primary)', background: 'transparent',
+                                        color: 'var(--prof-primary)', fontSize: '0.75rem', fontWeight: 600,
+                                        cursor: 'pointer', transition: 'background 0.15s, color 0.15s', lineHeight: 1.2,
+                                    }}
+                                >
+                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="12" height="12">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                    </svg>
+                                    Generate password
                                 </button>
-                                <span style={{ fontSize: '0.75rem', color: 'var(--prof-text-muted)' }}>The professor can change this in their settings.</span>
+                                <span style={{ fontSize: '0.72rem', color: 'var(--prof-text-muted)' }}>The professor can change this in their settings.</span>
                             </div>
                         </div>
                     </div>
