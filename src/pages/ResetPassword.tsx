@@ -118,15 +118,36 @@ export function ResetPassword() {
     <div className="login-container">
       <div className="login-left">
         <div className="left-content">
-          <img src="https://placehold.co/200x60/0f2554/FFF?text=Examineer+AI" alt="Examineer AI Logo" className="logo" />
-          <h1 className="brand-title">Examineer AI</h1>
+          <img src="/logo.png" alt="Examineer AI Logo" className="logo" />
+          <h1 className="brand-title"><span>Examineer</span><span className="brand-ai">AI</span></h1>
           <p className="brand-subtitle">Empowering your exams with artificial intelligence.</p>
+          <div className="brand-divider" />
+          <ul className="brand-features">
+            <li>
+              <span className="feat-check">
+                <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="11" height="11"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+              </span>
+              AI-powered exam question analysis
+            </li>
+            <li>
+              <span className="feat-check">
+                <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="11" height="11"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+              </span>
+              Automated OMR sheet scanning &amp; grading
+            </li>
+            <li>
+              <span className="feat-check">
+                <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="11" height="11"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+              </span>
+              Real-time student performance insights
+            </li>
+          </ul>
         </div>
       </div>
       <div className="login-right">
         <div className="login-card">
           <div className="mobile-logo-container">
-            <img src="https://placehold.co/200x60/0f2554/FFF?text=Examineer+AI" alt="Examineer AI Logo" className="mobile-logo" />
+            <img src="/logo_with_text.png" alt="Examineer AI Logo" className="mobile-logo" />
           </div>
 
           {stage === 'loading' && (
