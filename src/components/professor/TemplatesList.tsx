@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchTemplates, deleteTemplate } from '../../lib/templates';
 import type { Template } from '../../lib/templates';
@@ -18,6 +18,7 @@ export function TemplatesList() {
     const [templates, setTemplates] = useState<Template[]>([]);
     const [subjectMap, setSubjectMap] = useState<Record<string, SubjectWithCounts>>({});
     const [isLoading, setIsLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
 
     // Delete state
     const [deletePopupOpen, setDeletePopupOpen] = useState(false);
@@ -42,6 +43,14 @@ export function TemplatesList() {
             setIsLoading(false);
         });
     }, []);
+
+    const filtered = useMemo(() => {
+        const q = searchQuery.toLowerCase().trim();
+        if (!q) return templates;
+        return templates.filter(t =>
+            t.title.toLowerCase().includes(q) || t.code.toLowerCase().includes(q)
+        );
+    }, [templates, searchQuery]);
 
     const handleEdit = (id: string) => navigate(`/professor/templates/${id}/edit`);
 
@@ -79,6 +88,21 @@ export function TemplatesList() {
                 </div>
             </div>
 
+            {/* Search */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
+                <div className="subjects-search" style={{ flex: 1, marginBottom: 0 }}>
+                    <svg className="search-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                    </svg>
+                    <input type="text" className="subjects-search-input" placeholder="Search by title or code..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                    {searchQuery && (
+                        <button className="search-clear-btn" onClick={() => setSearchQuery('')}>
+                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    )}
+                </div>
+            </div>
+
             {isLoading ? (
                 <div className="subjects-empty">
                     <p style={{ color: 'var(--prof-text-muted)' }}>Loading templates...</p>
@@ -94,9 +118,16 @@ export function TemplatesList() {
                         + Create Template
                     </button>
                 </div>
+            ) : filtered.length === 0 ? (
+                <div className="subjects-empty">
+                    <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" className="empty-icon">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                    </svg>
+                    <p>No templates match your search.</p>
+                </div>
             ) : (
                 <div className="templates-simple-list">
-                    {templates.map(template => {
+                    {filtered.map(template => {
                         const subjectTags = template.subject_ids
                             .map(id => subjectMap[id])
                             .filter(Boolean)
