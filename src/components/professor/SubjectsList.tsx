@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../../lib/supabase';
 import { fetchProfessorSubjectsWithAccess } from '../../lib/subjects';
 import type { SubjectWithAccess, SubjectAccessType } from '../../lib/subjects';
 
@@ -40,6 +41,22 @@ export function SubjectsList() {
     const [searchQuery, setSearchQuery] = useState('');
     const [accessFilter, setAccessFilter] = useState<AccessFilter>('all');
     const [currentPage, setCurrentPage] = useState(1);
+    const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
+    const [viewModeUserId, setViewModeUserId] = useState<string | null>(null);
+
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data }) => {
+            const uid = data.user?.id;
+            if (!uid) return;
+            setViewModeUserId(uid);
+            const stored = localStorage.getItem(`subjects_viewMode_${uid}`);
+            if (stored === 'card' || stored === 'list') setViewMode(stored);
+        });
+    }, []);
+
+    useEffect(() => {
+        if (viewModeUserId) localStorage.setItem(`subjects_viewMode_${viewModeUserId}`, viewMode);
+    }, [viewMode, viewModeUserId]);
 
     const filteredSubjects = useMemo(() => {
         let result = subjects;
@@ -114,22 +131,36 @@ export function SubjectsList() {
                 </div>
             ) : (
                 <>
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', alignItems: 'center' }}>
-                        <div className="subjects-search" style={{ flex: 1, marginBottom: 0 }}>
-                            <svg className="search-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"></path></svg>
-                            <input
-                                type="text"
-                                className="subjects-search-input"
-                                placeholder="Search by course title or code..."
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                            />
-                            {searchQuery && (
-                                <button className="search-clear-btn" onClick={() => setSearchQuery('')} title="Clear search">
-                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', alignItems: 'center', flexWrap: 'wrap' }}>
+
+                        {/* Group 1: toggles + search — always on the same row */}
+                        <div style={{ display: 'flex', gap: '8px', flex: '1 1 auto', minWidth: '250px', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                                <button type="button" onClick={() => setViewMode('card')} title="Card view" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: '6px', cursor: 'pointer', border: viewMode === 'card' ? '1.5px solid var(--prof-primary)' : '1.5px solid var(--prof-border)', background: viewMode === 'card' ? 'var(--prof-primary)' : 'transparent', color: viewMode === 'card' ? '#fff' : 'var(--prof-text-muted)', transition: 'all 0.15s' }}>
+                                    <svg fill="none" strokeWidth="1.8" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
                                 </button>
-                            )}
+                                <button type="button" onClick={() => setViewMode('list')} title="List view" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: '6px', cursor: 'pointer', border: viewMode === 'list' ? '1.5px solid var(--prof-primary)' : '1.5px solid var(--prof-border)', background: viewMode === 'list' ? 'var(--prof-primary)' : 'transparent', color: viewMode === 'list' ? '#fff' : 'var(--prof-text-muted)', transition: 'all 0.15s' }}>
+                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                                </button>
+                            </div>
+                            <div className="subjects-search" style={{ flex: 1, marginBottom: 0 }}>
+                                <svg className="search-icon" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"></path></svg>
+                                <input
+                                    type="text"
+                                    className="subjects-search-input"
+                                    placeholder="Search by course title or code..."
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                />
+                                {searchQuery && (
+                                    <button className="search-clear-btn" onClick={() => setSearchQuery('')} title="Clear search">
+                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                    </button>
+                                )}
+                            </div>
                         </div>
+
+                        {/* Group 2: access select — wraps below on narrow viewports */}
                         <select
                             className="subjects-access-select"
                             value={accessFilter}
@@ -144,6 +175,7 @@ export function SubjectsList() {
                             <option value="manageable">Manageable</option>
                             <option value="view-only">View Only</option>
                         </select>
+
                     </div>
 
                     {filteredSubjects.length === 0 ? (
@@ -156,29 +188,67 @@ export function SubjectsList() {
                         </div>
                     ) : (
                         <>
-                            <div className="subjects-grid">
-                                {paginatedSubjects.map(subject => (
-                                    <div
-                                        key={subject.id}
-                                        className="subject-card"
-                                        style={{ cursor: 'pointer' }}
-                                        onClick={() => navigate(`/professor/subjects/${subject.id}/overview`)}
-                                    >
-                                        <div className="subject-card-body">
-                                            <div className="subject-card-info">
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                                    <span className="subject-code">{subject.course_code}</span>
-                                                    <AccessBadge type={subject.accessType} />
+                            {viewMode === 'card' ? (
+                                <div className="subjects-grid">
+                                    {paginatedSubjects.map(subject => (
+                                        <div
+                                            key={subject.id}
+                                            className="subject-card"
+                                            style={{ cursor: 'pointer' }}
+                                            onClick={() => navigate(`/professor/subjects/${subject.id}/overview`)}
+                                        >
+                                            <div className="subject-card-body">
+                                                <div className="subject-card-info">
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                        <span className="subject-code">{subject.course_code}</span>
+                                                        <AccessBadge type={subject.accessType} />
+                                                    </div>
+                                                    <h3 className="subject-name">{subject.course_title}</h3>
+                                                    <span className="subject-meta">
+                                                        {subject.course_outcomes[0]?.count ?? 0} Course Outcome{(subject.course_outcomes[0]?.count ?? 0) !== 1 ? 's' : ''}
+                                                    </span>
                                                 </div>
-                                                <h3 className="subject-name">{subject.course_title}</h3>
-                                                <span className="subject-meta">
-                                                    {subject.course_outcomes[0]?.count ?? 0} Course Outcome{(subject.course_outcomes[0]?.count ?? 0) !== 1 ? 's' : ''}
-                                                </span>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div style={{ borderRadius: '8px', border: '1px solid var(--prof-border)', overflow: 'hidden' }}>
+                                    {paginatedSubjects.map((subject, idx) => {
+                                        const isLast = idx === paginatedSubjects.length - 1;
+                                        return (
+                                            <div
+                                                key={subject.id}
+                                                onClick={() => navigate(`/professor/subjects/${subject.id}/overview`)}
+                                                style={{
+                                                    display: 'flex', alignItems: 'center', gap: '12px',
+                                                    padding: '12px 16px', background: '#fff',
+                                                    borderBottom: isLast ? 'none' : '1px solid var(--prof-border)',
+                                                    cursor: 'pointer', transition: 'background 0.12s',
+                                                }}
+                                                onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--prof-surface)'}
+                                                onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = '#fff'}
+                                            >
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <p style={{ margin: '0 0 2px', fontSize: '0.72rem', color: 'var(--prof-text-muted)', fontWeight: 600, letterSpacing: '0.05em' }}>
+                                                        {subject.course_code}
+                                                    </p>
+                                                    <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--prof-text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {subject.course_title}
+                                                    </p>
+                                                </div>
+                                                <AccessBadge type={subject.accessType} />
+                                                <span style={{ fontSize: '0.78rem', color: 'var(--prof-text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                                    {subject.course_outcomes[0]?.count ?? 0} CO{(subject.course_outcomes[0]?.count ?? 0) !== 1 ? 's' : ''}
+                                                </span>
+                                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" style={{ flexShrink: 0, color: 'var(--prof-text-muted)' }}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                                </svg>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
 
                             {totalPages > 1 && (
                                 <div className="subjects-pagination">
