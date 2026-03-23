@@ -109,6 +109,8 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
     // ── Image upload ──────────────────────────────────────────────────────────
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+    const [imageQueue, setImageQueue] = useState<File[]>([]);        // files waiting to be sent to server
+    const [imageTotalCount, setImageTotalCount] = useState(0);       // total selected, for progress display
 
     // ── ZIP ───────────────────────────────────────────────────────────────────
     const [zipFile, setZipFile] = useState<File | null>(null);
@@ -517,10 +519,21 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                 await computeAtIndex(reviewQueue, nextIdx);
             }
         } else {
-            // All items done
+            // All items done for this review batch
             setReviewQueue([]);
             setReviewIndex(0);
-            if (pending.source === 'camera') startCamera();
+            if (pending.source === 'camera') {
+                startCamera();
+            } else if (pending.source === 'image' && imageQueue.length > 0) {
+                const [next, ...remaining] = imageQueue;
+                setImageQueue(remaining);
+                setImageFile(next);
+                if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+                setImagePreviewUrl(URL.createObjectURL(next));
+                await scanSingleFile(next);
+            } else if (pending.source === 'image') {
+                setImageTotalCount(0);
+            }
         }
 
         setIsSaving(false);
@@ -530,6 +543,19 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
         setReviewQueue([]);
         setReviewIndex(0);
         setShowAnswerEditor(false);
+    }
+
+    async function handleSkipImage() {
+        if (imageQueue.length === 0) return;
+        setReviewQueue([]);
+        setReviewIndex(0);
+        setShowAnswerEditor(false);
+        const [next, ...remaining] = imageQueue;
+        setImageQueue(remaining);
+        setImageFile(next);
+        if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+        setImagePreviewUrl(URL.createObjectURL(next));
+        await scanSingleFile(next);
     }
 
     // ── Edit handlers ─────────────────────────────────────────────────────────
@@ -593,23 +619,31 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
     // ── Image upload ──────────────────────────────────────────────────────────
 
     function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
-        const file = e.target.files?.[0] ?? null;
-        setImageFile(file);
+        const files = Array.from(e.target.files ?? []);
+        if (!files.length) return;
+        const [first, ...rest] = files;
+        setImageFile(first);
+        setImageQueue(rest);
+        setImageTotalCount(files.length);
         if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
-        setImagePreviewUrl(file ? URL.createObjectURL(file) : null);
+        setImagePreviewUrl(URL.createObjectURL(first));
     }
 
-    async function handleScanImage() {
-        if (!imageFile || isProcessing) return;
+    async function scanSingleFile(file: File) {
         setIsProcessing(true);
         try {
-            const omrResult = await scanOMRImage(imageFile, serverUrl);
-            await enterReview(omrResult, 'image', imageFile.name);
+            const omrResult = await scanOMRImage(file, serverUrl);
+            await enterReview(omrResult, 'image', file.name);
         } catch (err: any) {
             setResults(prev => [{ omrResult: { roll_number: '', exam_set: '', answers: [], error: err.message }, student: null, gradeStatus: 'server_error' }, ...prev]);
         } finally {
             setIsProcessing(false);
         }
+    }
+
+    async function handleScanImage() {
+        if (!imageFile || isProcessing) return;
+        await scanSingleFile(imageFile);
     }
 
     // ── ZIP batch ─────────────────────────────────────────────────────────────
@@ -763,7 +797,9 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                             <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: 'var(--prof-text-muted, #64748b)' }}>
                                 {currentPending.source === 'zip'
                                     ? `Sheet ${reviewIndex + 1} of ${reviewQueue.length}${currentPending.filename ? ` — ${currentPending.filename}` : ''}`
-                                    : currentPending.filename ?? ''
+                                    : currentPending.source === 'image' && imageTotalCount > 1
+                                        ? `Image ${imageTotalCount - imageQueue.length} of ${imageTotalCount}${currentPending.filename ? ` — ${currentPending.filename}` : ''}`
+                                        : currentPending.filename ?? ''
                                 }
                             </p>
                         </div>
@@ -1075,6 +1111,15 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                                 ← Rescan
                             </button>
                         )}
+                        {currentPending.source === 'image' && imageQueue.length > 0 && (
+                            <button
+                                onClick={handleSkipImage}
+                                disabled={isSaving}
+                                style={{ padding: '9px 18px', borderRadius: '8px', border: '1.5px solid var(--prof-border, #e2e8f0)', background: '#fff', cursor: isSaving ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.88rem', color: 'var(--prof-text-muted, #64748b)', display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: isSaving ? 0.5 : 1 }}
+                            >
+                                Skip →
+                            </button>
+                        )}
                         <button
                             onClick={() => handleDecision('verified')}
                             disabled={isSaving || !!currentPending.isComputing || !currentPending.computed?.student}
@@ -1221,9 +1266,11 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                                 <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" width="36" height="36" style={{ opacity: 0.5 }}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                                 </svg>
-                                <span style={{ fontWeight: 500 }}>{imageFile ? imageFile.name : 'Click to choose an image'}</span>
-                                <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>JPG, PNG, WEBP supported</span>
-                                <input type="file" accept="image/*" onChange={handleImageSelect} style={{ display: 'none' }} />
+                                <span style={{ fontWeight: 500 }}>
+                                    {imageTotalCount > 1 ? `${imageTotalCount} images selected` : imageFile ? imageFile.name : 'Click to choose image(s)'}
+                                </span>
+                                <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>JPG, PNG, WEBP — select one or multiple</span>
+                                <input type="file" accept="image/*" multiple onChange={handleImageSelect} style={{ display: 'none' }} />
                             </label>
                             {imagePreviewUrl && (
                                 <div style={{ border: '1px solid var(--prof-border, #e2e8f0)', borderRadius: '10px', overflow: 'hidden', background: '#f8fafc', display: 'flex', justifyContent: 'center' }}>
