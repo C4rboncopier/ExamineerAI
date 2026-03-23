@@ -223,6 +223,16 @@ export async function deleteForm(formId: string): Promise<{ error: string | null
     return { error: error?.message ?? null };
 }
 
+/** Force-close a form by setting submission_end to now */
+export async function closeForm(formId: string): Promise<{ error: string | null }> {
+    const now = new Date().toISOString();
+    const { error } = await supabase
+        .from('forms')
+        .update({ submission_end: now, updated_at: now })
+        .eq('id', formId);
+    return { error: error?.message ?? null };
+}
+
 // ─── Notify Students ──────────────────────────────────────────
 
 async function notifyEligibleStudents(

@@ -7,7 +7,7 @@
 .login-left {
   flex: 1;
   display: none;
-  background: linear-gradient(135deg, var(--secondary) 0%, var(--bg-dark) 100%);
+  background: linear-gradient(160deg, #0f2554 0%, #0a1a3d 55%, #060e22 100%);
   position: relative;
   overflow: hidden;
   align-items: center;
@@ -18,28 +18,26 @@
 .login-left::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-image: url('https://placehold.co/1000x1000/0f2554/0f2554?text=Background');
-  background-size: cover;
-  background-position: center;
-  opacity: 0.15;
-  mix-blend-mode: color-dodge;
-  animation: pulseBackground 15s infinite alternate ease-in-out;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 75% 15%, rgba(236, 31, 40, 0.2) 0%, transparent 45%),
+    radial-gradient(circle at 15% 80%, rgba(59, 130, 246, 0.12) 0%, transparent 40%),
+    radial-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 28px 28px;
+  pointer-events: none;
 }
 
-@keyframes pulseBackground {
-  0% {
-    transform: scale(1);
-    opacity: 0.1;
-  }
-
-  100% {
-    transform: scale(1.05);
-    opacity: 0.2;
-  }
+.login-left::after {
+  content: '';
+  position: absolute;
+  top: -90px;
+  right: -90px;
+  width: 340px;
+  height: 340px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 0 70px rgba(255, 255, 255, 0.02), 0 0 0 140px rgba(255, 255, 255, 0.012);
+  pointer-events: none;
 }
 
 .left-content {
@@ -51,25 +49,65 @@
 .logo {
   height: auto;
   width: 180px;
-  margin-bottom: 2rem;
-  border-radius: 4px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  margin-bottom: 0.75rem;
 }
 
 .brand-title {
   font-size: 3.5rem;
   font-weight: 700;
-  margin-bottom: 1rem;
-  background: linear-gradient(135deg, #ffffff 0%, var(--text-muted) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  margin-bottom: 0.875rem;
+  color: #ffffff;
   line-height: 1.1;
 }
 
+.brand-ai {
+  color: #ec1f28;
+}
+
 .brand-subtitle {
-  font-size: 1.25rem;
-  color: var(--text-muted);
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.6);
   line-height: 1.6;
+  margin-bottom: 0;
+}
+
+.brand-divider {
+  width: 48px;
+  height: 3px;
+  background: linear-gradient(90deg, #ec1f28, transparent);
+  border-radius: 2px;
+  margin: 1.75rem 0;
+}
+
+.brand-features {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.brand-features li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.feat-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(236, 31, 40, 0.15);
+  border: 1px solid rgba(236, 31, 40, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #ec1f28;
 }
 
 .login-right {
@@ -125,7 +163,6 @@
 .mobile-logo {
   height: auto;
   width: 160px;
-  border-radius: 4px;
 }
 
 .login-title {

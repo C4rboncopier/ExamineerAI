@@ -3,9 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import {
     fetchFormById, fetchFormSubmissions, deleteForm,
-    processLateSubmissions, formatPHT,
+    closeForm, processLateSubmissions, formatPHT,
 } from '../../lib/forms';
 import type { Form, FormSubmission } from '../../lib/forms';
+import { Popup } from '../common/Popup';
 
 function getWindowStatus(form: Form): 'open' | 'upcoming' | 'closed' {
     const now = Date.now();
@@ -31,6 +32,8 @@ export function AdminViewForm() {
     const [subSearch, setSubSearch] = useState('');
     const [subPage, setSubPage] = useState(1);
     const SUB_PAGE_SIZE = 10;
+    const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+    const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
 
     useEffect(() => {
         if (!formId) return;
@@ -83,6 +86,19 @@ export function AdminViewForm() {
             setDeleteOpen(false);
         } else {
             navigate('/admin/forms');
+        }
+    }
+
+    async function handleCloseForm() {
+        if (!formId) return;
+        setCloseConfirmOpen(false);
+        const { error } = await closeForm(formId);
+        if (error) {
+            showToast('Failed to close form.', 'error');
+        } else {
+            showToast('Form closed successfully.', 'success');
+            const { data } = await fetchFormById(formId);
+            if (data) setForm(data);
         }
     }
 
@@ -226,7 +242,16 @@ export function AdminViewForm() {
                         <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: 'var(--prof-text-muted)', lineHeight: 1.5 }}>{form.description}</p>
                     )}
                 </div>
-                <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: '8px', flexShrink: 0, flexWrap: 'wrap' }}>
+                    {ws !== 'closed' && (
+                        <button
+                            onClick={() => setCloseConfirmOpen(true)}
+                            style={{ padding: '8px 16px', background: '#fff7ed', color: '#c2410c', border: '1.5px solid #fed7aa', borderRadius: '8px', fontSize: '0.83rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                        >
+                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                            Close Form
+                        </button>
+                    )}
                     {ws === 'closed' && (
                         <button
                             onClick={downloadXlsx}
@@ -254,7 +279,7 @@ export function AdminViewForm() {
             </div>
 
             {/* Stat row */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+            <div className="vf-stat-grid" style={{ gap: '12px', marginBottom: '20px' }}>
                 {[
                     {
                         label: 'Total Submissions', value: total,
@@ -290,10 +315,10 @@ export function AdminViewForm() {
             </div>
 
             {/* Two-column layout */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '20px', alignItems: 'start' }}>
+            <div className="vf-overview-grid">
 
                 {/* ── Left: Overview ── */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div className="vf-main-col" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
                     {/* Exam breakdown */}
                     <div className="cs-card" style={{ padding: '18px 20px' }}>
@@ -389,12 +414,12 @@ export function AdminViewForm() {
                                                             </div>
                                                             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
                                                                 {sub.student?.student_id && (
-                                                                    <span style={{ fontFamily: 'monospace', fontSize: '0.72rem', color: 'var(--prof-text-muted)' }}>
+                                                                    <span className="vf-hide-mobile" style={{ fontFamily: 'monospace', fontSize: '0.72rem', color: 'var(--prof-text-muted)' }}>
                                                                         {sub.student.student_id}
                                                                     </span>
                                                                 )}
                                                                 {sub.student?.email && (
-                                                                    <span style={{ fontSize: '0.72rem', color: 'var(--prof-text-muted)' }}>
+                                                                    <span className="vf-hide-mobile" style={{ fontSize: '0.72rem', color: 'var(--prof-text-muted)' }}>
                                                                         · {sub.student.email}
                                                                     </span>
                                                                 )}
@@ -445,10 +470,21 @@ export function AdminViewForm() {
                 </div>
 
                 {/* ── Right: Details + Actions ── */}
-                <div style={{ position: 'sticky', top: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div className="vf-details-col" style={{ position: 'sticky', top: '24px' }}>
+                    <div className="vf-details-card">
+
+                        {/* Toggle button — visible on mobile only */}
+                        <button className="vf-details-toggle" onClick={() => setIsDetailsOpen(v => !v)}>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Form Details</span>
+                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16" style={{ color: 'var(--prof-text-muted)', transform: isDetailsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', flexShrink: 0 }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </button>
+
+                        <div className={`vf-details-body${isDetailsOpen ? ' vf-details-open' : ''}`}>
 
                     {/* Form details */}
-                    <div className="cs-card" style={{ padding: 0, overflow: 'hidden' }}>
+                    <div className="cs-card vf-details-inner-card" style={{ padding: 0, overflow: 'hidden' }}>
                         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--prof-border)', background: '#fafbfc' }}>
                             <p style={{ margin: 0, fontSize: '0.7rem', fontWeight: 700, color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Form Details</p>
                         </div>
@@ -507,8 +543,23 @@ export function AdminViewForm() {
                             </button>
                         </div>
                     )}
-                </div>
-            </div>
+
+                        </div>{/* end vf-details-body */}
+                    </div>{/* end vf-details-card */}
+                </div>{/* end vf-details-col */}
+            </div>{/* end vf-overview-grid */}
+
+            {/* Close form confirmation */}
+            <Popup
+                isOpen={closeConfirmOpen}
+                title="Close Form"
+                message={`This will immediately close the submission window for "${form.title}". Students will no longer be able to submit.`}
+                type="warning"
+                onConfirm={handleCloseForm}
+                onCancel={() => setCloseConfirmOpen(false)}
+                confirmText="Close Form"
+                cancelText="Cancel"
+            />
 
             {/* Delete confirmation */}
             {deleteOpen && (
