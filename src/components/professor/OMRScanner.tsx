@@ -361,7 +361,7 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
     useEffect(() => {
         if (!cameraActive || !videoRef.current || !streamRef.current) return;
         videoRef.current.srcObject = streamRef.current;
-        videoRef.current.play().catch(() => {});
+        videoRef.current.play().catch(() => { });
     }, [cameraActive, reviewQueue.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Stop camera when leaving camera mode
@@ -401,7 +401,7 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
             const videoAR = vW / vH;
             let srcX = 0, srcY = 0, srcW = vW, srcH = vH;
             if (videoAR > containerAR) { srcW = Math.round(vH * containerAR); srcX = Math.round((vW - srcW) / 2); }
-            else                        { srcH = Math.round(vW / containerAR); srcY = Math.round((vH - srcH) / 2); }
+            else { srcH = Math.round(vW / containerAR); srcY = Math.round((vH - srcH) / 2); }
 
             const detW = 300, detH = 400;
             offscreen.width = detW;
@@ -1077,87 +1077,87 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                             {(!isMobile || showAnswerEditor) && (() => {
                                 const hasAnswerKey = !!currentPending.computed?.answerKey;
                                 return (
-                                <div style={{ padding: '14px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid var(--prof-border, #e2e8f0)', overflow: 'hidden' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--prof-text-muted, #64748b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                    Answer Grid — click to cycle (A→B→C→D→E→blank)
-                                </span>
-                                {hasAnswerKey && (
-                                    <span style={{ display: 'flex', gap: '10px', fontSize: '0.72rem' }}>
-                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                            <span style={{ width: '10px', height: '10px', background: '#dcfce7', border: '1px solid #86efac', borderRadius: '2px', display: 'inline-block' }} />
-                                            Correct
-                                        </span>
-                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                            <span style={{ width: '10px', height: '10px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '2px', display: 'inline-block' }} />
-                                            Wrong (small = correct ans.)
-                                        </span>
-                                    </span>
-                                )}
-                            </div>
-                            <div style={{ overflowX: 'auto' }}>
-                                <table style={{ borderCollapse: 'collapse', fontSize: '0.78rem' }}>
-                                    <thead>
-                                        <tr>
-                                            <th style={{ padding: '4px 8px', color: 'var(--prof-text-muted, #94a3b8)', fontWeight: 500, fontSize: '0.72rem' }}>Base</th>
-                                            {Array.from({ length: 10 }, (_, i) => (
-                                                <th key={i} style={{ padding: '4px 4px', color: 'var(--prof-text-muted, #94a3b8)', fontWeight: 500, textAlign: 'center', minWidth: '34px', fontSize: '0.72rem' }}>+{i + 1}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {Array.from({ length: 10 }, (_, row) => (
-                                            <tr key={row}>
-                                                <td style={{ padding: '3px 8px', color: 'var(--prof-text-muted, #94a3b8)', fontWeight: 500, fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-                                                    Q{row * 10}
-                                                </td>
-                                                {Array.from({ length: 10 }, (_, col) => {
-                                                    const idx = row * 10 + col;
-                                                    const letter = currentPending.editAnswers[idx] ?? '';
-                                                    const answerKey = currentPending.computed?.answerKey;
-                                                    const qId = answerKey?.questionIds[idx];
-                                                    const correctNum = qId != null ? answerKey?.questions[qId]?.correct_choice : undefined;
-                                                    const correctLetter = correctNum != null ? ANSWER_LETTERS[correctNum] : '';
-                                                    const isCorrect = hasAnswerKey && letter !== '' && correctLetter !== '' && letter === correctLetter;
-                                                    const isWrong = hasAnswerKey && letter !== '' && correctLetter !== '' && letter !== correctLetter;
-                                                    const bg = isCorrect ? '#dcfce7' : isWrong ? '#fee2e2' : letter ? '#f1f5f9' : '#fff';
-                                                    const borderColor = isCorrect ? '#86efac' : isWrong ? '#fca5a5' : 'var(--prof-border, #e2e8f0)';
-                                                    const textColor = isCorrect ? '#15803d' : isWrong ? '#dc2626' : letter ? '#1e293b' : '#cbd5e1';
-                                                    return (
-                                                        <td key={col} style={{ padding: '2px 3px', textAlign: 'center' }}>
-                                                            <button
-                                                                onClick={() => toggleAnswer(idx)}
-                                                                title={`Q${idx + 1}${correctLetter ? ` — Correct: ${correctLetter}` : ''}`}
-                                                                style={{
-                                                                    width: '30px', height: hasAnswerKey ? '34px' : '26px',
-                                                                    border: `1px solid ${borderColor}`,
-                                                                    borderRadius: '4px',
-                                                                    background: bg,
-                                                                    cursor: 'pointer',
-                                                                    fontWeight: letter ? 700 : 400,
-                                                                    fontSize: '0.75rem',
-                                                                    color: textColor,
-                                                                    display: 'flex', flexDirection: 'column',
-                                                                    alignItems: 'center', justifyContent: 'center',
-                                                                    padding: '1px',
-                                                                }}
-                                                            >
-                                                                <span>{letter || '—'}</span>
-                                                                {hasAnswerKey && correctLetter && (
-                                                                    <span style={{ fontSize: '0.55rem', lineHeight: 1, color: isCorrect ? '#15803d' : '#dc2626' }}>
-                                                                        {isCorrect ? '✓' : correctLetter}
-                                                                    </span>
-                                                                )}
-                                                            </button>
-                                                        </td>
-                                                    );
-                                                })}
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                                </div>
+                                    <div style={{ padding: '14px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid var(--prof-border, #e2e8f0)', overflow: 'hidden' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                                            <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--prof-text-muted, #64748b)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                                Answer Grid — click to cycle (A→B→C→D→E→blank)
+                                            </span>
+                                            {hasAnswerKey && (
+                                                <span style={{ display: 'flex', gap: '10px', fontSize: '0.72rem' }}>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <span style={{ width: '10px', height: '10px', background: '#dcfce7', border: '1px solid #86efac', borderRadius: '2px', display: 'inline-block' }} />
+                                                        Correct
+                                                    </span>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <span style={{ width: '10px', height: '10px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '2px', display: 'inline-block' }} />
+                                                        Wrong (small = correct ans.)
+                                                    </span>
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div style={{ overflowX: 'auto' }}>
+                                            <table style={{ borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ padding: '4px 8px', color: 'var(--prof-text-muted, #94a3b8)', fontWeight: 500, fontSize: '0.72rem' }}>Base</th>
+                                                        {Array.from({ length: 10 }, (_, i) => (
+                                                            <th key={i} style={{ padding: '4px 4px', color: 'var(--prof-text-muted, #94a3b8)', fontWeight: 500, textAlign: 'center', minWidth: '34px', fontSize: '0.72rem' }}>+{i + 1}</th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {Array.from({ length: 10 }, (_, row) => (
+                                                        <tr key={row}>
+                                                            <td style={{ padding: '3px 8px', color: 'var(--prof-text-muted, #94a3b8)', fontWeight: 500, fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                                                                Q{row * 10}
+                                                            </td>
+                                                            {Array.from({ length: 10 }, (_, col) => {
+                                                                const idx = row * 10 + col;
+                                                                const letter = currentPending.editAnswers[idx] ?? '';
+                                                                const answerKey = currentPending.computed?.answerKey;
+                                                                const qId = answerKey?.questionIds[idx];
+                                                                const correctNum = qId != null ? answerKey?.questions[qId]?.correct_choice : undefined;
+                                                                const correctLetter = correctNum != null ? ANSWER_LETTERS[correctNum] : '';
+                                                                const isCorrect = hasAnswerKey && letter !== '' && correctLetter !== '' && letter === correctLetter;
+                                                                const isWrong = hasAnswerKey && letter !== '' && correctLetter !== '' && letter !== correctLetter;
+                                                                const bg = isCorrect ? '#dcfce7' : isWrong ? '#fee2e2' : letter ? '#f1f5f9' : '#fff';
+                                                                const borderColor = isCorrect ? '#86efac' : isWrong ? '#fca5a5' : 'var(--prof-border, #e2e8f0)';
+                                                                const textColor = isCorrect ? '#15803d' : isWrong ? '#dc2626' : letter ? '#1e293b' : '#cbd5e1';
+                                                                return (
+                                                                    <td key={col} style={{ padding: '2px 3px', textAlign: 'center' }}>
+                                                                        <button
+                                                                            onClick={() => toggleAnswer(idx)}
+                                                                            title={`Q${idx + 1}${correctLetter ? ` — Correct: ${correctLetter}` : ''}`}
+                                                                            style={{
+                                                                                width: '30px', height: hasAnswerKey ? '34px' : '26px',
+                                                                                border: `1px solid ${borderColor}`,
+                                                                                borderRadius: '4px',
+                                                                                background: bg,
+                                                                                cursor: 'pointer',
+                                                                                fontWeight: letter ? 700 : 400,
+                                                                                fontSize: '0.75rem',
+                                                                                color: textColor,
+                                                                                display: 'flex', flexDirection: 'column',
+                                                                                alignItems: 'center', justifyContent: 'center',
+                                                                                padding: '1px',
+                                                                            }}
+                                                                        >
+                                                                            <span>{letter || '—'}</span>
+                                                                            {hasAnswerKey && correctLetter && (
+                                                                                <span style={{ fontSize: '0.55rem', lineHeight: 1, color: isCorrect ? '#15803d' : '#dc2626' }}>
+                                                                                    {isCorrect ? '✓' : correctLetter}
+                                                                                </span>
+                                                                            )}
+                                                                        </button>
+                                                                    </td>
+                                                                );
+                                                            })}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
                                 );
                             })()}
 
@@ -1717,7 +1717,7 @@ function _boxBlur3(src: Uint8Array, W: number, H: number): Uint8Array {
             const i = y * W + x;
             dst[i] = (
                 src[i - W - 1] + src[i - W] + src[i - W + 1] +
-                src[i - 1]     + src[i]     + src[i + 1] +
+                src[i - 1] + src[i] + src[i + 1] +
                 src[i + W - 1] + src[i + W] + src[i + W + 1]
             ) / 9 | 0;
         }
@@ -1823,9 +1823,9 @@ function _findDocumentCorners(
             if (cy > maxY) maxY = cy;
 
             // 4-connected neighbours
-            if (cx > 0)     { const n = cur - 1; if (binary[n] && !visited[n]) { visited[n] = 1; bfsQ[tail++] = n; } }
+            if (cx > 0) { const n = cur - 1; if (binary[n] && !visited[n]) { visited[n] = 1; bfsQ[tail++] = n; } }
             if (cx < W - 1) { const n = cur + 1; if (binary[n] && !visited[n]) { visited[n] = 1; bfsQ[tail++] = n; } }
-            if (cy > 0)     { const n = cur - W; if (binary[n] && !visited[n]) { visited[n] = 1; bfsQ[tail++] = n; } }
+            if (cy > 0) { const n = cur - W; if (binary[n] && !visited[n]) { visited[n] = 1; bfsQ[tail++] = n; } }
             if (cy < H - 1) { const n = cur + W; if (binary[n] && !visited[n]) { visited[n] = 1; bfsQ[tail++] = n; } }
         }
 
@@ -1836,16 +1836,16 @@ function _findDocumentCorners(
         if (ratio < 0.4 || ratio > 2.5) continue; // marks are squares, not thin lines
 
         const ccx = sumX / area, ccy = sumY / area;
-        const isLeft   = ccx < W * edgeFrac;
-        const isRight  = ccx > W * (1 - edgeFrac);
-        const isTop    = ccy < H * edgeFrac;
+        const isLeft = ccx < W * edgeFrac;
+        const isRight = ccx > W * (1 - edgeFrac);
+        const isTop = ccy < H * edgeFrac;
         const isBottom = ccy > H * (1 - edgeFrac);
 
         const nx = ccx / W, ny = ccy / H;
-        if (isLeft && isTop)     { const d = Math.hypot(ccx,       ccy);       if (!tlBest || d < tlBest[2]) tlBest = [nx, ny, d]; }
-        else if (isRight && isTop)    { const d = Math.hypot(W - ccx,   ccy);       if (!trBest || d < trBest[2]) trBest = [nx, ny, d]; }
-        else if (isLeft && isBottom)  { const d = Math.hypot(ccx,       H - ccy);   if (!blBest || d < blBest[2]) blBest = [nx, ny, d]; }
-        else if (isRight && isBottom) { const d = Math.hypot(W - ccx,   H - ccy);   if (!brBest || d < brBest[2]) brBest = [nx, ny, d]; }
+        if (isLeft && isTop) { const d = Math.hypot(ccx, ccy); if (!tlBest || d < tlBest[2]) tlBest = [nx, ny, d]; }
+        else if (isRight && isTop) { const d = Math.hypot(W - ccx, ccy); if (!trBest || d < trBest[2]) trBest = [nx, ny, d]; }
+        else if (isLeft && isBottom) { const d = Math.hypot(ccx, H - ccy); if (!blBest || d < blBest[2]) blBest = [nx, ny, d]; }
+        else if (isRight && isBottom) { const d = Math.hypot(W - ccx, H - ccy); if (!brBest || d < brBest[2]) brBest = [nx, ny, d]; }
     }
 
     if (!tlBest || !trBest || !blBest || !brBest) return null;
@@ -1952,10 +1952,10 @@ function _drawDetectionOverlay(
         oc.strokeStyle = bracketColor;
         oc.lineWidth = 2.5;
         const staticCorners: Array<[number, number, number, number]> = [
-            [gx1,      gy1,       1,  1],
-            [gx1 + gw, gy1,      -1,  1],
+            [gx1, gy1, 1, 1],
+            [gx1 + gw, gy1, -1, 1],
             [gx1 + gw, gy1 + gh, -1, -1],
-            [gx1,      gy1 + gh,  1, -1],
+            [gx1, gy1 + gh, 1, -1],
         ];
         for (const [cx, cy, dx, dy] of staticCorners) {
             oc.beginPath();
