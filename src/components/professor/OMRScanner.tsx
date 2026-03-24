@@ -105,6 +105,11 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
     const streamRef = useRef<MediaStream | null>(null);
     const [cameraActive, setCameraActive] = useState(false);
     const [cameraError, setCameraError] = useState<string | null>(null);
+    const [sheetStatus, setSheetStatus] = useState<'none' | 'partial' | 'detected'>('none');
+    const detectionCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const detectRafRef = useRef<number | null>(null);
+    const detectionOverlayRef = useRef<HTMLCanvasElement>(null);
+    const smoothCornersRef = useRef<Array<[number, number]> | null>(null);
 
     // ── Image upload ──────────────────────────────────────────────────────────
     const [imageFile, setImageFile] = useState<File | null>(null);
@@ -366,6 +371,98 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
 
     // Cleanup on unmount
     useEffect(() => () => { streamRef.current?.getTracks().forEach(t => t.stop()); }, []);
+
+    // Real-time OMR sheet detection with corner tracking (~10 fps)
+    useEffect(() => {
+        if (!cameraActive) {
+            setSheetStatus('none');
+            smoothCornersRef.current = null;
+            return;
+        }
+        if (!detectionCanvasRef.current) {
+            detectionCanvasRef.current = document.createElement('canvas');
+        }
+
+        let lastTime = 0;
+
+        const loop = (ts: number) => {
+            detectRafRef.current = requestAnimationFrame(loop);
+            if (ts - lastTime < 100) return; // ~10 fps
+            lastTime = ts;
+
+            const video = videoRef.current;
+            const offscreen = detectionCanvasRef.current!;
+            const overlayEl = detectionOverlayRef.current;
+            if (!video || video.readyState < 2 || video.videoWidth === 0 || !overlayEl) return;
+
+            // Crop the video frame to match objectFit:cover for the 3:4 container
+            const vW = video.videoWidth, vH = video.videoHeight;
+            const containerAR = 3 / 4;
+            const videoAR = vW / vH;
+            let srcX = 0, srcY = 0, srcW = vW, srcH = vH;
+            if (videoAR > containerAR) { srcW = Math.round(vH * containerAR); srcX = Math.round((vW - srcW) / 2); }
+            else                        { srcH = Math.round(vW / containerAR); srcY = Math.round((vH - srcH) / 2); }
+
+            const detW = 300, detH = 400;
+            offscreen.width = detW;
+            offscreen.height = detH;
+            const detCtx = offscreen.getContext('2d');
+            if (!detCtx) return;
+            detCtx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, detW, detH);
+
+            // Detect the 4 corner registration-mark squares (dark blobs in corner zones)
+            const rawCorners = _findDocumentCorners(detCtx, detW, detH);
+
+            let status: 'none' | 'partial' | 'detected';
+            if (rawCorners) {
+                // Large jump → instant reset; small drift → smooth with EMA
+                const alpha = 0.25;
+                if (smoothCornersRef.current) {
+                    const maxDrift = Math.max(...rawCorners.map(([rx, ry]: [number, number], i: number) =>
+                        Math.hypot(rx - smoothCornersRef.current![i][0], ry - smoothCornersRef.current![i][1])
+                    ));
+                    smoothCornersRef.current = maxDrift > 0.20
+                        ? rawCorners
+                        : smoothCornersRef.current.map(([sx, sy], i) => [
+                            sx + alpha * (rawCorners[i][0] - sx),
+                            sy + alpha * (rawCorners[i][1] - sy),
+                        ] as [number, number]);
+                } else {
+                    smoothCornersRef.current = rawCorners;
+                }
+                status = 'detected';
+            } else {
+                smoothCornersRef.current = null;
+                // Fallback: check mean brightness for partial hint
+                const d = detCtx.getImageData(0, 0, detW, detH).data;
+                let bSum = 0;
+                for (let i = 0; i < d.length; i += 4) bSum += d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+                status = bSum / (detW * detH) > 148 ? 'partial' : 'none';
+            }
+            setSheetStatus(status);
+
+            // Draw overlay directly onto the canvas element (no React re-render needed)
+            const cW = overlayEl.clientWidth;
+            const cH = overlayEl.clientHeight;
+            if (cW === 0 || cH === 0) return;
+            if (overlayEl.width !== cW || overlayEl.height !== cH) {
+                overlayEl.width = cW;
+                overlayEl.height = cH;
+            }
+            const oc = overlayEl.getContext('2d');
+            if (!oc) return;
+            _drawDetectionOverlay(oc, cW, cH, smoothCornersRef.current, status);
+        };
+
+        detectRafRef.current = requestAnimationFrame(loop);
+        return () => {
+            if (detectRafRef.current !== null) cancelAnimationFrame(detectRafRef.current);
+            setSheetStatus('none');
+            smoothCornersRef.current = null;
+            const oc = detectionOverlayRef.current?.getContext('2d');
+            if (oc) oc.clearRect(0, 0, detectionOverlayRef.current!.width, detectionOverlayRef.current!.height);
+        };
+    }, [cameraActive]);
 
     // Reset on attempt change
     useEffect(() => {
@@ -1230,9 +1327,30 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                             )}
 
                             {cameraActive && !cameraError && (
-                                <div style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--prof-border, #e2e8f0)', background: '#0f172a', aspectRatio: '3/4', maxWidth: '360px', margin: '0 auto', width: '100%' }}>
+                                <div style={{
+                                    position: 'relative', borderRadius: '10px', overflow: 'hidden',
+                                    border: `2px solid ${sheetStatus === 'detected' ? '#16a34a' : sheetStatus === 'partial' ? '#d97706' : 'var(--prof-border, #e2e8f0)'}`,
+                                    background: '#0f172a', aspectRatio: '3/4', maxWidth: '360px', margin: '0 auto', width: '100%',
+                                    transition: 'border-color 0.3s',
+                                }}>
                                     <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} muted playsInline />
-                                    <div style={{ position: 'absolute', inset: 0, border: '3px solid rgba(255,255,255,0.15)', borderRadius: '10px', pointerEvents: 'none' }} />
+
+                                    {/* Canvas overlay — draws guide rect or detected document quad at ~10 fps */}
+                                    <canvas
+                                        ref={detectionOverlayRef}
+                                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+                                    />
+
+                                    {/* Status badge */}
+                                    <div style={{
+                                        position: 'absolute', bottom: '10px', left: '50%', transform: 'translateX(-50%)',
+                                        padding: '3px 12px', borderRadius: '99px', fontSize: '0.75rem', fontWeight: 600,
+                                        background: sheetStatus === 'detected' ? 'rgba(22,163,74,0.9)' : sheetStatus === 'partial' ? 'rgba(217,119,6,0.9)' : 'rgba(0,0,0,0.55)',
+                                        color: '#fff', whiteSpace: 'nowrap', pointerEvents: 'none', transition: 'background 0.3s',
+                                        backdropFilter: 'blur(4px)',
+                                    }}>
+                                        {sheetStatus === 'detected' ? '✓ Sheet detected' : sheetStatus === 'partial' ? 'Aligning…' : 'Position OMR sheet'}
+                                    </div>
                                 </div>
                             )}
 
@@ -1243,7 +1361,12 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                                     <button
                                         onClick={handleCapture}
                                         disabled={isProcessing || !!cameraError}
-                                        style={{ ...btnPrimary, ...(isProcessing || !!cameraError ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+                                        style={{
+                                            ...btnPrimary,
+                                            ...(isProcessing || !!cameraError ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
+                                            ...(sheetStatus === 'detected' && !isProcessing ? { background: '#16a34a', boxShadow: '0 0 0 3px rgba(22,163,74,0.3)' } : {}),
+                                            transition: 'background 0.3s, box-shadow 0.3s',
+                                        }}
                                     >
                                         <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
@@ -1579,4 +1702,267 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
             )}
         </div>
     );
+}
+
+// ── Client-side document corner detection ────────────────────────────────────
+
+/**
+ * Fast 3×3 box blur. Reduces camera noise so small dark marks aren't shattered
+ * into sub-pixel speckles before Otsu thresholding.
+ */
+function _boxBlur3(src: Uint8Array, W: number, H: number): Uint8Array {
+    const dst = new Uint8Array(src.length);
+    for (let y = 1; y < H - 1; y++) {
+        for (let x = 1; x < W - 1; x++) {
+            const i = y * W + x;
+            dst[i] = (
+                src[i - W - 1] + src[i - W] + src[i - W + 1] +
+                src[i - 1]     + src[i]     + src[i + 1] +
+                src[i + W - 1] + src[i + W] + src[i + W + 1]
+            ) / 9 | 0;
+        }
+    }
+    // Copy border rows/cols unchanged
+    for (let x = 0; x < W; x++) { dst[x] = src[x]; dst[(H - 1) * W + x] = src[(H - 1) * W + x]; }
+    for (let y = 0; y < H; y++) { dst[y * W] = src[y * W]; dst[y * W + W - 1] = src[y * W + W - 1]; }
+    return dst;
+}
+
+/**
+ * Otsu's method: find the optimal threshold that maximises inter-class variance.
+ * Works on a flat Uint8Array of grayscale values (0-255).
+ */
+function _otsuThreshold(gray: Uint8Array): number {
+    const hist = new Int32Array(256);
+    for (let i = 0; i < gray.length; i++) hist[gray[i]]++;
+    const N = gray.length;
+    let sumAll = 0;
+    for (let i = 0; i < 256; i++) sumAll += i * hist[i];
+    let wB = 0, sumB = 0, maxVar = 0, thresh = 128;
+    for (let t = 0; t < 256; t++) {
+        wB += hist[t];
+        if (wB === 0) continue;
+        const wF = N - wB;
+        if (wF === 0) break;
+        sumB += t * hist[t];
+        const mB = sumB / wB;
+        const mF = (sumAll - sumB) / wF;
+        const v = wB * wF * (mB - mF) ** 2;
+        if (v > maxVar) { maxVar = v; thresh = t; }
+    }
+    return thresh;
+}
+
+/**
+ * Detect the 4 registration-mark squares printed near each corner of the OMR sheet.
+ *
+ * Algorithm mirrors omr_server.py _correct_perspective():
+ *  1. Grayscale + Otsu inverse-threshold → binary mask of dark blobs.
+ *  2. BFS connected-component labeling on dark pixels.
+ *  3. For each component check area bounds + aspect ratio (same params as server).
+ *  4. Assign each qualifying blob to the nearest corner zone (within edgeFrac).
+ *  5. All 4 zones must have a candidate; quad must span ≥20% in each axis.
+ *
+ * Returns normalised [x,y] pairs (0-1) ordered TL/TR/BR/BL, or null on failure.
+ */
+function _findDocumentCorners(
+    ctx: CanvasRenderingContext2D,
+    W: number,
+    H: number,
+): [[number, number], [number, number], [number, number], [number, number]] | null {
+    const data = ctx.getImageData(0, 0, W, H).data;
+    const N = W * H;
+    const rawGray = new Uint8Array(N);
+    for (let i = 0; i < N; i++) {
+        rawGray[i] = (data[i * 4] * 77 + data[i * 4 + 1] * 150 + data[i * 4 + 2] * 29) >> 8;
+    }
+
+    // Blur first so camera noise doesn't shatter marks into micro-blobs
+    const gray = _boxBlur3(rawGray, W, H);
+
+    // Invert-threshold: binary[i] = 1 means dark pixel (potential mark)
+    const thresh = _otsuThreshold(gray);
+    const binary = new Uint8Array(N);
+    for (let i = 0; i < N; i++) binary[i] = gray[i] < thresh ? 1 : 0;
+
+    // BFS connected-component labeling — pre-allocate queue for speed
+    const visited = new Uint8Array(N);
+    const bfsQ = new Int32Array(N);
+
+    // Mark area bounds — scale with W just like omr_server.py
+    const markMin = Math.max(4, (W * 0.003) ** 2); // at least 4px — rejects pure noise
+    const markMax = (W * 0.12) ** 2;               // tighter max: marks aren't huge
+    const edgeFrac = 0.28;
+
+    // Best candidate per corner: [nx, ny, distToCorner]
+    let tlBest: [number, number, number] | null = null;
+    let trBest: [number, number, number] | null = null;
+    let blBest: [number, number, number] | null = null;
+    let brBest: [number, number, number] | null = null;
+
+    for (let startIdx = 0; startIdx < N; startIdx++) {
+        if (!binary[startIdx] || visited[startIdx]) continue;
+
+        // BFS
+        let head = 0, tail = 0;
+        bfsQ[tail++] = startIdx;
+        visited[startIdx] = 1;
+
+        let area = 0, sumX = 0, sumY = 0;
+        let minX = W, maxX = 0, minY = H, maxY = 0;
+
+        while (head < tail) {
+            const cur = bfsQ[head++];
+            const cx = cur % W;
+            const cy = (cur - cx) / W;
+            area++;
+            sumX += cx; sumY += cy;
+            if (cx < minX) minX = cx;
+            if (cx > maxX) maxX = cx;
+            if (cy < minY) minY = cy;
+            if (cy > maxY) maxY = cy;
+
+            // 4-connected neighbours
+            if (cx > 0)     { const n = cur - 1; if (binary[n] && !visited[n]) { visited[n] = 1; bfsQ[tail++] = n; } }
+            if (cx < W - 1) { const n = cur + 1; if (binary[n] && !visited[n]) { visited[n] = 1; bfsQ[tail++] = n; } }
+            if (cy > 0)     { const n = cur - W; if (binary[n] && !visited[n]) { visited[n] = 1; bfsQ[tail++] = n; } }
+            if (cy < H - 1) { const n = cur + W; if (binary[n] && !visited[n]) { visited[n] = 1; bfsQ[tail++] = n; } }
+        }
+
+        if (area < markMin || area > markMax) continue;
+        const bw = maxX - minX + 1, bh = maxY - minY + 1;
+        if (bw === 0 || bh === 0) continue;
+        const ratio = bw / bh;
+        if (ratio < 0.4 || ratio > 2.5) continue; // marks are squares, not thin lines
+
+        const ccx = sumX / area, ccy = sumY / area;
+        const isLeft   = ccx < W * edgeFrac;
+        const isRight  = ccx > W * (1 - edgeFrac);
+        const isTop    = ccy < H * edgeFrac;
+        const isBottom = ccy > H * (1 - edgeFrac);
+
+        const nx = ccx / W, ny = ccy / H;
+        if (isLeft && isTop)     { const d = Math.hypot(ccx,       ccy);       if (!tlBest || d < tlBest[2]) tlBest = [nx, ny, d]; }
+        else if (isRight && isTop)    { const d = Math.hypot(W - ccx,   ccy);       if (!trBest || d < trBest[2]) trBest = [nx, ny, d]; }
+        else if (isLeft && isBottom)  { const d = Math.hypot(ccx,       H - ccy);   if (!blBest || d < blBest[2]) blBest = [nx, ny, d]; }
+        else if (isRight && isBottom) { const d = Math.hypot(W - ccx,   H - ccy);   if (!brBest || d < brBest[2]) brBest = [nx, ny, d]; }
+    }
+
+    if (!tlBest || !trBest || !blBest || !brBest) return null;
+
+    // Sanity: marks must span a meaningful portion of the frame
+    const spanX = Math.max(trBest[0], brBest[0]) - Math.min(tlBest[0], blBest[0]);
+    const spanY = Math.max(blBest[1], brBest[1]) - Math.min(tlBest[1], trBest[1]);
+    if (spanX < 0.20 || spanY < 0.20) return null;
+
+    // Quad must be portrait-oriented (taller than wide) — letter paper is ~8.5×11
+    // Allow some tilt: require height >= 80% of width at minimum
+    if (spanY < spanX * 0.8) return null;
+
+    // Top pair should be above bottom pair, left pair left of right pair
+    if (tlBest[1] > blBest[1] || trBest[1] > brBest[1]) return null;
+    if (tlBest[0] > trBest[0] || blBest[0] > brBest[0]) return null;
+
+    return [
+        [tlBest[0], tlBest[1]],
+        [trBest[0], trBest[1]],
+        [brBest[0], brBest[1]],
+        [blBest[0], blBest[1]],
+    ];
+}
+
+/**
+ * Draw the detection overlay onto an already-sized canvas context.
+ * When corners are found: fills + outlines the detected quadrilateral.
+ * Otherwise: draws the static alignment guide (dashed rect + L-brackets).
+ */
+function _drawDetectionOverlay(
+    oc: CanvasRenderingContext2D,
+    cW: number,
+    cH: number,
+    corners: Array<[number, number]> | null,
+    status: 'none' | 'partial' | 'detected',
+): void {
+    oc.clearRect(0, 0, cW, cH);
+
+    if (corners && corners.length === 4) {
+        const pts = corners.map(([nx, ny]) => [nx * cW, ny * cH] as [number, number]);
+
+        // Faint green fill
+        oc.beginPath();
+        oc.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < 4; i++) oc.lineTo(pts[i][0], pts[i][1]);
+        oc.closePath();
+        oc.fillStyle = 'rgba(22,163,74,0.10)';
+        oc.fill();
+
+        // Edge outline
+        oc.setLineDash([]);
+        oc.strokeStyle = '#22c55e';
+        oc.lineWidth = 2;
+        oc.beginPath();
+        oc.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < 4; i++) oc.lineTo(pts[i][0], pts[i][1]);
+        oc.closePath();
+        oc.stroke();
+
+        // L-shaped corner brackets: draw the start of each edge from each corner
+        const bLen = Math.min(cW, cH) * 0.055;
+        oc.strokeStyle = '#4ade80';
+        oc.lineWidth = 3;
+        for (let i = 0; i < 4; i++) {
+            const [cx, cy] = pts[i];
+            for (const j of [(i + 3) % 4, (i + 1) % 4] as const) {
+                const [ax, ay] = pts[j];
+                const len = Math.hypot(ax - cx, ay - cy);
+                if (len < 1) continue;
+                oc.beginPath();
+                oc.moveTo(cx, cy);
+                oc.lineTo(cx + (ax - cx) / len * bLen, cy + (ay - cy) / len * bLen);
+                oc.stroke();
+            }
+        }
+
+        // Corner dots: green ring + white centre
+        for (const [px, py] of pts) {
+            oc.beginPath();
+            oc.arc(px, py, 6, 0, Math.PI * 2);
+            oc.fillStyle = '#22c55e';
+            oc.fill();
+            oc.beginPath();
+            oc.arc(px, py, 2.5, 0, Math.PI * 2);
+            oc.fillStyle = '#fff';
+            oc.fill();
+        }
+    } else {
+        // Static guide: dashed rectangle + corner L-brackets
+        const pad = 0.08;
+        const gx1 = pad * cW, gy1 = pad * cH;
+        const gw = (1 - 2 * pad) * cW, gh = (1 - 2 * pad) * cH;
+        const bLen = Math.min(cW, cH) * 0.07;
+        const guideColor = status === 'partial' ? 'rgba(217,119,6,0.55)' : 'rgba(255,255,255,0.22)';
+        const bracketColor = status === 'partial' ? '#fbbf24' : 'rgba(255,255,255,0.70)';
+
+        oc.setLineDash([6, 4]);
+        oc.strokeStyle = guideColor;
+        oc.lineWidth = 1.5;
+        oc.strokeRect(gx1, gy1, gw, gh);
+
+        oc.setLineDash([]);
+        oc.strokeStyle = bracketColor;
+        oc.lineWidth = 2.5;
+        const staticCorners: Array<[number, number, number, number]> = [
+            [gx1,      gy1,       1,  1],
+            [gx1 + gw, gy1,      -1,  1],
+            [gx1 + gw, gy1 + gh, -1, -1],
+            [gx1,      gy1 + gh,  1, -1],
+        ];
+        for (const [cx, cy, dx, dy] of staticCorners) {
+            oc.beginPath();
+            oc.moveTo(cx + dx * bLen, cy);
+            oc.lineTo(cx, cy);
+            oc.lineTo(cx, cy + dy * bLen);
+            oc.stroke();
+        }
+    }
 }
