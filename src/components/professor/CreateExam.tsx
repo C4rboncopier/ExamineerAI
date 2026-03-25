@@ -28,6 +28,8 @@ export function CreateExam() {
     // Template
     const [templates, setTemplates] = useState<Template[]>([]);
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+    const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
+    const [templateSearch, setTemplateSearch] = useState('');
 
     // Basic details
     const [title, setTitle] = useState('');
@@ -66,6 +68,7 @@ export function CreateExam() {
 
     const programDropdownRef = useRef<HTMLDivElement>(null);
     const subjectDropdownRef = useRef<HTMLDivElement>(null);
+    const templateDropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -74,6 +77,9 @@ export function CreateExam() {
             }
             if (subjectDropdownRef.current && !subjectDropdownRef.current.contains(event.target as Node)) {
                 setSubjectDropdownOpen(false);
+            }
+            if (templateDropdownRef.current && !templateDropdownRef.current.contains(event.target as Node)) {
+                setTemplateDropdownOpen(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -129,6 +135,16 @@ export function CreateExam() {
         setSelectedSubjectIds(tpl.subject_ids.filter(id => subjects.some(s => s.id === id)));
         setSelectedProgramIds(tpl.program_ids ?? []);
     };
+
+    // ── Template search ───────────────────────────────────────
+    const filteredTemplates = useMemo(() => {
+        if (!templateSearch.trim()) return templates;
+        const q = templateSearch.toLowerCase().trim();
+        return templates.filter(t =>
+            t.title.toLowerCase().includes(q) ||
+            t.code.toLowerCase().includes(q)
+        );
+    }, [templates, templateSearch]);
 
     // ── Program selection ─────────────────────────────────────
     const filteredPrograms = useMemo(() => {
@@ -263,15 +279,59 @@ export function CreateExam() {
                                 <h3 className="cs-card-title">Use a Template <span style={{ fontWeight: 400, color: 'var(--prof-text-muted)', fontSize: '0.85rem' }}>(optional)</span></h3>
                                 <div className="cs-input-field">
                                     <label>Select Template</label>
-                                    <select
-                                        value={selectedTemplateId}
-                                        onChange={e => handleTemplateChange(e.target.value)}
-                                    >
-                                        <option value="">— No template —</option>
-                                        {templates.map(t => (
-                                            <option key={t.id} value={t.id}>{t.title} ({t.code})</option>
-                                        ))}
-                                    </select>
+                                    <div className="cq-subject-search" ref={templateDropdownRef}>
+                                        <div
+                                            className={`cq-subject-trigger ${templateDropdownOpen ? 'open' : ''}`}
+                                            onClick={() => setTemplateDropdownOpen(!templateDropdownOpen)}
+                                        >
+                                            <span className="cq-placeholder">
+                                                {selectedTemplateId
+                                                    ? (() => { const t = templates.find(t => t.id === selectedTemplateId); return t ? `${t.title} (${t.code})` : '— No template —'; })()
+                                                    : '— No template —'}
+                                            </span>
+                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"></path>
+                                            </svg>
+                                        </div>
+                                        {templateDropdownOpen && (
+                                            <div className="cq-subject-dropdown">
+                                                <input
+                                                    type="text"
+                                                    className="cq-subject-search-input"
+                                                    placeholder="Search templates..."
+                                                    value={templateSearch}
+                                                    onChange={e => setTemplateSearch(e.target.value)}
+                                                    autoFocus
+                                                />
+                                                <div className="cq-subject-options">
+                                                    <div
+                                                        className={`cq-subject-option ${!selectedTemplateId ? 'selected' : ''}`}
+                                                        onClick={() => { handleTemplateChange(''); setTemplateDropdownOpen(false); setTemplateSearch(''); }}
+                                                        style={{ cursor: 'pointer', fontStyle: 'italic', color: 'var(--prof-text-muted)' }}
+                                                    >
+                                                        — No template —
+                                                    </div>
+                                                    {filteredTemplates.length === 0 ? (
+                                                        <div className="cq-subject-no-results">No templates found</div>
+                                                    ) : filteredTemplates.map(t => {
+                                                        const isSelected = selectedTemplateId === t.id;
+                                                        return (
+                                                            <div
+                                                                key={t.id}
+                                                                className={`cq-subject-option ${isSelected ? 'selected' : ''}`}
+                                                                onClick={() => { handleTemplateChange(t.id); setTemplateDropdownOpen(false); setTemplateSearch(''); }}
+                                                                style={{ cursor: 'pointer' }}
+                                                            >
+                                                                <span className="cq-subject-option-code">{t.code}</span>
+                                                                <span>{t.title}</span>
+                                                                {isSelected && <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#16a34a' }}>✓</span>}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                     {selectedTemplateId && (
                                         <p style={{ marginTop: '6px', fontSize: '0.8rem', color: 'var(--prof-text-muted)' }}>
                                             Template pre-fills title, code, and subjects. Any changes here won't affect the original template.
