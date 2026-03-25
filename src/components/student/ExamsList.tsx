@@ -5,7 +5,7 @@ import { fetchEnrolledExamsPage, fetchEnrolledExamTermKeys, getStudentExamStatus
 import type { StudentExam } from '../../lib/studentExams';
 import { Pagination } from '../admin/Pagination';
 
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 20;
 
 export function ExamsList() {
     const { user } = useAuth();
