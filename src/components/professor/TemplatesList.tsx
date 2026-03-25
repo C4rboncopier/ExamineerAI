@@ -1,11 +1,14 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchTemplates, deleteTemplate } from '../../lib/templates';
+import { fetchTemplatesPage, deleteTemplate } from '../../lib/templates';
 import type { Template } from '../../lib/templates';
 import { fetchSubjects } from '../../lib/subjects';
 import type { SubjectWithCounts } from '../../lib/subjects';
 import { Popup } from '../common/Popup';
 import { Toast } from '../common/Toast';
+import { Pagination } from '../admin/Pagination';
+
+const ITEMS_PER_PAGE = 10;
 
 interface ToastState {
     open: boolean;
@@ -16,9 +19,17 @@ interface ToastState {
 export function TemplatesList() {
     const navigate = useNavigate();
     const [templates, setTemplates] = useState<Template[]>([]);
-    const [subjectMap, setSubjectMap] = useState<Record<string, SubjectWithCounts>>({});
+    const [total, setTotal] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [subjectMap, setSubjectMap] = useState<Record<string, SubjectWithCounts>>({});
+
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Delete state
     const [deletePopupOpen, setDeletePopupOpen] = useState(false);
@@ -31,26 +42,49 @@ export function TemplatesList() {
         setToast({ open: true, message, type });
     const closeToast = useCallback(() => setToast(prev => ({ ...prev, open: false })), []);
 
+    // Load subject map once
     useEffect(() => {
         fetchSubjects().then(({ data }) => {
             const map: Record<string, SubjectWithCounts> = {};
             data.forEach(s => { map[s.id] = s; });
             setSubjectMap(map);
         });
-        fetchTemplates().then(({ data, error }) => {
-            if (error) showToast('Failed to load templates.', 'error');
-            else setTemplates(data);
-            setIsLoading(false);
-        });
     }, []);
 
-    const filtered = useMemo(() => {
-        const q = searchQuery.toLowerCase().trim();
-        if (!q) return templates;
-        return templates.filter(t =>
-            t.title.toLowerCase().includes(q) || t.code.toLowerCase().includes(q)
-        );
-    }, [templates, searchQuery]);
+    // Debounce search
+    useEffect(() => {
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        debounceTimer.current = setTimeout(() => {
+            setDebouncedSearch(searchQuery);
+            setCurrentPage(1);
+        }, 300);
+        return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+    }, [searchQuery]);
+
+    // Fetch current page
+    useEffect(() => {
+        let cancelled = false;
+
+        if (!isLoading) setIsRefreshing(true);
+
+        fetchTemplatesPage({
+            search: debouncedSearch || undefined,
+            page: currentPage,
+            pageSize: ITEMS_PER_PAGE,
+        }).then(({ data, total: t, error }) => {
+            if (cancelled) return;
+            if (error) {
+                showToast('Failed to load templates.', 'error');
+            } else {
+                setTemplates(data);
+                setTotal(t);
+            }
+            setIsLoading(false);
+            setIsRefreshing(false);
+        });
+
+        return () => { cancelled = true; };
+    }, [debouncedSearch, currentPage, refreshKey]);
 
     const handleEdit = (id: string) => navigate(`/professor/templates/${id}/edit`);
 
@@ -66,13 +100,16 @@ export function TemplatesList() {
         if (error) {
             showToast(error, 'error');
         } else {
-            setTemplates(prev => prev.filter(t => t.id !== templateToDelete.id));
             showToast(`Template "${templateToDelete.title}" deleted.`);
+            setRefreshKey(k => k + 1);
         }
         setDeletePopupOpen(false);
         setTemplateToDelete(null);
         setIsDeleting(false);
     };
+
+    const hasFilters = !!debouncedSearch;
+    const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
 
     return (
         <div className="subjects-container">
@@ -107,7 +144,7 @@ export function TemplatesList() {
                 <div className="subjects-empty">
                     <p style={{ color: 'var(--prof-text-muted)' }}>Loading templates...</p>
                 </div>
-            ) : templates.length === 0 ? (
+            ) : total === 0 && !hasFilters ? (
                 <div className="subjects-empty">
                     <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" className="empty-icon">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"></path>
@@ -118,7 +155,7 @@ export function TemplatesList() {
                         + Create Template
                     </button>
                 </div>
-            ) : filtered.length === 0 ? (
+            ) : total === 0 ? (
                 <div className="subjects-empty">
                     <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" className="empty-icon">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -126,61 +163,77 @@ export function TemplatesList() {
                     <p>No templates match your search.</p>
                 </div>
             ) : (
-                <div style={{ borderRadius: '8px', border: '1px solid var(--prof-border)', overflow: 'hidden' }}>
-                    {filtered.map((template, idx) => {
-                        const subjectTags = template.subject_ids
-                            .map(id => subjectMap[id])
-                            .filter(Boolean)
-                            .sort((a, b) => a.course_code.localeCompare(b.course_code));
-                        const isLast = idx === filtered.length - 1;
+                <div style={{ opacity: isRefreshing ? 0.6 : 1, transition: 'opacity 0.2s' }}>
+                    <div style={{ borderRadius: '8px', border: '1px solid var(--prof-border)', overflow: 'hidden' }}>
+                        {templates.map((template, idx) => {
+                            const subjectTags = template.subject_ids
+                                .map(id => subjectMap[id])
+                                .filter(Boolean)
+                                .sort((a, b) => a.course_code.localeCompare(b.course_code));
+                            const isLast = idx === templates.length - 1;
 
-                        return (
-                            <div
-                                key={template.id}
-                                style={{
-                                    display: 'flex', alignItems: 'center', gap: '12px',
-                                    padding: '12px 16px', background: '#fff',
-                                    borderLeft: '3px solid var(--prof-primary)',
-                                    borderBottom: isLast ? 'none' : '1px solid var(--prof-border)',
-                                    transition: 'background 0.12s',
-                                }}
-                                onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--prof-surface)'}
-                                onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = '#fff'}
-                            >
-                                {/* Left column: code + title + subjects stacked */}
-                                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <div>
-                                        <p style={{ margin: '0 0 2px', fontSize: '0.72rem', color: 'var(--prof-text-muted)', fontWeight: 600, letterSpacing: '0.05em' }}>
-                                            {template.code}
-                                        </p>
-                                        <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--prof-text-main)', fontWeight: 600, lineHeight: 1.4 }}>
-                                            {template.title}
-                                        </p>
+                            return (
+                                <div
+                                    key={template.id}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', gap: '12px',
+                                        padding: '12px 16px', background: '#fff',
+                                        borderLeft: '3px solid var(--prof-primary)',
+                                        borderBottom: isLast ? 'none' : '1px solid var(--prof-border)',
+                                        transition: 'background 0.12s',
+                                    }}
+                                    onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--prof-surface)'}
+                                    onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = '#fff'}
+                                >
+                                    {/* Left column: code + title + subjects stacked */}
+                                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        <div>
+                                            <p style={{ margin: '0 0 2px', fontSize: '0.72rem', color: 'var(--prof-text-muted)', fontWeight: 600, letterSpacing: '0.05em' }}>
+                                                {template.code}
+                                            </p>
+                                            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--prof-text-main)', fontWeight: 600, lineHeight: 1.4 }}>
+                                                {template.title}
+                                            </p>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                            {subjectTags.length > 0 ? (
+                                                subjectTags.map(s => (
+                                                    <span key={s.id} style={{ fontSize: '0.75rem', background: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', color: '#475569', whiteSpace: 'nowrap' }}>
+                                                        {s.course_code}
+                                                    </span>
+                                                ))
+                                            ) : (
+                                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>No subjects</span>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
-                                        {subjectTags.length > 0 ? (
-                                            subjectTags.map(s => (
-                                                <span key={s.id} style={{ fontSize: '0.75rem', background: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', color: '#475569', whiteSpace: 'nowrap' }}>
-                                                    {s.course_code}
-                                                </span>
-                                            ))
-                                        ) : (
-                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>No subjects</span>
-                                        )}
+                                    {/* Right column: action buttons */}
+                                    <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                                        <button className="btn-icon" onClick={() => handleEdit(template.id)} title="Edit Template">
+                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"></path></svg>
+                                        </button>
+                                        <button className="btn-icon danger" onClick={() => confirmDelete(template)} title="Delete Template">
+                                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                        </button>
                                     </div>
                                 </div>
-                                {/* Right column: action buttons */}
-                                <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                                    <button className="btn-icon" onClick={() => handleEdit(template.id)} title="Edit Template">
-                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"></path></svg>
-                                    </button>
-                                    <button className="btn-icon danger" onClick={() => confirmDelete(template)} title="Delete Template">
-                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                    </button>
-                                </div>
-                            </div>
-                        );
-                    })}
+                            );
+                        })}
+                    </div>
+
+                    {totalPages > 1 && (
+                        <Pagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            isDisabled={isRefreshing}
+                            onPageChange={setCurrentPage}
+                        />
+                    )}
+                    {total > 0 && (
+                        <p className="subjects-count">
+                            Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, total)} of {total} template{total !== 1 ? 's' : ''}
+                        </p>
+                    )}
                 </div>
             )}
 

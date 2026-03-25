@@ -19,6 +19,28 @@ export async function fetchTemplates(): Promise<{ data: Template[]; error: strin
     return { data: data as Template[], error: null };
 }
 
+export async function fetchTemplatesPage(params: {
+    search?: string;
+    page: number;
+    pageSize: number;
+}): Promise<{ data: Template[]; total: number; error: string | null }> {
+    const { search, page, pageSize } = params;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+        .from('exam_templates')
+        .select('id, title, code, created_at, subject_ids, program_ids', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+    if (search) query = query.or(`title.ilike.%${search}%,code.ilike.%${search}%`);
+
+    const { data, error, count } = await query;
+    if (error) return { data: [], total: 0, error: error.message };
+    return { data: data as Template[], total: count ?? 0, error: null };
+}
+
 export async function fetchTemplateById(id: string): Promise<{ data: Template | null; error: string | null }> {
     const { data, error } = await supabase
         .from('exam_templates')
