@@ -8,7 +8,7 @@ function formatDate(dateStr: string): string {
     return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-const GRID = '24px 1fr 150px 110px 90px 90px 100px';
+const GRID = '24px 1fr 150px 160px 90px 90px 100px';
 
 export function AdminExamsList() {
     const [exams, setExams] = useState<AdminExam[]>([]);
@@ -16,6 +16,7 @@ export function AdminExamsList() {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [yearFilter, setYearFilter] = useState('');
+    const [termFilter, setTermFilter] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -31,20 +32,26 @@ export function AdminExamsList() {
         return years;
     }, [exams]);
 
+    const academicTerms = useMemo(() => {
+        const terms = [...new Set(exams.map(e => e.term).filter(Boolean))].sort();
+        return terms;
+    }, [exams]);
+
     const filtered = useMemo(() => {
         const q = searchQuery.toLowerCase().trim();
         return exams.filter(e => {
             const matchesSearch = !q || e.title.toLowerCase().includes(q) || e.code.toLowerCase().includes(q);
             const matchesStatus = !statusFilter || e.status === statusFilter;
             const matchesYear = !yearFilter || e.academic_year === yearFilter;
-            return matchesSearch && matchesStatus && matchesYear;
+            const matchesTerm = !termFilter || e.term === termFilter;
+            return matchesSearch && matchesStatus && matchesYear && matchesTerm;
         });
-    }, [exams, searchQuery, statusFilter, yearFilter]);
+    }, [exams, searchQuery, statusFilter, yearFilter, termFilter]);
 
     const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
     const paged = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-    useEffect(() => { setCurrentPage(1); setExpandedId(null); }, [searchQuery, statusFilter, yearFilter]);
+    useEffect(() => { setCurrentPage(1); setExpandedId(null); }, [searchQuery, statusFilter, yearFilter, termFilter]);
 
     const toggleExpand = (id: string) => setExpandedId(prev => prev === id ? null : id);
 
@@ -95,6 +102,10 @@ export function AdminExamsList() {
                     <option value="">All Academic Years</option>
                     {academicYears.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
+                <select className="admin-exam-filter-select" value={termFilter} onChange={e => setTermFilter(e.target.value)} style={{ ...filterSelectStyle, color: termFilter ? 'var(--prof-text-main)' : 'var(--prof-text-muted)', width: '160px' }}>
+                    <option value="">All Terms</option>
+                    {academicTerms.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
             </div>
 
             {/* Table */}
@@ -115,7 +126,7 @@ export function AdminExamsList() {
                         {[
                             { label: 'Exam', cls: '' },
                             { label: 'Main Professor', cls: 'admin-hide-mobile' },
-                            { label: 'Created', cls: 'admin-hide-mobile' },
+                            { label: 'AY & Term', cls: 'admin-hide-mobile' },
                             { label: 'Students', cls: 'admin-hide-mobile' },
                             { label: 'Status', cls: '' },
                             { label: 'Progress', cls: 'admin-hide-mobile' },
@@ -152,7 +163,7 @@ export function AdminExamsList() {
                                         {exam.creator_name || exam.creator_email || '—'}
                                     </span>
 
-                                    <span className="admin-hide-mobile" style={{ fontSize: '0.825rem', color: 'var(--prof-text-muted)' }}>{formatDate(exam.created_at)}</span>
+                                    <span className="admin-hide-mobile" style={{ fontSize: '0.8rem', color: 'var(--prof-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{exam.academic_year || '—'}{exam.term ? ` · ${exam.term}` : ''}</span>
 
                                     <span className="admin-hide-mobile" style={{ fontSize: '0.875rem', color: 'var(--prof-text-main)', fontWeight: 500 }}>{exam.enrollment_count}</span>
 

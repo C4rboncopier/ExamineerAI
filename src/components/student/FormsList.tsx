@@ -15,6 +15,7 @@ export function StudentFormsList() {
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
+    const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
 
     useEffect(() => {
         if (!user) return;
@@ -67,33 +68,47 @@ export function StudentFormsList() {
 
             {/* Filters */}
             {forms.length > 0 && (
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
-                    <div style={{ position: 'relative', flex: '1 1 200px' }}>
-                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15" style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--prof-text-muted)', pointerEvents: 'none' }}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                        </svg>
-                        <input
-                            type="text"
-                            placeholder="Search forms..."
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            style={{ width: '100%', padding: '9px 12px 9px 34px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff', fontSize: '0.875rem', outline: 'none', boxSizing: 'border-box' }}
-                        />
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', alignItems: 'center' }}>
+                    {/* Group 1: toggles + search — stay on same row */}
+                    <div style={{ display: 'flex', gap: '8px', flex: '1 1 auto', minWidth: '280px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                            <button type="button" onClick={() => setViewMode('card')} title="Card view" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: '6px', cursor: 'pointer', border: viewMode === 'card' ? '1.5px solid var(--prof-primary)' : '1.5px solid var(--prof-border)', background: viewMode === 'card' ? 'var(--prof-primary)' : 'transparent', color: viewMode === 'card' ? '#fff' : 'var(--prof-text-muted)', transition: 'all 0.15s' }}>
+                                <svg fill="none" strokeWidth="1.8" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
+                            </button>
+                            <button type="button" onClick={() => setViewMode('list')} title="List view" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: '6px', cursor: 'pointer', border: viewMode === 'list' ? '1.5px solid var(--prof-primary)' : '1.5px solid var(--prof-border)', background: viewMode === 'list' ? 'var(--prof-primary)' : 'transparent', color: viewMode === 'list' ? '#fff' : 'var(--prof-text-muted)', transition: 'all 0.15s' }}>
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                            </button>
+                        </div>
+                        <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15" style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--prof-text-muted)', pointerEvents: 'none' }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                            </svg>
+                            <input
+                                type="text"
+                                placeholder="Search forms..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                style={{ width: '100%', padding: '9px 12px 9px 34px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff', fontSize: '0.875rem', outline: 'none', boxSizing: 'border-box' }}
+                            />
+                        </div>
                     </div>
-                    <div style={{ position: 'relative', flexShrink: 0 }}>
-                        <select
-                            value={statusFilter}
-                            onChange={e => setStatusFilter(e.target.value as FilterStatus)}
-                            style={{ appearance: 'none', padding: '9px 36px 9px 14px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff', color: 'var(--prof-text-main)', fontSize: '0.875rem', fontWeight: 500, outline: 'none', cursor: 'pointer', minWidth: '150px' }}
-                        >
-                            <option value="all">All Status</option>
-                            <option value="open">Open</option>
-                            <option value="upcoming">Upcoming</option>
-                            <option value="closed">Closed</option>
-                            <option value="submitted">Submitted</option>
-                        </select>
-                        <div style={{ position: 'absolute', right: '11px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--prof-text-muted)' }}>
-                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                    {/* Group 2: filter selects — wrap below on narrow viewports */}
+                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ position: 'relative' }}>
+                            <select
+                                value={statusFilter}
+                                onChange={e => setStatusFilter(e.target.value as FilterStatus)}
+                                style={{ appearance: 'none', padding: '9px 36px 9px 14px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff', color: 'var(--prof-text-main)', fontSize: '0.875rem', fontWeight: 500, outline: 'none', cursor: 'pointer', minWidth: '150px' }}
+                            >
+                                <option value="all">All Status</option>
+                                <option value="open">Open</option>
+                                <option value="upcoming">Upcoming</option>
+                                <option value="closed">Closed</option>
+                                <option value="submitted">Submitted</option>
+                            </select>
+                            <div style={{ position: 'absolute', right: '11px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--prof-text-muted)' }}>
+                                <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -111,9 +126,52 @@ export function StudentFormsList() {
                 <div style={{ textAlign: 'center', padding: '40px 20px', background: '#fff', borderRadius: '12px', border: '1px solid var(--prof-border)' }}>
                     <p style={{ margin: 0, color: 'var(--prof-text-muted)' }}>No forms match your filter.</p>
                 </div>
-            ) : (
+            ) : viewMode === 'card' ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
                     {filtered.map(form => <FormCard key={form.id} form={form} onOpen={() => navigate(`/student/forms/${form.id}`)} />)}
+                </div>
+            ) : (
+                <div style={{ borderRadius: '8px', border: '1px solid var(--prof-border)', overflow: 'hidden' }}>
+                    {filtered.map((form, idx) => {
+                        const ws = getFormWindowStatus(form);
+                        const hasSubmitted = !!form.my_submission;
+                        let statusColor: string, statusBg: string, statusLabel: string;
+                        if (hasSubmitted) { statusColor = '#1d4ed8'; statusBg = '#eff6ff'; statusLabel = 'Submitted'; }
+                        else if (ws === 'open') { statusColor = '#15803d'; statusBg = '#dcfce7'; statusLabel = 'Open'; }
+                        else if (ws === 'upcoming') { statusColor = '#854d0e'; statusBg = '#fef9c3'; statusLabel = 'Upcoming'; }
+                        else { statusColor = '#475569'; statusBg = '#f1f5f9'; statusLabel = 'Closed'; }
+                        const barColor = hasSubmitted ? '#3b82f6' : ws === 'open' ? '#16a34a' : ws === 'upcoming' ? '#f59e0b' : '#94a3b8';
+                        const isLast = idx === filtered.length - 1;
+
+                        return (
+                            <div
+                                key={form.id}
+                                onClick={() => navigate(`/student/forms/${form.id}`)}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px',
+                                    background: '#fff', borderLeft: `3px solid ${barColor}`,
+                                    borderBottom: isLast ? 'none' : '1px solid var(--prof-border)',
+                                    cursor: 'pointer', transition: 'background 0.12s', flexWrap: 'wrap',
+                                }}
+                                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--prof-surface)'}
+                                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = '#fff'}
+                            >
+                                <div style={{ flex: 1, minWidth: '120px' }}>
+                                    <p style={{ margin: '0 0 1px', fontSize: '0.72rem', color: 'var(--prof-text-muted)', fontWeight: 600 }}>
+                                        Attempt {form.attempt_number} · {form.academic_year} · {form.term}
+                                    </p>
+                                    <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--prof-text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{form.title}</p>
+                                </div>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: statusColor, background: statusBg, padding: '2px 8px', borderRadius: '99px', flexShrink: 0 }}>{statusLabel}</span>
+                                <span style={{ fontSize: '0.78rem', color: 'var(--prof-text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                    {new Date(form.exam_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </span>
+                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" style={{ flexShrink: 0, color: 'var(--prof-text-muted)' }}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                </svg>
+                            </div>
+                        );
+                    })}
                 </div>
             )}
         </div>
@@ -216,4 +274,3 @@ function FormCard({ form, onOpen }: { form: StudentForm; onOpen: () => void }) {
         </div>
     );
 }
-
