@@ -157,15 +157,13 @@ export interface AdminSubjectWithCreator extends Subject {
   co_handlers: SubjectCoHandler[];
 }
 
-export async function fetchAdminSubjects(): Promise<{ data: AdminSubjectWithCreator[]; error: string | null }> {
-  const { data, error } = await supabase
-    .from('subjects')
-    .select('*, created_by, course_outcomes(count), questions(count)')
-    .order('created_at', { ascending: false });
+export interface AdminSubjectPageParams {
+  search?: string;
+  page: number;
+  pageSize: number;
+}
 
-  if (error) return { data: [], error: error.message };
-
-  const rows = data as any[];
+async function resolveAdminSubjectRows(rows: any[]): Promise<AdminSubjectWithCreator[]> {
   const creatorIds = [...new Set(rows.map((s: any) => s.created_by).filter(Boolean))];
   const subjectIds = rows.map((s: any) => s.id);
 
@@ -199,14 +197,40 @@ export async function fetchAdminSubjects(): Promise<{ data: AdminSubjectWithCrea
     }
   }
 
-  const merged: AdminSubjectWithCreator[] = rows.map((s: any) => ({
+  return rows.map((s: any) => ({
     ...s,
     creator_name: profileMap[s.created_by]?.full_name ?? null,
     creator_email: profileMap[s.created_by]?.email ?? null,
     co_handlers: coHandlerMap[s.id] ?? [],
   }));
+}
 
-  return { data: merged, error: null };
+export async function fetchAdminSubjectsPage(
+  params: AdminSubjectPageParams
+): Promise<{ data: AdminSubjectWithCreator[]; total: number; error: string | null }> {
+  const { search, page, pageSize } = params;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  let query = supabase
+    .from('subjects')
+    .select('*, created_by, course_outcomes(count), questions(count)', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (search) query = query.or(`course_title.ilike.%${search}%,course_code.ilike.%${search}%`);
+
+  const { data, error, count } = await query;
+  if (error) return { data: [], total: 0, error: error.message };
+
+  const merged = await resolveAdminSubjectRows(data as any[]);
+  return { data: merged, total: count ?? 0, error: null };
+}
+
+/** @deprecated Use fetchAdminSubjectsPage instead */
+export async function fetchAdminSubjects(): Promise<{ data: AdminSubjectWithCreator[]; error: string | null }> {
+  const res = await fetchAdminSubjectsPage({ page: 1, pageSize: 9999 });
+  return { data: res.data, error: res.error };
 }
 
 export interface AdminSubjectDetail extends SubjectWithOutcomes {

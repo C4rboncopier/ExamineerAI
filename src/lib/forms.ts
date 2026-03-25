@@ -93,6 +93,62 @@ export function utcToPhtLocal(utcIso: string): string {
 
 // ─── Fetch ────────────────────────────────────────────────────
 
+export interface FormListItem {
+    id: string;
+    title: string;
+    exam_date: string;
+    submission_start: string;
+    submission_end: string;
+    attempt_number: number;
+    academic_year: string;
+    term: string;
+    created_by: string;
+    created_at: string;
+    submission_count: number;
+}
+
+export async function fetchFormsPage(params: {
+    search?: string;
+    attempt?: number;
+    window?: 'open' | 'upcoming' | 'closed';
+    page: number;
+    pageSize: number;
+}): Promise<{ data: FormListItem[]; total: number; error: string | null }> {
+    const { search, attempt, window: windowFilter, page, pageSize } = params;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const now = new Date().toISOString();
+
+    let query = supabase
+        .from('forms')
+        .select(
+            'id, title, exam_date, submission_start, submission_end, attempt_number, academic_year, term, created_by, created_at, form_submissions(count)',
+            { count: 'exact' }
+        )
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+    if (search) query = query.ilike('title', `%${search}%`);
+    if (attempt !== undefined) query = query.eq('attempt_number', attempt);
+    if (windowFilter === 'open') {
+        query = query.lte('submission_start', now).gte('submission_end', now);
+    } else if (windowFilter === 'upcoming') {
+        query = query.gt('submission_start', now);
+    } else if (windowFilter === 'closed') {
+        query = query.lt('submission_end', now);
+    }
+
+    const { data, error, count } = await query;
+    if (error) return { data: [], total: 0, error: error.message };
+
+    const forms = (data as any[]).map(f => ({
+        ...f,
+        submission_count: f.form_submissions?.[0]?.count ?? 0,
+    }));
+
+    return { data: forms as FormListItem[], total: count ?? 0, error: null };
+}
+
 export async function fetchForms(): Promise<{ data: Form[]; error: string | null }> {
     const { data, error } = await supabase
         .from('forms')

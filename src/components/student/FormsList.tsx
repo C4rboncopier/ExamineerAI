@@ -1,48 +1,87 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-    fetchStudentForms, getFormWindowStatus, formatPHT, markAllNotificationsRead,
+    fetchStudentFormsPage, getFormWindowStatus, formatPHT, markAllNotificationsRead,
 } from '../../lib/studentForms';
-import type { StudentForm } from '../../lib/studentForms';
+import type { StudentFormListItem } from '../../lib/studentForms';
+import { Pagination } from '../admin/Pagination';
 
 type FilterStatus = 'all' | 'open' | 'upcoming' | 'closed' | 'submitted';
+
+const ITEMS_PER_PAGE = 10;
 
 export function StudentFormsList() {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [forms, setForms] = useState<StudentForm[]>([]);
+    const [forms, setForms] = useState<StudentFormListItem[]>([]);
+    const [total, setTotal] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
+    const [currentPage, setCurrentPage] = useState(1);
     const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
+    const [viewModeUserId, setViewModeUserId] = useState<string | null>(null);
 
     useEffect(() => {
         if (!user) return;
-        fetchStudentForms(user.id).then(({ data }) => {
-            setForms(data);
-            setIsLoading(false);
-        });
-        // Mark all notifications as read when viewing forms list
+        setViewModeUserId(user.id);
+        const stored = localStorage.getItem(`student_forms_viewMode_${user.id}`);
+        if (stored === 'card' || stored === 'list') setViewMode(stored);
+    }, [user]);
+
+    useEffect(() => {
+        if (viewModeUserId) localStorage.setItem(`student_forms_viewMode_${viewModeUserId}`, viewMode);
+    }, [viewMode, viewModeUserId]);
+
+    useEffect(() => {
+        if (!user) return;
         markAllNotificationsRead(user.id);
     }, [user]);
 
-    const filtered = useMemo(() => {
-        const q = searchQuery.toLowerCase().trim();
-        return forms.filter(f => {
-            const matchSearch = !q || f.title.toLowerCase().includes(q);
-            const ws = getFormWindowStatus(f);
-            const hasSubmitted = !!f.my_submission;
+    // Debounce search (300ms)
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => {
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        debounceTimer.current = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+        return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+    }, [searchQuery]);
 
-            let matchStatus = true;
-            if (statusFilter === 'submitted') matchStatus = hasSubmitted;
-            else if (statusFilter === 'open') matchStatus = ws === 'open' && !hasSubmitted;
-            else if (statusFilter === 'upcoming') matchStatus = ws === 'upcoming';
-            else if (statusFilter === 'closed') matchStatus = ws === 'closed' && !hasSubmitted;
+    // Reset to page 1 when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [debouncedSearch, statusFilter]);
 
-            return matchSearch && matchStatus;
+    // Fetch current page
+    useEffect(() => {
+        if (!user) return;
+        let cancelled = false;
+        const isFirst = isLoading;
+        if (!isFirst) setIsRefreshing(true);
+
+        fetchStudentFormsPage({
+            studentId: user.id,
+            search: debouncedSearch || undefined,
+            status: statusFilter,
+            page: currentPage,
+            pageSize: ITEMS_PER_PAGE,
+        }).then(res => {
+            if (cancelled) return;
+            if (!res.error) {
+                setForms(res.data);
+                setTotal(res.total);
+            }
+            setIsLoading(false);
+            setIsRefreshing(false);
         });
-    }, [forms, searchQuery, statusFilter]);
+
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user, debouncedSearch, statusFilter, currentPage]);
+
+    const totalPages = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
 
     if (isLoading) {
         return (
@@ -67,118 +106,137 @@ export function StudentFormsList() {
             </div>
 
             {/* Filters */}
-            {forms.length > 0 && (
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', alignItems: 'center' }}>
-                    {/* Group 1: toggles + search — stay on same row */}
-                    <div style={{ display: 'flex', gap: '8px', flex: '1 1 auto', minWidth: '280px', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                            <button type="button" onClick={() => setViewMode('card')} title="Card view" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: '6px', cursor: 'pointer', border: viewMode === 'card' ? '1.5px solid var(--prof-primary)' : '1.5px solid var(--prof-border)', background: viewMode === 'card' ? 'var(--prof-primary)' : 'transparent', color: viewMode === 'card' ? '#fff' : 'var(--prof-text-muted)', transition: 'all 0.15s' }}>
-                                <svg fill="none" strokeWidth="1.8" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
-                            </button>
-                            <button type="button" onClick={() => setViewMode('list')} title="List view" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: '6px', cursor: 'pointer', border: viewMode === 'list' ? '1.5px solid var(--prof-primary)' : '1.5px solid var(--prof-border)', background: viewMode === 'list' ? 'var(--prof-primary)' : 'transparent', color: viewMode === 'list' ? '#fff' : 'var(--prof-text-muted)', transition: 'all 0.15s' }}>
-                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
-                            </button>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', alignItems: 'center' }}>
+                {/* Group 1: toggles + search */}
+                <div style={{ display: 'flex', gap: '8px', flex: '1 1 auto', minWidth: '280px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                        <button type="button" onClick={() => setViewMode('card')} title="Card view" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: '6px', cursor: 'pointer', border: viewMode === 'card' ? '1.5px solid var(--prof-primary)' : '1.5px solid var(--prof-border)', background: viewMode === 'card' ? 'var(--prof-primary)' : 'transparent', color: viewMode === 'card' ? '#fff' : 'var(--prof-text-muted)', transition: 'all 0.15s' }}>
+                            <svg fill="none" strokeWidth="1.8" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
+                        </button>
+                        <button type="button" onClick={() => setViewMode('list')} title="List view" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: '6px', cursor: 'pointer', border: viewMode === 'list' ? '1.5px solid var(--prof-primary)' : '1.5px solid var(--prof-border)', background: viewMode === 'list' ? 'var(--prof-primary)' : 'transparent', color: viewMode === 'list' ? '#fff' : 'var(--prof-text-muted)', transition: 'all 0.15s' }}>
+                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                        </button>
+                    </div>
+                    <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15" style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--prof-text-muted)', pointerEvents: 'none' }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                        </svg>
+                        <input
+                            type="text"
+                            placeholder="Search forms..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            style={{ width: '100%', padding: '9px 12px 9px 34px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff', fontSize: '0.875rem', outline: 'none', boxSizing: 'border-box' }}
+                        />
+                    </div>
+                </div>
+                {/* Group 2: filter selects */}
+                <div style={{ display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ position: 'relative' }}>
+                        <select
+                            value={statusFilter}
+                            onChange={e => setStatusFilter(e.target.value as FilterStatus)}
+                            style={{ appearance: 'none', padding: '9px 36px 9px 14px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff', color: 'var(--prof-text-main)', fontSize: '0.875rem', fontWeight: 500, outline: 'none', cursor: 'pointer', minWidth: '150px' }}
+                        >
+                            <option value="all">All Status</option>
+                            <option value="open">Open</option>
+                            <option value="upcoming">Upcoming</option>
+                            <option value="closed">Closed</option>
+                            <option value="submitted">Submitted</option>
+                        </select>
+                        <div style={{ position: 'absolute', right: '11px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--prof-text-muted)' }}>
+                            <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
                         </div>
-                        <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-                            <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="15" height="15" style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--prof-text-muted)', pointerEvents: 'none' }}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                    </div>
+                </div>
+            </div>
+
+            {total === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px', background: '#fff', borderRadius: '16px', border: '1px solid var(--prof-border)' }}>
+                    {debouncedSearch || statusFilter !== 'all' ? (
+                        <p style={{ margin: 0, color: 'var(--prof-text-muted)' }}>No forms match your filter.</p>
+                    ) : (
+                        <>
+                            <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" width="48" height="48" style={{ margin: '0 auto 14px', display: 'block', opacity: 0.25 }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
                             </svg>
-                            <input
-                                type="text"
-                                placeholder="Search forms..."
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                                style={{ width: '100%', padding: '9px 12px 9px 34px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff', fontSize: '0.875rem', outline: 'none', boxSizing: 'border-box' }}
-                            />
+                            <h3 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 600, color: 'var(--prof-text-main)' }}>No forms available</h3>
+                            <p style={{ margin: 0, color: 'var(--prof-text-muted)', fontSize: '0.88rem' }}>Application forms for exam attempts will appear here.</p>
+                        </>
+                    )}
+                </div>
+            ) : (
+                <div style={{ opacity: isRefreshing ? 0.6 : 1, transition: 'opacity 0.15s' }}>
+                    {viewMode === 'card' ? (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+                            {forms.map(form => <FormCard key={form.id} form={form} onOpen={() => navigate(`/student/forms/${form.id}`)} />)}
                         </div>
-                    </div>
-                    {/* Group 2: filter selects — wrap below on narrow viewports */}
-                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <div style={{ position: 'relative' }}>
-                            <select
-                                value={statusFilter}
-                                onChange={e => setStatusFilter(e.target.value as FilterStatus)}
-                                style={{ appearance: 'none', padding: '9px 36px 9px 14px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff', color: 'var(--prof-text-main)', fontSize: '0.875rem', fontWeight: 500, outline: 'none', cursor: 'pointer', minWidth: '150px' }}
-                            >
-                                <option value="all">All Status</option>
-                                <option value="open">Open</option>
-                                <option value="upcoming">Upcoming</option>
-                                <option value="closed">Closed</option>
-                                <option value="submitted">Submitted</option>
-                            </select>
-                            <div style={{ position: 'absolute', right: '11px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--prof-text-muted)' }}>
-                                <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
-                            </div>
+                    ) : (
+                        <div style={{ borderRadius: '8px', border: '1px solid var(--prof-border)', overflow: 'hidden' }}>
+                            {forms.map((form, idx) => {
+                                const ws = getFormWindowStatus(form);
+                                const hasSubmitted = !!form.my_submission;
+                                let statusColor: string, statusBg: string, statusLabel: string;
+                                if (hasSubmitted) { statusColor = '#1d4ed8'; statusBg = '#eff6ff'; statusLabel = 'Submitted'; }
+                                else if (ws === 'open') { statusColor = '#15803d'; statusBg = '#dcfce7'; statusLabel = 'Open'; }
+                                else if (ws === 'upcoming') { statusColor = '#854d0e'; statusBg = '#fef9c3'; statusLabel = 'Upcoming'; }
+                                else { statusColor = '#475569'; statusBg = '#f1f5f9'; statusLabel = 'Closed'; }
+                                const barColor = hasSubmitted ? '#3b82f6' : ws === 'open' ? '#16a34a' : ws === 'upcoming' ? '#f59e0b' : '#94a3b8';
+                                const isLast = idx === forms.length - 1;
+
+                                return (
+                                    <div
+                                        key={form.id}
+                                        onClick={() => navigate(`/student/forms/${form.id}`)}
+                                        style={{
+                                            display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '12px 16px',
+                                            background: '#fff', borderLeft: `3px solid ${barColor}`,
+                                            borderBottom: isLast ? 'none' : '1px solid var(--prof-border)',
+                                            cursor: 'pointer', transition: 'background 0.12s', flexWrap: 'wrap',
+                                        }}
+                                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--prof-surface)'}
+                                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = '#fff'}
+                                    >
+                                        <div style={{ flex: 1, minWidth: '120px' }}>
+                                            <p style={{ margin: '0 0 1px', fontSize: '0.72rem', color: 'var(--prof-text-muted)', fontWeight: 600 }}>
+                                                Attempt {form.attempt_number} · {form.academic_year} · {form.term}
+                                            </p>
+                                            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--prof-text-main)', fontWeight: 600 }}>{form.title}</p>
+                                        </div>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: statusColor, background: statusBg, padding: '2px 8px', borderRadius: '99px', flexShrink: 0 }}>{statusLabel}</span>
+                                        <span style={{ fontSize: '0.78rem', color: 'var(--prof-text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                            {new Date(form.exam_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                        </span>
+                                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" style={{ flexShrink: 0, color: 'var(--prof-text-muted)' }}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                        </svg>
+                                    </div>
+                                );
+                            })}
                         </div>
-                    </div>
+                    )}
                 </div>
             )}
 
-            {forms.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '60px 20px', background: '#fff', borderRadius: '16px', border: '1px solid var(--prof-border)' }}>
-                    <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" width="48" height="48" style={{ margin: '0 auto 14px', display: 'block', opacity: 0.25 }}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
-                    </svg>
-                    <h3 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 600, color: 'var(--prof-text-main)' }}>No forms available</h3>
-                    <p style={{ margin: 0, color: 'var(--prof-text-muted)', fontSize: '0.88rem' }}>Application forms for exam attempts will appear here.</p>
-                </div>
-            ) : filtered.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px', background: '#fff', borderRadius: '12px', border: '1px solid var(--prof-border)' }}>
-                    <p style={{ margin: 0, color: 'var(--prof-text-muted)' }}>No forms match your filter.</p>
-                </div>
-            ) : viewMode === 'card' ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-                    {filtered.map(form => <FormCard key={form.id} form={form} onOpen={() => navigate(`/student/forms/${form.id}`)} />)}
-                </div>
-            ) : (
-                <div style={{ borderRadius: '8px', border: '1px solid var(--prof-border)', overflow: 'hidden' }}>
-                    {filtered.map((form, idx) => {
-                        const ws = getFormWindowStatus(form);
-                        const hasSubmitted = !!form.my_submission;
-                        let statusColor: string, statusBg: string, statusLabel: string;
-                        if (hasSubmitted) { statusColor = '#1d4ed8'; statusBg = '#eff6ff'; statusLabel = 'Submitted'; }
-                        else if (ws === 'open') { statusColor = '#15803d'; statusBg = '#dcfce7'; statusLabel = 'Open'; }
-                        else if (ws === 'upcoming') { statusColor = '#854d0e'; statusBg = '#fef9c3'; statusLabel = 'Upcoming'; }
-                        else { statusColor = '#475569'; statusBg = '#f1f5f9'; statusLabel = 'Closed'; }
-                        const barColor = hasSubmitted ? '#3b82f6' : ws === 'open' ? '#16a34a' : ws === 'upcoming' ? '#f59e0b' : '#94a3b8';
-                        const isLast = idx === filtered.length - 1;
-
-                        return (
-                            <div
-                                key={form.id}
-                                onClick={() => navigate(`/student/forms/${form.id}`)}
-                                style={{
-                                    display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px',
-                                    background: '#fff', borderLeft: `3px solid ${barColor}`,
-                                    borderBottom: isLast ? 'none' : '1px solid var(--prof-border)',
-                                    cursor: 'pointer', transition: 'background 0.12s', flexWrap: 'wrap',
-                                }}
-                                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--prof-surface)'}
-                                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = '#fff'}
-                            >
-                                <div style={{ flex: 1, minWidth: '120px' }}>
-                                    <p style={{ margin: '0 0 1px', fontSize: '0.72rem', color: 'var(--prof-text-muted)', fontWeight: 600 }}>
-                                        Attempt {form.attempt_number} · {form.academic_year} · {form.term}
-                                    </p>
-                                    <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--prof-text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{form.title}</p>
-                                </div>
-                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: statusColor, background: statusBg, padding: '2px 8px', borderRadius: '99px', flexShrink: 0 }}>{statusLabel}</span>
-                                <span style={{ fontSize: '0.78rem', color: 'var(--prof-text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                                    {new Date(form.exam_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                </span>
-                                <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" style={{ flexShrink: 0, color: 'var(--prof-text-muted)' }}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                                </svg>
-                            </div>
-                        );
-                    })}
-                </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    isDisabled={isRefreshing}
+                    onPageChange={setCurrentPage}
+                />
+            )}
+            {total > 0 && (
+                <p style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--prof-text-muted)', marginTop: '8px' }}>
+                    Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, total)} of {total} form{total !== 1 ? 's' : ''}
+                </p>
             )}
         </div>
     );
 }
 
-function FormCard({ form, onOpen }: { form: StudentForm; onOpen: () => void }) {
+function FormCard({ form, onOpen }: { form: StudentFormListItem; onOpen: () => void }) {
     const ws = getFormWindowStatus(form);
     const hasSubmitted = !!form.my_submission;
 

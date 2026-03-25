@@ -803,6 +803,13 @@ select:focus {
     margin-top: 12px;
 }
 
+@media (max-width: 600px) {
+    .pagination-btn-text { display: none; }
+    .pagination-btn { padding: 8px 10px; }
+    .subjects-pagination { gap: 4px; }
+    .pagination-page { width: 32px; height: 32px; font-size: 0.8rem; }
+}
+
 .subjects-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

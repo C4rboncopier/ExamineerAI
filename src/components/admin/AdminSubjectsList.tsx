@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
-import { fetchAdminSubjects, fetchAdminSubjectDetail } from '../../lib/subjects';
+import { useState, useEffect, useRef } from 'react';
+import { fetchAdminSubjectsPage, fetchAdminSubjectDetail } from '../../lib/subjects';
 import type { AdminSubjectWithCreator, AdminSubjectDetail } from '../../lib/subjects';
+import { Pagination } from './Pagination';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -12,31 +13,55 @@ const GRID = '24px 1fr 150px 110px 80px';
 
 export function AdminSubjectsList() {
     const [subjects, setSubjects] = useState<AdminSubjectWithCreator[]>([]);
+    const [total, setTotal] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [detailsMap, setDetailsMap] = useState<Record<string, AdminSubjectDetail>>({});
     const [loadingDetails, setLoadingDetails] = useState<string | null>(null);
 
+    // Debounce search input (300ms)
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => {
-        fetchAdminSubjects().then(res => {
-            if (!res.error) setSubjects(res.data);
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        debounceTimer.current = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+        return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+    }, [searchQuery]);
+
+    // Reset to page 1 when search changes
+    useEffect(() => {
+        setCurrentPage(1);
+        setExpandedId(null);
+    }, [debouncedSearch]);
+
+    // Fetch current page from the server
+    useEffect(() => {
+        let cancelled = false;
+        const isFirst = isLoading;
+        if (!isFirst) setIsRefreshing(true);
+
+        fetchAdminSubjectsPage({
+            search: debouncedSearch || undefined,
+            page: currentPage,
+            pageSize: ITEMS_PER_PAGE,
+        }).then(res => {
+            if (cancelled) return;
+            if (!res.error) {
+                setSubjects(res.data);
+                setTotal(res.total);
+            }
             setIsLoading(false);
+            setIsRefreshing(false);
         });
-    }, []);
 
-    const filtered = useMemo(() => {
-        const q = searchQuery.toLowerCase().trim();
-        return subjects.filter(s =>
-            !q || s.course_title.toLowerCase().includes(q) || s.course_code.toLowerCase().includes(q)
-        );
-    }, [subjects, searchQuery]);
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedSearch, currentPage]);
 
-    const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-    const paged = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
-    useEffect(() => { setCurrentPage(1); setExpandedId(null); }, [searchQuery]);
+    const totalPages = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
 
     async function handleToggleExpand(id: string) {
         if (expandedId === id) {
@@ -79,15 +104,15 @@ export function AdminSubjectsList() {
             {/* Table */}
             {isLoading ? (
                 <div className="subjects-loading">Loading subjects...</div>
-            ) : filtered.length === 0 ? (
+            ) : total === 0 ? (
                 <div className="subjects-empty">
                     <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" className="empty-icon">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
                     </svg>
-                    <p>{searchQuery ? 'No subjects match your search.' : 'No subjects found.'}</p>
+                    <p>{debouncedSearch ? 'No subjects match your search.' : 'No subjects found.'}</p>
                 </div>
             ) : (
-                <div className="templates-simple-list" style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--prof-border)' }}>
+                <div className="templates-simple-list" style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--prof-border)', opacity: isRefreshing ? 0.6 : 1, transition: 'opacity 0.15s' }}>
                     {/* Header */}
                     <div className="admin-subject-list-header" style={{ display: 'grid', gridTemplateColumns: GRID, alignItems: 'center', padding: '8px 14px', background: 'var(--prof-bg)', borderBottom: '1px solid var(--prof-border)', gap: '12px' }}>
                         <div />
@@ -102,10 +127,10 @@ export function AdminSubjectsList() {
                     </div>
 
                     {/* Rows */}
-                    {paged.map((subject, idx) => {
+                    {subjects.map((subject, idx) => {
                         const isExpanded = expandedId === subject.id;
                         const isLoadingThis = loadingDetails === subject.id;
-                        const isLast = idx === paged.length - 1;
+                        const isLast = idx === subjects.length - 1;
                         const questionCount = subject.questions?.[0]?.count ?? 0;
                         const detail = detailsMap[subject.id];
 
@@ -259,25 +284,16 @@ export function AdminSubjectsList() {
 
             {/* Pagination */}
             {!isLoading && totalPages > 1 && (
-                <div className="subjects-pagination">
-                    <button className="pagination-btn" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1}>
-                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
-                        Previous
-                    </button>
-                    <div className="pagination-pages">
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                            <button key={page} className={`pagination-page ${page === currentPage ? 'active' : ''}`} onClick={() => setCurrentPage(page)}>{page}</button>
-                        ))}
-                    </div>
-                    <button className="pagination-btn" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage === totalPages}>
-                        Next
-                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
-                    </button>
-                </div>
+                <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    isDisabled={isRefreshing}
+                    onPageChange={setCurrentPage}
+                />
             )}
-            {!isLoading && filtered.length > 0 && (
+            {!isLoading && total > 0 && (
                 <p className="subjects-count">
-                    Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filtered.length)} of {filtered.length} subject{filtered.length !== 1 ? 's' : ''}
+                    Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, total)} of {total} subject{total !== 1 ? 's' : ''}
                 </p>
             )}
         </div>

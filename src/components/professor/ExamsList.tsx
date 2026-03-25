@@ -1,10 +1,13 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { fetchExams } from '../../lib/exams';
+import { fetchExamsPage, fetchExamTermKeys } from '../../lib/exams';
 import type { Exam } from '../../lib/exams';
 import { Toast } from '../common/Toast';
 import { printOMR } from '../../lib/printOMR';
+import { Pagination } from '../admin/Pagination';
+
+const ITEMS_PER_PAGE = 10;
 
 interface ToastState {
     open: boolean;
@@ -15,13 +18,24 @@ interface ToastState {
 export function ExamsList() {
     const navigate = useNavigate();
     const [exams, setExams] = useState<Exam[]>([]);
+    const [total, setTotal] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [availableTerms, setAvailableTerms] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'locked' | 'unlocked'>('all');
     const [termFilter, setTermFilter] = useState<'all' | string>('all');
+    const [currentPage, setCurrentPage] = useState(1);
     const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
     const [viewModeUserId, setViewModeUserId] = useState<string | null>(null);
 
+    const [toast, setToast] = useState<ToastState>({ open: false, message: '', type: 'success' });
+    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') =>
+        setToast({ open: true, message, type });
+    const closeToast = useCallback(() => setToast(prev => ({ ...prev, open: false })), []);
+
+    // Load viewMode from localStorage
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => {
             const uid = data.user?.id;
@@ -36,44 +50,50 @@ export function ExamsList() {
         if (viewModeUserId) localStorage.setItem(`exams_viewMode_${viewModeUserId}`, viewMode);
     }, [viewMode, viewModeUserId]);
 
-
-    const [toast, setToast] = useState<ToastState>({ open: false, message: '', type: 'success' });
-    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') =>
-        setToast({ open: true, message, type });
-    const closeToast = useCallback(() => setToast(prev => ({ ...prev, open: false })), []);
-
+    // Load term options once
     useEffect(() => {
-        fetchExams().then(({ data, error }) => {
-            if (error) showToast('Failed to load exams.', 'error');
-            else setExams(data);
-            setIsLoading(false);
-        });
+        fetchExamTermKeys().then(setAvailableTerms);
     }, []);
 
-    const availableTerms = useMemo(() => {
-        const terms = new Set<string>();
-        exams.forEach(e => {
-            const ay = e.academic_year || 'Unknown A.Y.';
-            const t = e.term || 'Unknown Term';
-            terms.add(`${ay} | ${t}`);
-        });
-        return Array.from(terms).sort((a, b) => b.localeCompare(a));
-    }, [exams]);
+    // Debounce search (300ms)
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => {
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        debounceTimer.current = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+        return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+    }, [searchQuery]);
 
-    const filteredExams = exams.filter(exam => {
-        const matchesSearch = searchQuery === '' ||
-            exam.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            exam.code.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesStatus = statusFilter === 'all' || exam.status === statusFilter;
-        const ay = exam.academic_year || 'Unknown A.Y.';
-        const t = exam.term || 'Unknown Term';
-        const examTermKey = `${ay} | ${t}`;
-        const matchesTerm = termFilter === 'all' || examTermKey === termFilter;
-        return matchesSearch && matchesStatus && matchesTerm;
-    });
+    // Reset to page 1 on filter change
+    useEffect(() => { setCurrentPage(1); }, [debouncedSearch, statusFilter, termFilter]);
+
+    // Fetch current page
+    useEffect(() => {
+        let cancelled = false;
+        if (!isLoading) setIsRefreshing(true);
+        fetchExamsPage({
+            search: debouncedSearch || undefined,
+            status: statusFilter !== 'all' ? statusFilter : undefined,
+            termKey: termFilter !== 'all' ? termFilter : undefined,
+            page: currentPage,
+            pageSize: ITEMS_PER_PAGE,
+        }).then(res => {
+            if (cancelled) return;
+            if (res.error) showToast('Failed to load exams.', 'error');
+            else {
+                setExams(res.data);
+                setTotal(res.total);
+            }
+            setIsLoading(false);
+            setIsRefreshing(false);
+        });
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedSearch, statusFilter, termFilter, currentPage]);
+
+    const totalPages = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
 
     const groupedExams = useMemo(() => {
-        const groups = filteredExams.reduce((acc, exam) => {
+        const groups = exams.reduce((acc, exam) => {
             const ay = exam.academic_year || 'Unknown A.Y.';
             const t = exam.term || 'Unknown Term';
             const key = `${ay} | ${t}`;
@@ -83,7 +103,9 @@ export function ExamsList() {
         }, {} as Record<string, Exam[]>);
         const sortedKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
         return sortedKeys.map(key => ({ termString: key, exams: groups[key] }));
-    }, [filteredExams]);
+    }, [exams]);
+
+    const hasFilters = !!debouncedSearch || statusFilter !== 'all' || termFilter !== 'all';
 
     return (
         <div className="subjects-container">
@@ -103,10 +125,10 @@ export function ExamsList() {
             </div>
 
             {/* Search + filter bar */}
-            {!isLoading && exams.length > 0 && (
+            {!isLoading && (
                 <div className="prof-exam-filter-bar" style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap' }}>
 
-                    {/* Group 1: toggles + search — always on the same row */}
+                    {/* Group 1: toggles + search */}
                     <div style={{ display: 'flex', gap: '8px', flex: '1 1 auto', minWidth: '280px', alignItems: 'center' }}>
                         <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
                             <button type="button" onClick={() => setViewMode('card')} title="Card view" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '7px 10px', borderRadius: '6px', cursor: 'pointer', border: viewMode === 'card' ? '1.5px solid var(--prof-primary)' : '1.5px solid var(--prof-border)', background: viewMode === 'card' ? 'var(--prof-primary)' : 'transparent', color: viewMode === 'card' ? '#fff' : 'var(--prof-text-muted)', transition: 'all 0.15s' }}>
@@ -130,7 +152,7 @@ export function ExamsList() {
                         </div>
                     </div>
 
-                    {/* Group 2: filter selects — wrap below on narrow viewports */}
+                    {/* Group 2: filter selects */}
                     <div style={{ display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center', flexWrap: 'wrap' }}>
                         <div style={{ position: 'relative' }}>
                             <select value={termFilter} onChange={e => setTermFilter(e.target.value)} style={{ appearance: 'none', padding: '9px 36px 9px 16px', borderRadius: '8px', border: '1.5px solid var(--prof-border)', background: '#fff', color: 'var(--prof-text-main)', fontSize: '0.875rem', fontWeight: 500, outline: 'none', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.02)', minWidth: '180px' }}>
@@ -160,7 +182,7 @@ export function ExamsList() {
                 <div className="subjects-empty">
                     <p style={{ color: 'var(--prof-text-muted)' }}>Loading exams...</p>
                 </div>
-            ) : exams.length === 0 ? (
+            ) : total === 0 && !hasFilters ? (
                 <div className="subjects-empty">
                     <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" className="empty-icon">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
@@ -171,12 +193,12 @@ export function ExamsList() {
                         + Create Exam
                     </button>
                 </div>
-            ) : filteredExams.length === 0 ? (
+            ) : total === 0 ? (
                 <div className="subjects-empty">
                     <p style={{ color: 'var(--prof-text-muted)' }}>No exams match your search or filter.</p>
                 </div>
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: viewMode === 'list' ? '20px' : '32px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: viewMode === 'list' ? '20px' : '32px', opacity: isRefreshing ? 0.6 : 1, transition: 'opacity 0.15s' }}>
                     {groupedExams.map(group => (
                         <div key={group.termString}>
                             <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--prof-text-muted)', marginBottom: viewMode === 'list' ? '8px' : '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -303,6 +325,21 @@ export function ExamsList() {
                         </div>
                     ))}
                 </div>
+            )}
+
+            {/* Pagination */}
+            {!isLoading && totalPages > 1 && (
+                <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    isDisabled={isRefreshing}
+                    onPageChange={setCurrentPage}
+                />
+            )}
+            {!isLoading && total > 0 && (
+                <p className="subjects-count">
+                    Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, total)} of {total} exam{total !== 1 ? 's' : ''}
+                </p>
             )}
 
             <Toast isOpen={toast.open} message={toast.message} type={toast.type} onClose={closeToast} />

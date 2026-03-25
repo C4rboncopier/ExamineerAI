@@ -1,9 +1,12 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { fetchStudents, deleteStudent } from '../../lib/students';
+import { fetchStudentsPage, deleteStudent } from '../../lib/students';
 import type { Student } from '../../lib/students';
+import { fetchPrograms } from '../../lib/professors';
+import type { Program } from '../../lib/professors';
 import { Popup } from '../common/Popup';
 import { Toast } from '../common/Toast';
+import { Pagination } from './Pagination';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -13,10 +16,15 @@ export function StudentsList() {
     const navigate = useNavigate();
     const location = useLocation();
     const [students, setStudents] = useState<Student[]>([]);
+    const [total, setTotal] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [programs, setPrograms] = useState<Program[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [programFilter, setProgramFilter] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
+    const [refreshKey, setRefreshKey] = useState(0);
 
     // View
     const [viewTarget, setViewTarget] = useState<Student | null>(null);
@@ -42,49 +50,58 @@ export function StudentsList() {
         }
     }, [location, showToast]);
 
+    // Load programs once
     useEffect(() => {
-        fetchStudents().then((studRes) => {
-            if (!studRes.error) setStudents(studRes.data);
-            setIsLoading(false);
-        });
+        fetchPrograms().then(setPrograms);
     }, []);
 
-    // Unique programs derived from loaded students
-    const programs = useMemo(() => {
-        const map = new Map<string, { id: string; code: string; name: string }>();
-        students.forEach(s => {
-            if (s.program_id && s.program) map.set(s.program_id, { id: s.program_id, code: s.program.code, name: s.program.name });
+    // Debounce search (300ms)
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => {
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        debounceTimer.current = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+        return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+    }, [searchQuery]);
+
+    // Reset page + selection on filter change
+    useEffect(() => { setCurrentPage(1); setSelectedIds(new Set()); }, [debouncedSearch, programFilter]);
+
+    // Fetch current page
+    useEffect(() => {
+        let cancelled = false;
+        if (!isLoading) setIsRefreshing(true);
+        fetchStudentsPage({
+            search: debouncedSearch || undefined,
+            programId: programFilter || undefined,
+            page: currentPage,
+            pageSize: ITEMS_PER_PAGE,
+        }).then(res => {
+            if (cancelled) return;
+            if (!res.error) {
+                setStudents(res.data);
+                setTotal(res.total);
+            }
+            setIsLoading(false);
+            setIsRefreshing(false);
         });
-        return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
-    }, [students]);
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedSearch, programFilter, currentPage, refreshKey]);
 
-    const filtered = useMemo(() => {
-        const q = searchQuery.toLowerCase().trim();
-        return students.filter(s => {
-            const matchesSearch = !q || s.full_name?.toLowerCase().includes(q) || s.username?.toLowerCase().includes(q);
-            const matchesProgram = !programFilter || s.program_id === programFilter;
-            return matchesSearch && matchesProgram;
-        });
-    }, [students, searchQuery, programFilter]);
-
-    const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-    const paged = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
-    useEffect(() => { setCurrentPage(1); }, [searchQuery, programFilter]);
-    useEffect(() => { setSelectedIds(new Set()); }, [searchQuery, programFilter]);
+    const totalPages = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
 
     // ── Select ──────────────────────────────────────────────────────────
 
-    const allPageSelected = paged.length > 0 && paged.every(s => selectedIds.has(s.id));
-    const somePageSelected = paged.some(s => selectedIds.has(s.id)) && !allPageSelected;
+    const allPageSelected = students.length > 0 && students.every(s => selectedIds.has(s.id));
+    const somePageSelected = students.some(s => selectedIds.has(s.id)) && !allPageSelected;
 
     function toggleAll() {
         setSelectedIds(prev => {
             const next = new Set(prev);
             if (allPageSelected) {
-                paged.forEach(s => next.delete(s.id));
+                students.forEach(s => next.delete(s.id));
             } else {
-                paged.forEach(s => next.add(s.id));
+                students.forEach(s => next.add(s.id));
             }
             return next;
         });
@@ -107,9 +124,9 @@ export function StudentsList() {
         if (error) {
             showToast(error, 'error');
         } else {
-            setStudents(prev => prev.filter(s => s.id !== studentToDelete.id));
             setSelectedIds(prev => { const next = new Set(prev); next.delete(studentToDelete.id); return next; });
             showToast(`Student "${studentToDelete.full_name}" deleted.`);
+            setRefreshKey(k => k + 1);
         }
         setDeletePopupOpen(false);
         setStudentToDelete(null);
@@ -126,7 +143,6 @@ export function StudentsList() {
             const { error } = await deleteStudent(id);
             if (error) errorCount++;
         }
-        setStudents(prev => prev.filter(s => !selectedIds.has(s.id)));
         setSelectedIds(new Set());
         setBulkDeletePopupOpen(false);
         setIsBulkDeleting(false);
@@ -135,6 +151,7 @@ export function StudentsList() {
         } else {
             showToast(`${ids.length} student${ids.length !== 1 ? 's' : ''} deleted.`);
         }
+        setRefreshKey(k => k + 1);
     }
 
     // ── Render ─────────────────────────────────────────────────────────
@@ -220,15 +237,15 @@ export function StudentsList() {
             {/* List */}
             {isLoading ? (
                 <div className="subjects-loading">Loading students...</div>
-            ) : filtered.length === 0 ? (
+            ) : total === 0 ? (
                 <div className="subjects-empty">
                     <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" className="empty-icon">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
                     </svg>
-                    <p>{searchQuery || programFilter ? 'No students match your filters.' : 'No students yet. Add one to get started.'}</p>
+                    <p>{debouncedSearch || programFilter ? 'No students match your filters.' : 'No students yet. Add one to get started.'}</p>
                 </div>
             ) : (
-                <div className="templates-simple-list" style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--prof-border)' }}>
+                <div className="templates-simple-list" style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--prof-border)', opacity: isRefreshing ? 0.6 : 1, transition: 'opacity 0.15s' }}>
                     {/* Table Header */}
                     <div className="admin-student-list-header" style={{
                         display: 'grid', gridTemplateColumns: '36px 1fr 80px 110px 100px',
@@ -252,7 +269,7 @@ export function StudentsList() {
                     </div>
 
                     {/* Rows */}
-                    {paged.map((student, idx) => {
+                    {students.map((student, idx) => {
                         const isSelected = selectedIds.has(student.id);
                         return (
                             <div
@@ -262,7 +279,7 @@ export function StudentsList() {
                                     display: 'grid', gridTemplateColumns: '36px 1fr 80px 110px 100px',
                                     alignItems: 'center', padding: '9px 14px', gap: '12px',
                                     background: isSelected ? '#eff6ff' : idx % 2 === 0 ? '#fff' : 'var(--prof-bg)',
-                                    borderBottom: idx < paged.length - 1 ? '1px solid var(--prof-border)' : 'none',
+                                    borderBottom: idx < students.length - 1 ? '1px solid var(--prof-border)' : 'none',
                                     transition: 'background 0.1s',
                                 }}
                             >
@@ -324,27 +341,16 @@ export function StudentsList() {
 
             {/* Pagination */}
             {!isLoading && totalPages > 1 && (
-                <div className="subjects-pagination">
-                    <button className="pagination-btn" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1}>
-                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
-                        Previous
-                    </button>
-                    <div className="pagination-pages">
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                            <button key={page} className={`pagination-page ${page === currentPage ? 'active' : ''}`} onClick={() => setCurrentPage(page)}>
-                                {page}
-                            </button>
-                        ))}
-                    </div>
-                    <button className="pagination-btn" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage === totalPages}>
-                        Next
-                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
-                    </button>
-                </div>
+                <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    isDisabled={isRefreshing}
+                    onPageChange={setCurrentPage}
+                />
             )}
-            {!isLoading && filtered.length > 0 && (
+            {!isLoading && total > 0 && (
                 <p className="subjects-count">
-                    Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filtered.length)} of {filtered.length} student{filtered.length !== 1 ? 's' : ''}
+                    Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, total)} of {total} student{total !== 1 ? 's' : ''}
                 </p>
             )}
 

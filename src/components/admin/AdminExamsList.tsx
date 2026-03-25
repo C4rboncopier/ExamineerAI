@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
-import { fetchAdminExams } from '../../lib/exams';
+import { useState, useEffect, useRef } from 'react';
+import { fetchAdminExamsPage, fetchAdminExamFilterOptions } from '../../lib/exams';
 import type { AdminExam } from '../../lib/exams';
+import { Pagination } from './Pagination';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -12,46 +13,69 @@ const GRID = '24px 1fr 150px 160px 90px 90px 100px';
 
 export function AdminExamsList() {
     const [exams, setExams] = useState<AdminExam[]>([]);
+    const [total, setTotal] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [yearFilter, setYearFilter] = useState('');
     const [termFilter, setTermFilter] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [academicYears, setAcademicYears] = useState<string[]>([]);
+    const [academicTerms, setAcademicTerms] = useState<string[]>([]);
 
+    // Load filter options once (lightweight — only 2 columns)
     useEffect(() => {
-        fetchAdminExams().then(res => {
-            if (!res.error) setExams(res.data);
-            setIsLoading(false);
+        fetchAdminExamFilterOptions().then(({ years, terms }) => {
+            setAcademicYears(years);
+            setAcademicTerms(terms);
         });
     }, []);
 
-    const academicYears = useMemo(() => {
-        const years = [...new Set(exams.map(e => e.academic_year).filter(Boolean))].sort().reverse();
-        return years;
-    }, [exams]);
+    // Debounce search input (300ms)
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => {
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        debounceTimer.current = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+        return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+    }, [searchQuery]);
 
-    const academicTerms = useMemo(() => {
-        const terms = [...new Set(exams.map(e => e.term).filter(Boolean))].sort();
-        return terms;
-    }, [exams]);
+    // Reset to page 1 whenever filters change
+    useEffect(() => {
+        setCurrentPage(1);
+        setExpandedId(null);
+    }, [debouncedSearch, statusFilter, yearFilter, termFilter]);
 
-    const filtered = useMemo(() => {
-        const q = searchQuery.toLowerCase().trim();
-        return exams.filter(e => {
-            const matchesSearch = !q || e.title.toLowerCase().includes(q) || e.code.toLowerCase().includes(q);
-            const matchesStatus = !statusFilter || e.status === statusFilter;
-            const matchesYear = !yearFilter || e.academic_year === yearFilter;
-            const matchesTerm = !termFilter || e.term === termFilter;
-            return matchesSearch && matchesStatus && matchesYear && matchesTerm;
+    // Fetch current page from the server
+    useEffect(() => {
+        let cancelled = false;
+        const isFirst = isLoading;
+        if (!isFirst) setIsRefreshing(true);
+
+        fetchAdminExamsPage({
+            search: debouncedSearch || undefined,
+            status: statusFilter || undefined,
+            year: yearFilter || undefined,
+            term: termFilter || undefined,
+            page: currentPage,
+            pageSize: ITEMS_PER_PAGE,
+        }).then(res => {
+            if (cancelled) return;
+            if (!res.error) {
+                setExams(res.data);
+                setTotal(res.total);
+            }
+            setIsLoading(false);
+            setIsRefreshing(false);
         });
-    }, [exams, searchQuery, statusFilter, yearFilter, termFilter]);
 
-    const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-    const paged = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedSearch, statusFilter, yearFilter, termFilter, currentPage]);
 
-    useEffect(() => { setCurrentPage(1); setExpandedId(null); }, [searchQuery, statusFilter, yearFilter, termFilter]);
+    const totalPages = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
 
     const toggleExpand = (id: string) => setExpandedId(prev => prev === id ? null : id);
 
@@ -111,15 +135,15 @@ export function AdminExamsList() {
             {/* Table */}
             {isLoading ? (
                 <div className="subjects-loading">Loading exams...</div>
-            ) : filtered.length === 0 ? (
+            ) : total === 0 ? (
                 <div className="subjects-empty">
                     <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" className="empty-icon">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
                     </svg>
-                    <p>{searchQuery || statusFilter || yearFilter ? 'No exams match your filters.' : 'No exams found.'}</p>
+                    <p>{debouncedSearch || statusFilter || yearFilter || termFilter ? 'No exams match your filters.' : 'No exams found.'}</p>
                 </div>
             ) : (
-                <div className="templates-simple-list" style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--prof-border)' }}>
+                <div className="templates-simple-list" style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--prof-border)', opacity: isRefreshing ? 0.6 : 1, transition: 'opacity 0.15s' }}>
                     {/* Header */}
                     <div className="admin-exam-list-header" style={{ display: 'grid', gridTemplateColumns: GRID, alignItems: 'center', padding: '8px 14px', background: 'var(--prof-bg)', borderBottom: '1px solid var(--prof-border)', gap: '12px' }}>
                         <div />
@@ -136,9 +160,9 @@ export function AdminExamsList() {
                     </div>
 
                     {/* Rows */}
-                    {paged.map((exam, idx) => {
+                    {exams.map((exam, idx) => {
                         const isExpanded = expandedId === exam.id;
-                        const isLast = idx === paged.length - 1;
+                        const isLast = idx === exams.length - 1;
                         return (
                             <div key={exam.id}>
                                 {/* Main row */}
@@ -268,25 +292,16 @@ export function AdminExamsList() {
 
             {/* Pagination */}
             {!isLoading && totalPages > 1 && (
-                <div className="subjects-pagination">
-                    <button className="pagination-btn" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1}>
-                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
-                        Previous
-                    </button>
-                    <div className="pagination-pages">
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                            <button key={page} className={`pagination-page ${page === currentPage ? 'active' : ''}`} onClick={() => setCurrentPage(page)}>{page}</button>
-                        ))}
-                    </div>
-                    <button className="pagination-btn" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage === totalPages}>
-                        Next
-                        <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
-                    </button>
-                </div>
+                <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    isDisabled={isRefreshing}
+                    onPageChange={setCurrentPage}
+                />
             )}
-            {!isLoading && filtered.length > 0 && (
+            {!isLoading && total > 0 && (
                 <p className="subjects-count">
-                    Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filtered.length)} of {filtered.length} exam{filtered.length !== 1 ? 's' : ''}
+                    Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, total)} of {total} exam{total !== 1 ? 's' : ''}
                 </p>
             )}
         </div>

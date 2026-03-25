@@ -255,15 +255,16 @@ export interface AdminExam {
     co_handlers: ExamCoHandler[];
 }
 
-export async function fetchAdminExams(): Promise<{ data: AdminExam[]; error: string | null }> {
-    const { data, error } = await supabase
-        .from('exams')
-        .select('id, title, code, num_sets, max_attempts, academic_year, term, created_at, status, is_completed, program_ids, ai_analysis_enabled, created_by, exam_subjects(subject_id, subjects(course_code, course_title)), exam_enrollments(count)')
-        .order('created_at', { ascending: false });
+export interface AdminExamPageParams {
+    search?: string;
+    status?: string;
+    year?: string;
+    term?: string;
+    page: number;
+    pageSize: number;
+}
 
-    if (error) return { data: [], error: error.message };
-
-    const rows = data as any[];
+async function resolveAdminExamRows(rows: any[]): Promise<AdminExam[]> {
     const creatorIds = [...new Set(rows.map((e: any) => e.created_by).filter(Boolean))];
     const examIds = rows.map((e: any) => e.id);
 
@@ -297,7 +298,7 @@ export async function fetchAdminExams(): Promise<{ data: AdminExam[]; error: str
         }
     }
 
-    const merged: AdminExam[] = rows.map((e: any) => ({
+    return rows.map((e: any) => ({
         id: e.id,
         title: e.title,
         code: e.code,
@@ -317,8 +318,45 @@ export async function fetchAdminExams(): Promise<{ data: AdminExam[]; error: str
         creator_email: profileMap[e.created_by]?.email ?? null,
         co_handlers: coHandlerMap[e.id] ?? [],
     }));
+}
 
-    return { data: merged, error: null };
+export async function fetchAdminExamsPage(
+    params: AdminExamPageParams
+): Promise<{ data: AdminExam[]; total: number; error: string | null }> {
+    const { search, status, year, term, page, pageSize } = params;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+        .from('exams')
+        .select('id, title, code, num_sets, max_attempts, academic_year, term, created_at, status, is_completed, program_ids, ai_analysis_enabled, created_by, exam_subjects(subject_id, subjects(course_code, course_title)), exam_enrollments(count)', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+    if (search) query = query.or(`title.ilike.%${search}%,code.ilike.%${search}%`);
+    if (status) query = query.eq('status', status);
+    if (year) query = query.eq('academic_year', year);
+    if (term) query = query.eq('term', term);
+
+    const { data, error, count } = await query;
+    if (error) return { data: [], total: 0, error: error.message };
+
+    const merged = await resolveAdminExamRows(data as any[]);
+    return { data: merged, total: count ?? 0, error: null };
+}
+
+export async function fetchAdminExamFilterOptions(): Promise<{ years: string[]; terms: string[] }> {
+    const { data } = await supabase.from('exams').select('academic_year, term');
+    const rows = (data ?? []) as any[];
+    const years = [...new Set(rows.map((e: any) => e.academic_year).filter(Boolean))].sort().reverse() as string[];
+    const terms = [...new Set(rows.map((e: any) => e.term).filter(Boolean))].sort() as string[];
+    return { years, terms };
+}
+
+/** @deprecated Use fetchAdminExamsPage instead */
+export async function fetchAdminExams(): Promise<{ data: AdminExam[]; error: string | null }> {
+    const res = await fetchAdminExamsPage({ page: 1, pageSize: 9999 });
+    return { data: res.data, error: res.error };
 }
 
 // ─── CRUD ─────────────────────────────────────────────────────
@@ -331,6 +369,50 @@ export async function fetchExams(): Promise<{ data: Exam[]; error: string | null
 
     if (error) return { data: [], error: error.message };
     return { data: data as unknown as Exam[], error: null };
+}
+
+export async function fetchExamsPage(params: {
+    search?: string;
+    status?: 'locked' | 'unlocked';
+    termKey?: string;
+    page: number;
+    pageSize: number;
+}): Promise<{ data: Exam[]; total: number; error: string | null }> {
+    const { search, status, termKey, page, pageSize } = params;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+        .from('exams')
+        .select(
+            'id, title, code, num_sets, max_attempts, academic_year, term, created_at, status, is_completed, program_ids, ai_analysis_enabled, cover_image_url, exam_subjects(subject_id, subjects(course_code, course_title))',
+            { count: 'exact' }
+        )
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+    if (search) query = query.or(`title.ilike.%${search}%,code.ilike.%${search}%`);
+    if (status) query = query.eq('status', status);
+    if (termKey) {
+        const parts = termKey.split(' | ');
+        if (parts.length === 2) query = query.eq('academic_year', parts[0]).eq('term', parts[1]);
+    }
+
+    const { data, error, count } = await query;
+    if (error) return { data: [], total: 0, error: error.message };
+    return { data: data as unknown as Exam[], total: count ?? 0, error: null };
+}
+
+export async function fetchExamTermKeys(): Promise<string[]> {
+    const { data } = await supabase.from('exams').select('academic_year, term');
+    if (!data) return [];
+    const keys = new Set<string>();
+    for (const e of data as any[]) {
+        const ay = e.academic_year || 'Unknown A.Y.';
+        const t = e.term || 'Unknown Term';
+        keys.add(`${ay} | ${t}`);
+    }
+    return Array.from(keys).sort((a, b) => b.localeCompare(a));
 }
 
 export async function fetchExamById(id: string): Promise<{ data: ExamWithSets | null; error: string | null }> {

@@ -33,6 +33,31 @@ export async function fetchProfessors(): Promise<{ data: Professor[]; error: str
     return { data: (data as unknown as Professor[]) ?? [], error: error?.message ?? null };
 }
 
+export async function fetchProfessorsPage(params: {
+    search?: string;
+    programId?: string;
+    page: number;
+    pageSize: number;
+}): Promise<{ data: Professor[]; total: number; error: string | null }> {
+    const { search, programId, page, pageSize } = params;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+        .from('profiles')
+        .select('id, email, full_name, username, program_id, created_at, program:programs(id, code, name)', { count: 'exact' })
+        .eq('role', 'professor')
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+    if (search) query = query.or(`full_name.ilike.%${search}%,username.ilike.%${search}%`);
+    if (programId) query = query.eq('program_id', programId);
+
+    const { data, error, count } = await query;
+    if (error) return { data: [], total: 0, error: error.message };
+    return { data: (data as unknown as Professor[]), total: count ?? 0, error: null };
+}
+
 export async function createProfessor(payload: {
     email: string;
     first_name: string;

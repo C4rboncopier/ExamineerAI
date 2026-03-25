@@ -83,6 +83,68 @@ export async function fetchEnrolledExams(studentId: string): Promise<{ data: Stu
     return { data: exams as StudentExam[], error: null };
 }
 
+export async function fetchEnrolledExamsPage(
+    studentId: string,
+    params: {
+        search?: string;
+        termKey?: string;
+        page: number;
+        pageSize: number;
+    }
+): Promise<{ data: StudentExam[]; total: number; error: string | null }> {
+    const { search, termKey, page, pageSize } = params;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    // Step 1: get all enrolled exam IDs
+    const { data: enrollments } = await supabase
+        .from('exam_enrollments')
+        .select('exam_id')
+        .eq('student_id', studentId);
+
+    const enrolledIds = ((enrollments ?? []) as { exam_id: string }[]).map(e => e.exam_id);
+    if (enrolledIds.length === 0) return { data: [], total: 0, error: null };
+
+    // Step 2: paginate exams with filters
+    let query = supabase
+        .from('exams')
+        .select(
+            'id, title, code, academic_year, term, status, is_completed, max_attempts, num_sets, program_ids, ai_analysis_enabled, cover_image_url, exam_subjects(subject_id, subjects(course_code, course_title)), exam_attempts(attempt_number, status, grades_released)',
+            { count: 'exact' }
+        )
+        .in('id', enrolledIds)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+    if (search) query = query.or(`title.ilike.%${search}%,code.ilike.%${search}%`);
+    if (termKey) {
+        const parts = termKey.split(' | ');
+        if (parts.length === 2) query = query.eq('academic_year', parts[0]).eq('term', parts[1]);
+    }
+
+    const { data, error, count } = await query;
+    if (error) return { data: [], total: 0, error: error.message };
+    return { data: data as unknown as StudentExam[], total: count ?? 0, error: null };
+}
+
+export async function fetchEnrolledExamTermKeys(studentId: string): Promise<string[]> {
+    const { data: enrollments } = await supabase
+        .from('exam_enrollments')
+        .select('exam_id')
+        .eq('student_id', studentId);
+
+    const enrolledIds = ((enrollments ?? []) as { exam_id: string }[]).map(e => e.exam_id);
+    if (enrolledIds.length === 0) return [];
+
+    const { data } = await supabase.from('exams').select('academic_year, term').in('id', enrolledIds);
+    if (!data) return [];
+    const keys = new Set<string>();
+    for (const e of data as any[]) {
+        if (e.academic_year && e.term) keys.add(`${e.academic_year} | ${e.term}`);
+    }
+    return Array.from(keys).sort((a, b) => b.localeCompare(a));
+}
+
 export async function fetchEnrolledExamById(examId: string): Promise<{ data: StudentExam | null; error: string | null }> {
     const { data, error } = await supabase
         .from('exams')

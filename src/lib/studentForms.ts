@@ -72,6 +72,114 @@ export { formatPHT };
 
 // ─── Fetch Forms ──────────────────────────────────────────────
 
+export interface StudentFormListItem {
+    id: string;
+    title: string;
+    description: string | null;
+    exam_date: string;
+    submission_start: string;
+    submission_end: string;
+    attempt_number: number;
+    academic_year: string;
+    term: string;
+    my_submission: { id: string; submitted_at: string } | null;
+}
+
+export async function fetchStudentFormsPage(params: {
+    studentId: string;
+    search?: string;
+    status: 'all' | 'open' | 'upcoming' | 'closed' | 'submitted';
+    page: number;
+    pageSize: number;
+}): Promise<{ data: StudentFormListItem[]; total: number; error: string | null }> {
+    const { studentId, search, status, page, pageSize } = params;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const now = new Date().toISOString();
+
+    const SELECT = 'id, title, description, exam_date, submission_start, submission_end, attempt_number, academic_year, term';
+
+    if (status === 'submitted') {
+        const { data: subs } = await supabase
+            .from('form_submissions')
+            .select('id, form_id, submitted_at')
+            .eq('student_id', studentId);
+
+        const subArray = (subs ?? []) as { id: string; form_id: string; submitted_at: string }[];
+        if (subArray.length === 0) return { data: [], total: 0, error: null };
+
+        const subMap: Record<string, { id: string; submitted_at: string }> = {};
+        const formIds: string[] = [];
+        for (const s of subArray) {
+            subMap[s.form_id] = { id: s.id, submitted_at: s.submitted_at };
+            formIds.push(s.form_id);
+        }
+
+        let query = supabase
+            .from('forms')
+            .select(SELECT, { count: 'exact' })
+            .in('id', formIds)
+            .order('submission_end', { ascending: false })
+            .range(from, to);
+
+        if (search) query = query.ilike('title', `%${search}%`);
+
+        const { data, error, count } = await query;
+        if (error) return { data: [], total: 0, error: error.message };
+
+        const forms = (data as any[]).map(f => ({ ...f, my_submission: subMap[f.id] ?? null }));
+        return { data: forms as StudentFormListItem[], total: count ?? 0, error: null };
+    }
+
+    // For open/closed: exclude forms the student already submitted
+    let excludeIds: string[] = [];
+    if (status === 'open' || status === 'closed') {
+        const { data: subs } = await supabase
+            .from('form_submissions')
+            .select('form_id')
+            .eq('student_id', studentId);
+        excludeIds = ((subs ?? []) as { form_id: string }[]).map(s => s.form_id);
+    }
+
+    let query = supabase
+        .from('forms')
+        .select(SELECT, { count: 'exact' })
+        .order('submission_end', { ascending: false })
+        .range(from, to);
+
+    if (search) query = query.ilike('title', `%${search}%`);
+
+    if (status === 'open') {
+        query = query.lte('submission_start', now).gte('submission_end', now);
+        if (excludeIds.length > 0) query = query.not('id', 'in', `(${excludeIds.join(',')})`);
+    } else if (status === 'upcoming') {
+        query = query.gt('submission_start', now);
+    } else if (status === 'closed') {
+        query = query.lt('submission_end', now);
+        if (excludeIds.length > 0) query = query.not('id', 'in', `(${excludeIds.join(',')})`);
+    }
+
+    const { data, error, count } = await query;
+    if (error) return { data: [], total: 0, error: error.message };
+
+    // Fetch my_submission for the current page's forms
+    let subMap: Record<string, { id: string; submitted_at: string }> = {};
+    const pageFormIds = (data as any[]).map(f => f.id);
+    if (pageFormIds.length > 0 && (status === 'all' || status === 'upcoming')) {
+        const { data: subs } = await supabase
+            .from('form_submissions')
+            .select('id, form_id, submitted_at')
+            .eq('student_id', studentId)
+            .in('form_id', pageFormIds);
+        for (const s of (subs ?? []) as any[]) {
+            subMap[s.form_id] = { id: s.id, submitted_at: s.submitted_at };
+        }
+    }
+
+    const forms = (data as any[]).map(f => ({ ...f, my_submission: subMap[f.id] ?? null }));
+    return { data: forms as StudentFormListItem[], total: count ?? 0, error: null };
+}
+
 export async function fetchStudentForms(
     studentId: string
 ): Promise<{ data: StudentForm[]; error: string | null }> {

@@ -21,6 +21,31 @@ export async function fetchStudents(): Promise<{ data: Student[]; error: string 
     return { data: (data as unknown as Student[]) ?? [], error: error?.message ?? null };
 }
 
+export async function fetchStudentsPage(params: {
+    search?: string;
+    programId?: string;
+    page: number;
+    pageSize: number;
+}): Promise<{ data: Student[]; total: number; error: string | null }> {
+    const { search, programId, page, pageSize } = params;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+        .from('profiles')
+        .select('id, email, full_name, username, student_id, program_id, created_at, program:programs(id, code, name)', { count: 'exact' })
+        .eq('role', 'student')
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+    if (search) query = query.or(`full_name.ilike.%${search}%,username.ilike.%${search}%`);
+    if (programId) query = query.eq('program_id', programId);
+
+    const { data, error, count } = await query;
+    if (error) return { data: [], total: 0, error: error.message };
+    return { data: (data as unknown as Student[]), total: count ?? 0, error: null };
+}
+
 export async function createStudent(payload: {
     email: string;
     first_name: string;
