@@ -81,11 +81,27 @@ export function CreateForm() {
     const totalExamPages = Math.max(1, Math.ceil(filteredExams.length / EXAMS_PER_PAGE));
     const pagedExams = filteredExams.slice((examPage - 1) * EXAMS_PER_PAGE, examPage * EXAMS_PER_PAGE);
 
+    const selectableFiltered = filteredExams.filter(e => e.attempt_status !== 'done');
+    const allFilteredSelected = selectableFiltered.length > 0 && selectableFiltered.every(e => selectedExamIds.has(e.id));
+    const someFilteredSelected = selectableFiltered.some(e => selectedExamIds.has(e.id)) && !allFilteredSelected;
+
     function toggleExam(examId: string, isDone: boolean) {
         if (isDone) return;
         setSelectedExamIds(prev => {
             const next = new Set(prev);
             if (next.has(examId)) next.delete(examId); else next.add(examId);
+            return next;
+        });
+    }
+
+    function toggleSelectAll() {
+        setSelectedExamIds(prev => {
+            const next = new Set(prev);
+            if (allFilteredSelected) {
+                selectableFiltered.forEach(e => next.delete(e.id));
+            } else {
+                selectableFiltered.forEach(e => next.add(e.id));
+            }
             return next;
         });
     }
@@ -288,6 +304,47 @@ export function CreateForm() {
                                     style={{ ...inputStyle, paddingLeft: '32px' }}
                                 />
                             </div>
+
+                            {/* Select All */}
+                            {!isLoadingExams && filteredExams.length > 0 && (
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
+                                    padding: '7px 10px', marginBottom: '8px',
+                                    background: allFilteredSelected || someFilteredSelected ? '#eff6ff' : 'var(--prof-input-bg, #f8fafc)',
+                                    border: `1px solid ${allFilteredSelected || someFilteredSelected ? '#bfdbfe' : 'var(--prof-border)'}`,
+                                    borderRadius: '7px',
+                                }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={allFilteredSelected}
+                                        ref={el => { if (el) el.indeterminate = someFilteredSelected; }}
+                                        onChange={toggleSelectAll}
+                                        disabled={selectableFiltered.length === 0}
+                                        style={{ width: '15px', height: '15px', flexShrink: 0, cursor: selectableFiltered.length === 0 ? 'not-allowed' : 'pointer', accentColor: 'var(--prof-accent)' }}
+                                    />
+                                    <span style={{ fontSize: '0.82rem', fontWeight: 500, flex: 1, color: allFilteredSelected || someFilteredSelected ? '#1d4ed8' : 'var(--prof-text-main)' }}>
+                                        {allFilteredSelected
+                                            ? `All ${selectableFiltered.length} exam${selectableFiltered.length !== 1 ? 's' : ''} selected`
+                                            : someFilteredSelected
+                                                ? `${[...selectedExamIds].filter(id => selectableFiltered.some(e => e.id === id)).length} of ${selectableFiltered.length} selected`
+                                                : `Select all${examSearch ? ' matching' : ''} (${selectableFiltered.length} exam${selectableFiltered.length !== 1 ? 's' : ''})`
+                                        }
+                                    </span>
+                                    {(allFilteredSelected || someFilteredSelected) && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedExamIds(prev => {
+                                                const next = new Set(prev);
+                                                selectableFiltered.forEach(e => next.delete(e.id));
+                                                return next;
+                                            })}
+                                            style={{ fontSize: '0.78rem', color: '#1d4ed8', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px', fontWeight: 600, whiteSpace: 'nowrap' }}
+                                        >
+                                            Clear
+                                        </button>
+                                    )}
+                                </div>
+                            )}
 
                             {isLoadingExams ? (
                                 <div style={{ display: 'flex', justifyContent: 'center', padding: '30px 0' }}>
