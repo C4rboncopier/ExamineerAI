@@ -45,3 +45,11 @@ body {
 #root {
   height: 100%;
 }
+
+/* Applied by login/reset-password pages to allow vertical scroll */
+html.scrollable-page,
+html.scrollable-page body,
+html.scrollable-page #root {
+  height: auto;
+  overflow: visible;
+}

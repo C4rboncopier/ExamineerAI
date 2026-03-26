@@ -41,6 +41,11 @@ function CheckItem({ met, label }: { met: boolean; label: string }) {
 
 export function ResetPassword() {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    document.documentElement.classList.add('scrollable-page');
+    return () => document.documentElement.classList.remove('scrollable-page');
+  }, []);
   const [stage, setStage] = useState<Stage>('loading');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');

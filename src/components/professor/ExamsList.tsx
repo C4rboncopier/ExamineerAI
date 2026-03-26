@@ -245,7 +245,7 @@ export function ExamsList() {
                                                     <p style={{ margin: '0 0 4px', fontSize: '0.75rem', color: 'var(--prof-text-muted)', fontWeight: 600, letterSpacing: '0.05em' }}>
                                                         {exam.code}
                                                     </p>
-                                                    <h3 style={{ margin: '0 0 12px', fontSize: '1.05rem', color: 'var(--prof-text-main)', lineHeight: 1.3 }}>
+                                                    <h3 style={{ margin: '0 0 12px', fontSize: '1.05rem', color: 'var(--prof-text-main)', lineHeight: 1.3, minHeight: 'calc(1.05rem * 1.3 * 2)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                                                         {exam.title}
                                                     </h3>
                                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>

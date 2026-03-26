@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -20,6 +20,11 @@ function EyeIcon({ open }: { open: boolean }) {
 
 export function Login() {
   const { user, isLoading, signIn } = useAuth();
+
+  useEffect(() => {
+    document.documentElement.classList.add('scrollable-page');
+    return () => document.documentElement.classList.remove('scrollable-page');
+  }, []);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
