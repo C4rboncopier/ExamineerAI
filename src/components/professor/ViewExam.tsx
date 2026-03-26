@@ -1661,7 +1661,8 @@ export function ViewExam() {
                                 !invitedIds.has(p.id) &&
                                 (professorQuery === '' ||
                                     (p.full_name ?? '').toLowerCase().includes(professorQuery.toLowerCase()) ||
-                                    (p.email ?? '').toLowerCase().includes(professorQuery.toLowerCase()))
+                                    (p.program?.code ?? '').toLowerCase().includes(professorQuery.toLowerCase()) ||
+                                    (p.program?.name ?? '').toLowerCase().includes(professorQuery.toLowerCase()))
                             );
                             const avatarColor = (name: string) => {
                                 const palette = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#0ea5e9'];
@@ -1720,7 +1721,7 @@ export function ViewExam() {
                                                 <svg style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} fill="none" strokeWidth="2" stroke="#94a3b8" viewBox="0 0 24 24" width="15" height="15"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                                                 <input
                                                     className="cs-input-field"
-                                                    placeholder="Search by name or email…"
+                                                    placeholder="Search by name or program…"
                                                     value={professorQuery}
                                                     onChange={e => { setProfessorQuery(e.target.value); setInvitePage(0); }}
                                                     autoFocus
@@ -1747,7 +1748,7 @@ export function ViewExam() {
                                                                     {professorQuery ? 'No professors found' : 'All professors invited'}
                                                                 </p>
                                                                 <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>
-                                                                    {professorQuery ? 'Try a different name or email.' : 'Every professor has already been invited.'}
+                                                                    {professorQuery ? 'Try a different name or program.' : 'Every professor has already been invited.'}
                                                                 </p>
                                                             </div>
                                                         ) : (

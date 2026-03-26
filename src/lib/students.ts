@@ -46,6 +46,33 @@ export async function fetchStudentsPage(params: {
     return { data: (data as unknown as Student[]), total: count ?? 0, error: null };
 }
 
+export async function fetchAvailableStudentsPage(params: {
+    search?: string;
+    allowedProgramIds?: string[];
+    excludeIds?: string[];
+    page: number;
+    pageSize: number;
+}): Promise<{ data: Student[]; total: number; error: string | null }> {
+    const { search, allowedProgramIds, excludeIds, page, pageSize } = params;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+        .from('profiles')
+        .select('id, email, full_name, username, student_id, program_id, created_at, program:programs(id, code, name)', { count: 'exact' })
+        .eq('role', 'student')
+        .order('full_name', { ascending: true })
+        .range(from, to);
+
+    if (search) query = query.or(`full_name.ilike.%${search}%,username.ilike.%${search}%`);
+    if (allowedProgramIds && allowedProgramIds.length > 0) query = query.in('program_id', allowedProgramIds);
+    if (excludeIds && excludeIds.length > 0) query = query.not('id', 'in', `(${excludeIds.join(',')})`);
+
+    const { data, error, count } = await query;
+    if (error) return { data: [], total: 0, error: error.message };
+    return { data: (data as unknown as Student[]), total: count ?? 0, error: null };
+}
+
 export async function createStudent(payload: {
     email: string;
     first_name: string;

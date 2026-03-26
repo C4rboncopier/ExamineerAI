@@ -237,7 +237,7 @@ ${schoolHeaderHtml}
         <td class="set-cell">${escapeHtml(setLabel)}</td>
     </tr>
     <tr class="exam-id-labels">
-        <td>SY / SEM</td>
+        <td>AY / SEM</td>
         <td>COURSE CODE</td>
         <td>COURSE TITLE</td>
         <td>SET</td>

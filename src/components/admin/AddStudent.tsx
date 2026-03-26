@@ -26,9 +26,9 @@ function generateRandomPassword(): string {
     const special = '!@#$';
     const all = upper + lower + digits + special;
     let pw = upper[Math.floor(Math.random() * upper.length)]
-           + lower[Math.floor(Math.random() * lower.length)]
-           + digits[Math.floor(Math.random() * digits.length)]
-           + special[Math.floor(Math.random() * special.length)];
+        + lower[Math.floor(Math.random() * lower.length)]
+        + digits[Math.floor(Math.random() * digits.length)]
+        + special[Math.floor(Math.random() * special.length)];
     for (let i = 0; i < 8; i++) pw += all[Math.floor(Math.random() * all.length)];
     return pw.split('').sort(() => Math.random() - 0.5).join('');
 }
@@ -185,7 +185,7 @@ export function AddStudent() {
                         {/* Student ID */}
                         <div>
                             <label style={labelStyle}>Student ID <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
-                            <input type="text" style={inputStyle} placeholder="e.g. 2021-00123" value={addForm.student_id} onChange={e => setAddForm(f => ({ ...f, student_id: e.target.value }))} />
+                            <input type="text" style={inputStyle} placeholder="e.g. 2026001234" value={addForm.student_id} onChange={e => setAddForm(f => ({ ...f, student_id: e.target.value }))} />
                         </div>
                     </div>
 

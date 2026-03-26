@@ -216,7 +216,7 @@ export function CreateSubject() {
                             <label>Course Title</label>
                             <input
                                 type="text"
-                                placeholder="e.g. Introduction to Computer Science"
+                                placeholder="e.g. Engineering Calculus 1"
                                 value={courseTitle}
                                 onChange={e => setCourseTitle(e.target.value)}
                                 required
@@ -226,7 +226,7 @@ export function CreateSubject() {
                             <label>Course Code</label>
                             <input
                                 type="text"
-                                placeholder="e.g. CS101"
+                                placeholder="e.g. MATH041"
                                 value={courseCode}
                                 onChange={e => setCourseCode(e.target.value.toUpperCase())}
                                 required

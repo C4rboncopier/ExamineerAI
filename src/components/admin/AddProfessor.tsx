@@ -112,11 +112,13 @@ export function AddProfessor() {
                 program_id: addForm.program_id,
             });
             if (error) {
-                setFormError(
-                    /already registered|already exists|duplicate|email/i.test(error)
-                        ? 'An account with this email already exists.'
-                        : error
-                );
+                if (/username/i.test(error)) {
+                    setFormError('An account with this username already exists.');
+                } else if (/already registered|already exists|duplicate|email/i.test(error)) {
+                    setFormError('An account with this email already exists.');
+                } else {
+                    setFormError(error);
+                }
                 return;
             }
             const toastMessage = emailError

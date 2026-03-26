@@ -2,14 +2,17 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { fetchExamById } from '../../lib/exams';
 import type { ExamWithSets } from '../../lib/exams';
-import { fetchStudents } from '../../lib/students';
+import { fetchAvailableStudentsPage } from '../../lib/students';
 import type { Student } from '../../lib/students';
-import { fetchExamEnrollments, enrollStudent, unenrollStudent } from '../../lib/examEnrollments';
+import { fetchEnrolledStudentIds, fetchExamEnrollmentsPage, enrollStudent, unenrollStudent } from '../../lib/examEnrollments';
 import type { EnrolledStudent } from '../../lib/examEnrollments';
+import { fetchPrograms } from '../../lib/professors';
 import { Popup } from '../common/Popup';
 import { Toast } from '../common/Toast';
 
 interface ToastState { open: boolean; message: string; type: 'success' | 'error' | 'info'; }
+
+const ITEMS_PER_PAGE = 10;
 
 export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
     const { examId: examIdParam } = useParams<{ examId: string }>();
@@ -17,18 +20,27 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
     const navigate = useNavigate();
 
     const [exam, setExam] = useState<ExamWithSets | null>(null);
-    const [allStudents, setAllStudents] = useState<Student[]>([]);
-    const [enrollments, setEnrollments] = useState<EnrolledStudent[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [programMap, setProgramMap] = useState<Record<string, { code: string; name: string }>>({});
 
-    const [addSearch, setAddSearch] = useState('');
-    const [submittedSearch, setSubmittedSearch] = useState<string | null>(null);
+    // All enrolled IDs — maintained locally for count badge and exclusion
+    const [enrolledIds, setEnrolledIds] = useState<string[]>([]);
+
+    // Enrolled section
+    const [enrolledData, setEnrolledData] = useState<EnrolledStudent[]>([]);
+    const [enrolledTotal, setEnrolledTotal] = useState(0);
+    const [enrolledPage, setEnrolledPage] = useState(1);
     const [enrollSearch, setEnrollSearch] = useState('');
     const [submittedEnrollSearch, setSubmittedEnrollSearch] = useState('');
+    const [isLoadingEnrolled, setIsLoadingEnrolled] = useState(false);
 
+    // Add students section
+    const [addData, setAddData] = useState<Student[]>([]);
+    const [addTotal, setAddTotal] = useState(0);
     const [addPage, setAddPage] = useState(1);
-    const [enrolledPage, setEnrolledPage] = useState(1);
-    const ITEMS_PER_PAGE = 10;
+    const [addSearch, setAddSearch] = useState('');
+    const [submittedSearch, setSubmittedSearch] = useState<string | null>(null);
+    const [isLoadingAdd, setIsLoadingAdd] = useState(false);
 
     const [unenrollTarget, setUnenrollTarget] = useState<EnrolledStudent | null>(null);
     const [isUnenrolling, setIsUnenrolling] = useState(false);
@@ -39,111 +51,94 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
         setToast({ open: true, message, type }), []);
     const closeToast = useCallback(() => setToast(prev => ({ ...prev, open: false })), []);
 
+    const allowedProgramIds = useMemo(() => new Set(exam?.program_ids ?? []), [exam]);
+    const totalEnrolledPages = Math.max(1, Math.ceil(enrolledTotal / ITEMS_PER_PAGE));
+    const totalAddPages = Math.max(1, Math.ceil(addTotal / ITEMS_PER_PAGE));
+
+    // Initial load
     useEffect(() => {
         if (!examId) return;
         Promise.all([
             fetchExamById(examId),
-            fetchStudents(),
-            fetchExamEnrollments(examId),
-        ]).then(([examRes, studRes, enrollRes]) => {
+            fetchEnrolledStudentIds(examId),
+            fetchPrograms(),
+        ]).then(([examRes, ids, programs]) => {
             if (examRes.data) setExam(examRes.data);
-            if (!studRes.error) setAllStudents(studRes.data);
-            if (!enrollRes.error) setEnrollments(enrollRes.data);
+            setEnrolledIds(ids);
+            const map: Record<string, { code: string; name: string }> = {};
+            for (const p of programs) map[p.id] = p;
+            setProgramMap(map);
             setIsLoading(false);
         });
     }, [examId]);
 
-    const enrolledStudentIds = useMemo(() => new Set(enrollments.map(e => e.student_id)), [enrollments]);
+    const loadEnrolledPage = useCallback(async (page: number, search: string) => {
+        if (!examId) return;
+        setIsLoadingEnrolled(true);
+        const result = await fetchExamEnrollmentsPage({
+            examId,
+            search: search || undefined,
+            page,
+            pageSize: ITEMS_PER_PAGE,
+        });
+        setEnrolledData(result.data);
+        setEnrolledTotal(result.total);
+        setIsLoadingEnrolled(false);
+    }, [examId]);
 
-    // Build a map of program_id → program for label display
-    const programMap = useMemo(() => {
-        const map: Record<string, { code: string; name: string }> = {};
-        for (const s of allStudents) {
-            if (s.program_id && s.program) map[s.program_id] = s.program;
-        }
-        return map;
-    }, [allStudents]);
+    // Load first enrolled page once initial data is ready
+    useEffect(() => {
+        if (!isLoading && examId) loadEnrolledPage(1, '');
+    }, [isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Allowed program IDs from exam restrictions (empty = no restriction)
-    const allowedProgramIds = useMemo(() => new Set(exam?.program_ids ?? []), [exam]);
-
-    function handleAddSearch() {
-        setSubmittedSearch(addSearch.trim());
-        setAddPage(1);
+    async function loadAddPage(page: number, search: string, currentExcludeIds: string[], currentAllowedProgramIds: Set<string>) {
+        if (!examId) return;
+        setIsLoadingAdd(true);
+        const result = await fetchAvailableStudentsPage({
+            search: search || undefined,
+            allowedProgramIds: currentAllowedProgramIds.size > 0 ? [...currentAllowedProgramIds] : undefined,
+            excludeIds: currentExcludeIds.length > 0 ? currentExcludeIds : undefined,
+            page,
+            pageSize: ITEMS_PER_PAGE,
+        });
+        setAddData(result.data);
+        setAddTotal(result.total);
+        setIsLoadingAdd(false);
     }
 
     function handleEnrollSearch() {
-        setSubmittedEnrollSearch(enrollSearch.trim());
+        const search = enrollSearch.trim();
+        setSubmittedEnrollSearch(search);
         setEnrolledPage(1);
+        loadEnrolledPage(1, search);
     }
 
-    // Students not yet enrolled — for "Add Students" search
-    const availableStudents = useMemo(() => {
-        if (submittedSearch === null) return [];
-        const q = submittedSearch.toLowerCase();
-        return allStudents.filter(s => {
-            if (enrolledStudentIds.has(s.id)) return false;
-            // Restrict to allowed programs if the exam has program restrictions
-            if (allowedProgramIds.size > 0 && !allowedProgramIds.has(s.program_id ?? '')) return false;
-            if (!q) return true;
-            return (
-                s.full_name?.toLowerCase().includes(q) ||
-                s.username?.toLowerCase().includes(q) ||
-                s.email?.toLowerCase().includes(q) ||
-                s.program?.code?.toLowerCase().includes(q) ||
-                s.program?.name?.toLowerCase().includes(q)
-            );
-        });
-    }, [allStudents, enrolledStudentIds, submittedSearch, allowedProgramIds]);
-
-    // Enrolled students — for search within enrolled list
-    const filteredEnrollments = useMemo(() => {
-        const q = submittedEnrollSearch.toLowerCase().trim();
-        if (!q) return enrollments;
-        return enrollments.filter(e =>
-            e.student?.full_name?.toLowerCase().includes(q) ||
-            e.student?.username?.toLowerCase().includes(q) ||
-            e.student?.email?.toLowerCase().includes(q) ||
-            e.student?.program?.code?.toLowerCase().includes(q) ||
-            e.student?.program?.name?.toLowerCase().includes(q)
-        );
-    }, [enrollments, submittedEnrollSearch]);
-
-    const totalEnrolledPages = Math.max(1, Math.ceil(filteredEnrollments.length / ITEMS_PER_PAGE));
-    const paginatedEnrollments = useMemo(() => {
-        const start = (enrolledPage - 1) * ITEMS_PER_PAGE;
-        return filteredEnrollments.slice(start, start + ITEMS_PER_PAGE);
-    }, [filteredEnrollments, enrolledPage]);
-
-    const totalAddPages = Math.max(1, Math.ceil(availableStudents.length / ITEMS_PER_PAGE));
-    const paginatedAvailable = useMemo(() => {
-        const start = (addPage - 1) * ITEMS_PER_PAGE;
-        return availableStudents.slice(start, start + ITEMS_PER_PAGE);
-    }, [availableStudents, addPage]);
+    function handleAddSearch() {
+        const search = addSearch.trim();
+        setSubmittedSearch(search);
+        setAddPage(1);
+        loadAddPage(1, search, enrolledIds, allowedProgramIds);
+    }
 
     async function handleEnroll(student: Student) {
         if (!examId) return;
         setEnrollingId(student.id);
         const { error } = await enrollStudent(examId, student.id);
         setEnrollingId(null);
-        if (error) {
-            showToast(`Failed to enroll: ${error}`, 'error');
-            return;
+        if (error) { showToast(`Failed to enroll: ${error}`, 'error'); return; }
+
+        const newIds = [...enrolledIds, student.id];
+        setEnrolledIds(newIds);
+
+        // Refresh enrolled section from page 1 (new enrollment is at top)
+        setEnrolledPage(1);
+        loadEnrolledPage(1, submittedEnrollSearch);
+
+        // Refresh add section so the enrolled student disappears
+        if (submittedSearch !== null) {
+            loadAddPage(addPage, submittedSearch, newIds, allowedProgramIds);
         }
-        // Optimistically add to enrollments list
-        const newEnrollment: EnrolledStudent = {
-            id: crypto.randomUUID(),
-            exam_id: examId,
-            student_id: student.id,
-            created_at: new Date().toISOString(),
-            student: {
-                full_name: student.full_name,
-                email: student.email,
-                username: student.username,
-                program: student.program,
-            },
-        };
-        setEnrollments(prev => [newEnrollment, ...prev]);
+
         showToast(`${student.full_name ?? 'Student'} enrolled successfully.`);
     }
 
@@ -152,12 +147,22 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
         setIsUnenrolling(true);
         const { error } = await unenrollStudent(unenrollTarget.id);
         setIsUnenrolling(false);
-        if (error) {
-            showToast(`Failed to remove: ${error}`, 'error');
-        } else {
-            setEnrollments(prev => prev.filter(e => e.id !== unenrollTarget.id));
-            showToast(`${unenrollTarget.student?.full_name ?? 'Student'} removed from exam.`);
+        if (error) { showToast(`Failed to remove: ${error}`, 'error'); setUnenrollTarget(null); return; }
+
+        const newIds = enrolledIds.filter(id => id !== unenrollTarget.student_id);
+        setEnrolledIds(newIds);
+
+        // If the removed item was the only one on this page, go back one page
+        const newPage = enrolledData.length === 1 && enrolledPage > 1 ? enrolledPage - 1 : enrolledPage;
+        setEnrolledPage(newPage);
+        loadEnrolledPage(newPage, submittedEnrollSearch);
+
+        // Refresh add section so the unenrolled student can reappear
+        if (submittedSearch !== null) {
+            loadAddPage(addPage, submittedSearch, newIds, allowedProgramIds);
         }
+
+        showToast(`${unenrollTarget.student?.full_name ?? 'Student'} removed from exam.`);
         setUnenrollTarget(null);
     }
 
@@ -196,7 +201,7 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
                         <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--prof-text-main)' }}>
                             Enrolled
                             <span style={{ marginLeft: '8px', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 600, background: '#eff6ff', color: '#2563eb', border: '1px solid #93c5fd' }}>
-                                {enrollments.length}
+                                {enrolledIds.length}
                             </span>
                         </h3>
                     </div>
@@ -218,7 +223,12 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
                             />
                             {enrollSearch && (
                                 <button
-                                    onClick={() => { setEnrollSearch(''); setSubmittedEnrollSearch(''); setEnrolledPage(1); }}
+                                    onClick={() => {
+                                        setEnrollSearch('');
+                                        setSubmittedEnrollSearch('');
+                                        setEnrolledPage(1);
+                                        loadEnrolledPage(1, '');
+                                    }}
                                     style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--prof-text-muted)', display: 'flex', padding: 0 }}
                                 >
                                     <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
@@ -232,21 +242,23 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
                         </button>
                     </div>
 
-                    {enrollments.length === 0 ? (
+                    {isLoadingEnrolled ? (
+                        <p style={{ textAlign: 'center', padding: '32px', color: 'var(--prof-text-muted)', fontSize: '0.875rem' }}>Loading...</p>
+                    ) : enrolledIds.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--prof-text-muted)', fontSize: '0.875rem' }}>
                             <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" width="36" height="36" style={{ margin: '0 auto 10px', display: 'block', opacity: 0.4 }}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
                             </svg>
                             No students enrolled yet.
                         </div>
-                    ) : filteredEnrollments.length === 0 ? (
+                    ) : enrolledData.length === 0 ? (
                         <p style={{ textAlign: 'center', padding: '20px', color: 'var(--prof-text-muted)', fontSize: '0.875rem' }}>
                             No students match your search.
                         </p>
                     ) : (
                         <>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                {paginatedEnrollments.map(enrollment => (
+                                {enrolledData.map(enrollment => (
                                     <div
                                         key={enrollment.id}
                                         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--prof-border)', background: 'var(--prof-surface)' }}
@@ -282,7 +294,7 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
                             {totalEnrolledPages > 1 && (
                                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--prof-border)' }}>
                                     <button
-                                        onClick={() => setEnrolledPage(p => Math.max(1, p - 1))}
+                                        onClick={() => { const p = Math.max(1, enrolledPage - 1); setEnrolledPage(p); loadEnrolledPage(p, submittedEnrollSearch); }}
                                         disabled={enrolledPage === 1}
                                         className="btn-secondary"
                                         type="button"
@@ -294,7 +306,7 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
                                         Page {enrolledPage} of {totalEnrolledPages}
                                     </span>
                                     <button
-                                        onClick={() => setEnrolledPage(p => Math.min(totalEnrolledPages, p + 1))}
+                                        onClick={() => { const p = Math.min(totalEnrolledPages, enrolledPage + 1); setEnrolledPage(p); loadEnrolledPage(p, submittedEnrollSearch); }}
                                         disabled={enrolledPage === totalEnrolledPages}
                                         className="btn-secondary"
                                         type="button"
@@ -343,7 +355,7 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
                             />
                             {addSearch && (
                                 <button
-                                    onClick={() => { setAddSearch(''); setSubmittedSearch(null); setAddPage(1); }}
+                                    onClick={() => { setAddSearch(''); setSubmittedSearch(null); setAddPage(1); setAddData([]); setAddTotal(0); }}
                                     style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--prof-text-muted)', display: 'flex', padding: 0 }}
                                 >
                                     <svg fill="none" strokeWidth="2.5" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14">
@@ -364,14 +376,16 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
                             </svg>
                             Search to find students to enroll.
                         </div>
-                    ) : availableStudents.length === 0 ? (
+                    ) : isLoadingAdd ? (
+                        <p style={{ textAlign: 'center', padding: '32px', color: 'var(--prof-text-muted)', fontSize: '0.875rem' }}>Loading...</p>
+                    ) : addData.length === 0 ? (
                         <p style={{ textAlign: 'center', padding: '20px', color: 'var(--prof-text-muted)', fontSize: '0.875rem' }}>
                             {submittedSearch ? 'No students match your search.' : 'All students are already enrolled.'}
                         </p>
                     ) : (
                         <>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                {paginatedAvailable.map(student => (
+                                {addData.map(student => (
                                     <div
                                         key={student.id}
                                         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--prof-border)', background: 'var(--prof-surface)' }}
@@ -414,7 +428,7 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
                             {totalAddPages > 1 && (
                                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--prof-border)' }}>
                                     <button
-                                        onClick={() => setAddPage(p => Math.max(1, p - 1))}
+                                        onClick={() => { const p = Math.max(1, addPage - 1); setAddPage(p); loadAddPage(p, submittedSearch ?? '', enrolledIds, allowedProgramIds); }}
                                         disabled={addPage === 1}
                                         className="btn-secondary"
                                         type="button"
@@ -426,7 +440,7 @@ export function ExamStudents({ examId: examIdProp }: { examId?: string } = {}) {
                                         Page {addPage} of {totalAddPages}
                                     </span>
                                     <button
-                                        onClick={() => setAddPage(p => Math.min(totalAddPages, p + 1))}
+                                        onClick={() => { const p = Math.min(totalAddPages, addPage + 1); setAddPage(p); loadAddPage(p, submittedSearch ?? '', enrolledIds, allowedProgramIds); }}
                                         disabled={addPage === totalAddPages}
                                         className="btn-secondary"
                                         type="button"
