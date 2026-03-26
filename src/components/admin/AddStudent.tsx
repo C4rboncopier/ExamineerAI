@@ -4,6 +4,10 @@ import { createStudent } from '../../lib/students';
 import { fetchPrograms } from '../../lib/professors';
 import type { Program } from '../../lib/professors';
 
+function capitalizeWords(str: string): string {
+    return str.trim().split(/\s+/).filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
 function generateUsername(firstName: string, lastName: string): string {
     const firstParts = firstName.trim().split(/\s+/).filter(Boolean);
     const lastParts = lastName.trim().split(/\s+/).filter(Boolean);
@@ -95,13 +99,15 @@ export function AddStudent() {
         if (!addForm.password.trim()) { setFormError('Password is required.'); return; }
         if (addForm.password.trim().length < 8) { setFormError('Password must be at least 8 characters.'); return; }
         if (!addForm.program_id) { setFormError('Program assignment is required.'); return; }
-        const fullName = `${addForm.first_name.trim()} ${addForm.last_name.trim()}`;
+        const firstName = capitalizeWords(addForm.first_name);
+        const lastName = capitalizeWords(addForm.last_name);
+        const fullName = `${firstName} ${lastName}`;
         setIsSubmitting(true);
         try {
             const { error, emailError } = await createStudent({
                 email: addForm.email,
-                first_name: addForm.first_name.trim(),
-                last_name: addForm.last_name.trim(),
+                first_name: firstName,
+                last_name: lastName,
                 username: addForm.username,
                 password: addForm.password,
                 program_id: addForm.program_id,
