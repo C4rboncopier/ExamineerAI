@@ -985,7 +985,7 @@ export function CreateQuestion() {
                                     </h4>
                                     <div style={{
                                         display: 'grid',
-                                        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                                        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
                                         gap: '5px',
                                     }}>
                                         {group.items.map((item, ii) => (
@@ -1018,6 +1018,23 @@ export function CreateQuestion() {
                                     </div>
                                 </div>
                             ))}
+                            <div style={{ marginTop: '18px', paddingTop: '14px', borderTop: '1px solid var(--prof-border)', textAlign: 'center' }}>
+                                <a
+                                    href="https://katex.org/docs/supported"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{
+                                        fontSize: '0.82rem', color: 'var(--prof-primary)',
+                                        textDecoration: 'none', fontWeight: 600,
+                                        display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                    }}
+                                >
+                                    View all supported functions
+                                    <svg fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24" width="13" height="13">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                                    </svg>
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
