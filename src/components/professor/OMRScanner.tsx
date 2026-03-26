@@ -38,8 +38,8 @@ interface PendingReview {
     computed?: ComputedGrade;
     computeError?: string;
     isComputing?: boolean;
-    alreadyGraded?: boolean;    // student already has a submission for this attempt
-    isDNT?: boolean;            // student was marked Did Not Take (didn't fill out form)
+    alreadyGraded?: boolean;
+    isDNT?: boolean;
 }
 
 interface ScanRow {
@@ -58,7 +58,7 @@ interface Props {
     attemptNumber: number;
     numSets: number;
     enrollments: EnrolledStudentFull[];
-    existingGrades?: AttemptGradeRow[];   // already-saved submissions for duplicate detection
+    existingGrades?: AttemptGradeRow[];
     onComplete: () => void;
     onBusyChange?: (busy: boolean) => void;
 }

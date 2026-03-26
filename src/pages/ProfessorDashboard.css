@@ -861,6 +861,7 @@ select:focus {
     margin: 0 0 8px 0;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     min-height: 2.75rem;
@@ -2074,7 +2075,6 @@ select:focus {
         gap: 12px;
     }
 
-    /* Keep icon + text on the same row; text shrinks before wrapping */
     .settings-section-heading>div:not(.settings-section-icon) {
         flex: 1;
         min-width: 0;

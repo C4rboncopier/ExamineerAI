@@ -3,7 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Sidebar } from '../components/student/Sidebar';
 import { Popup } from '../components/common/Popup';
-import './ProfessorDashboard.css'; // Reusing professor styles for consistency
+import './ProfessorDashboard.css';
 
 export function StudentDashboard() {
   const { profile, signOut } = useAuth();

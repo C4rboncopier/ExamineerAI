@@ -80,9 +80,6 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 // ─── Equal MO distribution ────────────────────────────────────
-// Picks `count` questions from `questionsByMO`, distributing
-// equally across MOs. Handles uneven counts and MOs with fewer
-// questions than needed by redistributing to other MOs.
 
 function distributeAcrossMOs(
     questionsByMO: Record<string, QuestionWithOutcomes[]>,

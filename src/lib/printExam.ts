@@ -27,7 +27,6 @@ function escapeHtml(str: string): string {
 
 /**
  * Renders a string that may contain LaTeX math delimiters to HTML.
- * $$...$$ → display math, $...$ → inline math.
  * Non-math segments are HTML-escaped normally.
  */
 function renderMath(text: string): string {
@@ -284,6 +283,6 @@ export function printExam(opts: PrintExamOptions): void {
         iframeWin.print();
     };
 
-    iframe.src = blobUrl; // src + blob URL respects @page { size }; srcdoc does not
+    iframe.src = blobUrl;
     document.body.appendChild(iframe);
 }

@@ -5,16 +5,16 @@ import type { Program } from './professors';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface EnrolledStudentFull {
-    id: string;           // enrollment row UUID
+    id: string;
     exam_id: string;
-    student_id: string;   // profiles.id (UUID)
+    student_id: string;
     created_at: string;
     student: {
         id: string;
         full_name: string | null;
         email: string | null;
         username: string | null;
-        student_id: string | null;   // text field like "2020103917"
+        student_id: string | null;
         program: Program | null;
     } | null;
 }
@@ -25,23 +25,23 @@ export interface AttemptGradeRow {
 }
 
 export interface OMRBubble {
-    q_idx: number;   // 0-based question index
+    q_idx: number;
     x: number;
     y: number;
     r: number;
-    answer: string;  // detected letter "A"–"E"
+    answer: string;
 }
 
 export interface OMRResult {
-    roll_number: string;      // 5-char string like "03917"
-    exam_set: string;         // "A"–"E" or "" if blank
-    answers: string[];        // 100 entries, each "A"–"E" or "" if blank
+    roll_number: string;
+    exam_set: string;
+    answers: string[];
     error: string | null;
     filename?: string;
     annotated_image?: string | null;
-    bubble_positions?: OMRBubble[];  // detected answer bubble positions (image-space coords)
-    img_w?: number;           // annotated image natural width (px)
-    img_h?: number;           // annotated image natural height (px)
+    bubble_positions?: OMRBubble[];
+    img_w?: number;
+    img_h?: number;
 }
 
 export interface SetAnswerKey {

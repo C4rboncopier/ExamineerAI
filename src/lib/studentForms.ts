@@ -258,8 +258,8 @@ export async function fetchStudentFormById(
 
 export interface SubmitFormResult {
     error: string | null;
-    autoEnrolled: string[];   // exam titles that were auto-enrolled
-    dntMarked: number;        // number of DNT records created
+    autoEnrolled: string[];
+    dntMarked: number;
 }
 
 export async function submitStudentForm(

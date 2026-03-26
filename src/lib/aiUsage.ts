@@ -1,8 +1,5 @@
 import { supabase } from './supabase';
 
-/**
- * Fetch the total number of AI-generated questions used today (UTC day) by a professor.
- */
 export async function fetchTodayAiUsage(professorId: string): Promise<{ used: number; error: string | null }> {
     // Compute start of today in Philippine Standard Time (UTC+8)
     const phtOffset = 8 * 60 * 60 * 1000;
@@ -22,9 +19,6 @@ export async function fetchTodayAiUsage(professorId: string): Promise<{ used: nu
     return { used, error: null };
 }
 
-/**
- * Log a batch of AI-generated questions for a professor.
- */
 export async function logAiGeneration(professorId: string, count: number): Promise<{ error: string | null }> {
     const { error } = await supabase
         .from('ai_generation_logs')
