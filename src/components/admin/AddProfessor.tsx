@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { createProfessor, fetchPrograms } from '../../lib/professors';
 import type { Program } from '../../lib/professors';
 
-function generateUsername(fullName: string): string {
-    const parts = fullName.trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return '';
-    if (parts.length === 1) return parts[0].toLowerCase();
-    const initials = parts.slice(0, -1).map(p => p[0].toLowerCase()).join('');
-    const last = parts[parts.length - 1];
-    return initials + last[0].toUpperCase() + last.slice(1).toLowerCase();
+function generateUsername(firstName: string, lastName: string): string {
+    const firstParts = firstName.trim().split(/\s+/).filter(Boolean);
+    const lastParts = lastName.trim().split(/\s+/).filter(Boolean);
+    if (firstParts.length === 0 && lastParts.length === 0) return '';
+    const initials = firstParts.map(p => p[0].toLowerCase()).join('');
+    if (lastParts.length === 0) return initials;
+    const lastJoined = lastParts.join('');
+    const lastFormatted = lastJoined.charAt(0).toUpperCase() + lastJoined.slice(1).toLowerCase();
+    return initials + lastFormatted;
 }
 
 function generateRandomPassword(): string {
@@ -77,8 +79,7 @@ export function AddProfessor() {
     function handleNameChange(field: 'first_name' | 'last_name', val: string) {
         setAddForm(f => {
             const updated = { ...f, [field]: val };
-            const combined = `${updated.first_name.trim()} ${updated.last_name.trim()}`.trim();
-            return { ...updated, username: generateUsername(combined) };
+            return { ...updated, username: generateUsername(updated.first_name, updated.last_name) };
         });
     }
 
