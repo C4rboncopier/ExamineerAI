@@ -181,11 +181,15 @@ class OMRProcessor:
         h, w = gray.shape
 
         # ── Try registration marks first ──────────────────────────────────────
-        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        # Pre-blur before Otsu so the threshold value is stable across frames;
+        # without it, tiny lighting shifts change the threshold, causing contour
+        # boundaries to wobble by 1-2 px and the perspective warp to jitter.
+        blurred_for_thresh = cv2.GaussianBlur(gray, (5, 5), 0)
+        _, thresh = cv2.threshold(blurred_for_thresh, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         mark_min = (w * 0.004) ** 2
-        mark_max = (w * 0.12) ** 2
+        mark_max = (w * 0.10) ** 2
         edge_frac = 0.28
 
         corners: dict = {"tl": None, "tr": None, "bl": None, "br": None}
@@ -196,9 +200,22 @@ class OMRProcessor:
             bx, by, bw, bh = cv2.boundingRect(cnt)
             if bw == 0 or bh == 0:
                 continue
-            if not (0.3 < bw / bh < 3.0):
+            # Tighter aspect ratio: registration marks are square; loose bounds
+            # let non-square blobs compete and alternate between frames.
+            if not (0.5 < bw / bh < 2.0):
                 continue
-            cx, cy = bx + bw / 2, by + bh / 2
+            # Solidity check: filled squares score ~1.0; hollow/irregular shapes
+            # (box borders, text artefacts) score much lower and are discarded.
+            hull_area = cv2.contourArea(cv2.convexHull(cnt))
+            if hull_area == 0 or area / hull_area < 0.70:
+                continue
+            # Use centroid (moments) rather than bounding-rect midpoint — the
+            # bounding rect can shift ±1 px on the same blob across frames,
+            # while the centroid is sub-pixel stable.
+            M = cv2.moments(cnt)
+            if M["m00"] == 0:
+                continue
+            cx, cy = M["m10"] / M["m00"], M["m01"] / M["m00"]
             nl = cx < w * edge_frac
             nr = cx > w * (1 - edge_frac)
             nt = cy < h * edge_frac
