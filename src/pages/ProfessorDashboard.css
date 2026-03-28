@@ -804,10 +804,23 @@ select:focus {
 }
 
 @media (max-width: 600px) {
-    .pagination-btn-text { display: none; }
-    .pagination-btn { padding: 8px 10px; }
-    .subjects-pagination { gap: 4px; }
-    .pagination-page { width: 32px; height: 32px; font-size: 0.8rem; }
+    .pagination-btn-text {
+        display: none;
+    }
+
+    .pagination-btn {
+        padding: 8px 10px;
+    }
+
+    .subjects-pagination {
+        gap: 4px;
+    }
+
+    .pagination-page {
+        width: 32px;
+        height: 32px;
+        font-size: 0.8rem;
+    }
 }
 
 .subjects-grid {
@@ -938,6 +951,7 @@ select:focus {
     .prof-content-scroll {
         padding: 24px;
         padding-bottom: max(24px, env(safe-area-inset-bottom, 24px));
+        overflow-x: hidden;
     }
 
     .cs-header h2 {
@@ -1431,6 +1445,112 @@ select:focus {
     font-size: 0.85rem;
     color: var(--prof-text-main);
     font-weight: 700;
+}
+
+/* Question bank — mobile responsive */
+@media (max-width: 768px) {
+    .qb-container {
+        overflow: hidden;
+    }
+
+    /* Filter bar: wrap but keep dropdowns paired */
+    .ql-filter-bar {
+        flex-direction: row;
+        align-items: stretch !important;
+        flex-wrap: wrap;
+    }
+
+    .ql-filter-bar .subjects-search {
+        flex: 1 1 100% !important;
+        min-width: 0 !important;
+    }
+
+    /* CO + MO dropdowns share one row */
+    .ql-filter-bar .ql-filter-select {
+        flex: 1 1 0 !important;
+        width: auto !important;
+        min-width: 0 !important;
+        flex-shrink: 1 !important;
+    }
+
+    .ql-filter-bar .ql-filter-clear {
+        flex: 0 0 auto;
+    }
+
+    .ql-filter-bar > div:last-child {
+        width: 100%;
+        display: flex;
+    }
+
+    .ql-filter-bar > div:last-child .btn-secondary,
+    .ql-filter-bar > div:last-child .btn-primary {
+        flex: 1;
+        justify-content: center;
+    }
+
+    /* Question rows: 2-column — text left, actions right */
+    .ql-row {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+
+    .ql-text {
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        min-width: 0;
+        flex: 1;
+    }
+
+    .ql-tags {
+        display: none;
+    }
+
+    .ql-num {
+        width: auto;
+    }
+
+    .ql-row-actions {
+        flex-shrink: 0;
+    }
+
+    .ql-chevron {
+        flex-shrink: 0;
+    }
+
+    /* Expanded detail */
+    .ql-detail {
+        padding: 12px 14px;
+    }
+
+    /* Selection bar */
+    .ql-list + .subjects-pagination {
+        flex-wrap: wrap;
+    }
+}
+
+@media (max-width: 480px) {
+    .ql-row {
+        padding: 8px 10px;
+        gap: 6px;
+    }
+
+    .ql-text {
+        font-size: 0.82rem;
+    }
+
+    .ql-row-actions .btn-icon {
+        width: 24px;
+        height: 24px;
+        padding: 3px;
+    }
+
+    .ql-detail {
+        padding: 10px 12px;
+    }
 }
 
 /* Question image in detail */
