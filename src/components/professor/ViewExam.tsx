@@ -333,6 +333,7 @@ export function ViewExam() {
     // ── Grade attempt filter ──
     const [gradesAttemptFilter, setGradesAttemptFilter] = useState<number | null>(null);
     const [gradesSummaryMode, setGradesSummaryMode] = useState(false);
+    const [gradesSummaryPage, setGradesSummaryPage] = useState(0);
 
     // ── Exam Faculty ──
     const [faculty, setFaculty] = useState<ExamFacultyMember[]>([]);
@@ -1021,6 +1022,7 @@ export function ViewExam() {
                                                     onChange={e => {
                                                         if (e.target.value === 'summary') {
                                                             setGradesSummaryMode(true);
+                                                            setGradesSummaryPage(0);
                                                             setSelectModeAttempt(null); setSelectedGradeKeys(new Set()); setExpandedGradeKey(null); setEditingGradeKey(null);
                                                         } else {
                                                             const n = Number(e.target.value);
@@ -1054,7 +1056,7 @@ export function ViewExam() {
                                                         );
                                                     })}
                                                     <button
-                                                        onClick={() => { setGradesSummaryMode(v => !v); setSelectModeAttempt(null); setSelectedGradeKeys(new Set()); setExpandedGradeKey(null); setEditingGradeKey(null); }}
+                                                        onClick={() => { setGradesSummaryMode(v => !v); setGradesSummaryPage(0); setSelectModeAttempt(null); setSelectedGradeKeys(new Set()); setExpandedGradeKey(null); setEditingGradeKey(null); }}
                                                         style={{ padding: '3px 11px', borderRadius: '9px', border: `1px solid ${gradesSummaryMode ? '#7c3aed' : 'var(--prof-border)'}`, background: gradesSummaryMode ? '#7c3aed' : '#fff', color: gradesSummaryMode ? '#fff' : 'var(--prof-text-main)', cursor: 'pointer', fontSize: '0.77rem', fontWeight: 600 }}
                                                     >
                                                         Summary
@@ -1182,11 +1184,14 @@ export function ViewExam() {
                                                 const allStudents = Object.values(studentMap).sort((a, b) =>
                                                     (a.student?.full_name ?? '').localeCompare(b.student?.full_name ?? '')
                                                 );
+                                                const totalSummaryPages = Math.ceil(allStudents.length / GRADES_PER_PAGE);
+                                                const pagedStudents = allStudents.slice(gradesSummaryPage * GRADES_PER_PAGE, (gradesSummaryPage + 1) * GRADES_PER_PAGE);
                                                 const thStyle: CSSProperties = { textAlign: 'left', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--prof-surface)' };
                                                 if (allStudents.length === 0 && !isLoadingGrades) {
                                                     return <p style={{ color: 'var(--prof-text-muted)', fontSize: '0.82rem', margin: 0, padding: '12px 16px' }}>No students enrolled.</p>;
                                                 }
                                                 return (
+                                                    <>
                                                     <div style={{ overflowX: 'auto' }}>
                                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                                                             <thead>
@@ -1199,7 +1204,7 @@ export function ViewExam() {
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
-                                                                {allStudents.map(enrollment => (
+                                                                {pagedStudents.map(enrollment => (
                                                                     <tr key={enrollment.student_id} style={{ borderBottom: '1px solid var(--prof-border)' }}>
                                                                         <td style={{ padding: '7px 10px 7px 16px', fontSize: '0.83rem', color: 'var(--prof-text-main)' }}>{enrollment.student?.full_name ?? '—'}</td>
                                                                         <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: '0.77rem', color: 'var(--prof-text-muted)' }}>{enrollment.student?.student_id ?? '—'}</td>
@@ -1236,6 +1241,14 @@ export function ViewExam() {
                                                             </tbody>
                                                         </table>
                                                     </div>
+                                                    {totalSummaryPages > 1 && (
+                                                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', padding: '10px 16px', borderTop: '1px solid var(--prof-border)' }}>
+                                                            <button className="btn-secondary" style={{ padding: '5px 14px', fontSize: '0.8rem' }} disabled={gradesSummaryPage === 0} onClick={() => setGradesSummaryPage(prev => Math.max(0, prev - 1))}>Prev</button>
+                                                            <span style={{ fontSize: '0.78rem', color: 'var(--prof-text-muted)', minWidth: '60px', textAlign: 'center' }}>{gradesSummaryPage + 1} / {totalSummaryPages}</span>
+                                                            <button className="btn-secondary" style={{ padding: '5px 14px', fontSize: '0.8rem' }} disabled={gradesSummaryPage >= totalSummaryPages - 1} onClick={() => setGradesSummaryPage(prev => prev + 1)}>Next</button>
+                                                        </div>
+                                                    )}
+                                                    </>
                                                 );
                                             })() : rows.length === 0 && !isLoadingGrades ? (
                                                 <p style={{ color: 'var(--prof-text-muted)', fontSize: '0.82rem', margin: 0, padding: '12px 16px' }}>No students enrolled.</p>
