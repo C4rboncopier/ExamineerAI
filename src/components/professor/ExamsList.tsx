@@ -7,7 +7,7 @@ import { Toast } from '../common/Toast';
 import { printOMR } from '../../lib/printOMR';
 import { Pagination } from '../admin/Pagination';
 
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 10;
 
 interface ToastState {
     open: boolean;

@@ -5,21 +5,21 @@ interface PaginationProps {
     onPageChange: (page: number) => void;
 }
 
-function getPageNumbers(current: number, total: number): (number | '...')[] {
-    if (total <= 5) return Array.from({ length: total }, (_, i) => i + 1);
+function getPageNumbers(current: number, total: number): (number | '…')[] {
+    const delta = 2;
+    const pages: (number | '…')[] = [];
+    const left = current - delta;
+    const right = current + delta;
 
-    const result: (number | '...')[] = [1];
-    const left = current - 1;
-    const right = current + 1;
-
-    if (left > 2) result.push('...');
-    for (let p = Math.max(2, left); p <= Math.min(total - 1, right); p++) {
-        result.push(p);
+    for (let p = 1; p <= total; p++) {
+        if (p === 1 || p === total || (p >= left && p <= right)) {
+            pages.push(p);
+        } else if (pages[pages.length - 1] !== '…') {
+            pages.push('…');
+        }
     }
-    if (right < total - 1) result.push('...');
-    result.push(total);
 
-    return result;
+    return pages;
 }
 
 export function Pagination({ currentPage, totalPages, isDisabled = false, onPageChange }: PaginationProps) {
@@ -39,11 +39,11 @@ export function Pagination({ currentPage, totalPages, isDisabled = false, onPage
             </button>
             <div className="pagination-pages">
                 {pages.map((page, idx) =>
-                    page === '...'
+                    page === '…'
                         ? (
                             <span
                                 key={`ellipsis-${idx}`}
-                                style={{ padding: '0 2px', color: 'var(--prof-text-muted)', alignSelf: 'center', userSelect: 'none', fontSize: '0.875rem' }}
+                                className="pagination-ellipsis"
                             >
                                 …
                             </span>

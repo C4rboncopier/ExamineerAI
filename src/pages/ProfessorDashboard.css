@@ -796,6 +796,18 @@ select:focus {
     color: white;
 }
 
+.pagination-ellipsis {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    font-size: 0.85rem;
+    color: var(--prof-text-muted);
+    user-select: none;
+    pointer-events: none;
+}
+
 .subjects-count {
     text-align: center;
     font-size: 0.85rem;

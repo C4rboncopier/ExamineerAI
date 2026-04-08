@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { fetchProfessorSubjectsWithAccess } from '../../lib/subjects';
 import type { SubjectWithAccess, SubjectAccessType } from '../../lib/subjects';
 
-const ITEMS_PER_PAGE = 12;
+const ITEMS_PER_PAGE = 10;
 
 type AccessFilter = 'all' | 'manageable' | 'view-only';
 
@@ -261,15 +261,34 @@ export function SubjectsList() {
                                         Previous
                                     </button>
                                     <div className="pagination-pages">
-                                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                                            <button
-                                                key={page}
-                                                className={`pagination-page ${page === currentPage ? 'active' : ''}`}
-                                                onClick={() => setCurrentPage(page)}
-                                            >
-                                                {page}
-                                            </button>
-                                        ))}
+                                        {(() => {
+                                            const delta = 2;
+                                            const pages: (number | '…')[] = [];
+                                            const left = currentPage - delta;
+                                            const right = currentPage + delta;
+
+                                            for (let p = 1; p <= totalPages; p++) {
+                                                if (p === 1 || p === totalPages || (p >= left && p <= right)) {
+                                                    pages.push(p);
+                                                } else if (pages[pages.length - 1] !== '…') {
+                                                    pages.push('…');
+                                                }
+                                            }
+
+                                            return pages.map((page, idx) =>
+                                                page === '…' ? (
+                                                    <span key={`ellipsis-${idx}`} className="pagination-ellipsis">…</span>
+                                                ) : (
+                                                    <button
+                                                        key={page}
+                                                        className={`pagination-page ${page === currentPage ? 'active' : ''}`}
+                                                        onClick={() => setCurrentPage(page)}
+                                                    >
+                                                        {page}
+                                                    </button>
+                                                )
+                                            );
+                                        })()}
                                     </div>
                                     <button
                                         className="pagination-btn"

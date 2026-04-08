@@ -14,7 +14,7 @@ const ITEMS_PER_PAGE = 20;
 
 function escapeHtml(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function renderLatex(text: string): string {
@@ -439,7 +439,7 @@ export function QuestionBankList({ embedded = false, canManage = true }: { embed
                                                         <input
                                                             type="checkbox"
                                                             checked={isSelected}
-                                                            onChange={() => {}}
+                                                            onChange={() => { }}
                                                             onClick={e => { e.stopPropagation(); handleCheckboxActivate(q.id); }}
                                                             style={{ cursor: 'pointer', width: '14px', height: '14px', flexShrink: 0 }}
                                                         />
@@ -505,15 +505,34 @@ export function QuestionBankList({ embedded = false, canManage = true }: { embed
                                         Previous
                                     </button>
                                     <div className="pagination-pages">
-                                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                                            <button
-                                                key={page}
-                                                className={`pagination-page ${page === currentPage ? 'active' : ''}`}
-                                                onClick={() => setCurrentPage(page)}
-                                            >
-                                                {page}
-                                            </button>
-                                        ))}
+                                        {(() => {
+                                            const delta = 2;
+                                            const pages: (number | '…')[] = [];
+                                            const left = currentPage - delta;
+                                            const right = currentPage + delta;
+
+                                            for (let p = 1; p <= totalPages; p++) {
+                                                if (p === 1 || p === totalPages || (p >= left && p <= right)) {
+                                                    pages.push(p);
+                                                } else if (pages[pages.length - 1] !== '…') {
+                                                    pages.push('…');
+                                                }
+                                            }
+
+                                            return pages.map((page, idx) =>
+                                                page === '…' ? (
+                                                    <span key={`ellipsis-${idx}`} className="pagination-ellipsis">…</span>
+                                                ) : (
+                                                    <button
+                                                        key={page}
+                                                        className={`pagination-page ${page === currentPage ? 'active' : ''}`}
+                                                        onClick={() => setCurrentPage(page)}
+                                                    >
+                                                        {page}
+                                                    </button>
+                                                )
+                                            );
+                                        })()}
                                     </div>
                                     <button
                                         className="pagination-btn"
