@@ -2958,6 +2958,43 @@ select:focus {
     .pve-col-pct {
         display: none !important;
     }
+
+    /* On mobile, revert to auto layout so remaining columns aren't cramped */
+    .pve-grades-table {
+        table-layout: auto !important;
+    }
+
+    .pve-grades-table th,
+    .pve-grades-table td {
+        width: auto !important;
+    }
+}
+
+/* ── Expanded grade detail: prevent overflow at ALL zoom levels ── */
+
+/* The expanded td must not push the table wider than its container */
+.pve-grade-detail-td {
+    max-width: 1px;          /* forces td to respect table width */
+    overflow: hidden;
+}
+
+.pve-grade-detail-flex {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.pve-answer-grid-wrap {
+    overflow-x: auto;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* At ~1000px (or zoomed ≈125-150%) stack answer grid + pie chart */
+@media (max-width: 1000px) {
+    .pve-grade-detail-flex {
+        flex-direction: column !important;
+        gap: 16px !important;
+    }
 }
 
 @media (max-width: 768px) {
@@ -2966,11 +3003,12 @@ select:focus {
     .pve-grade-detail-flex {
         flex-direction: column !important;
         gap: 16px !important;
+        padding: 12px 10px !important;
     }
 
     .pve-answer-grid-wrap {
         width: 100%;
-        overflow-x: hidden;
+        overflow-x: auto;
     }
 
     /* Fit answer grid within mobile width — 10 equal columns, no min-width */

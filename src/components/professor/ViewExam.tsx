@@ -1255,7 +1255,7 @@ export function ViewExam() {
                                             ) : (
                                                 <>
                                                     <div style={{ overflowX: 'auto' }}>
-                                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                                        <table className="pve-grades-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', tableLayout: 'fixed' }}>
                                                             <thead>
                                                                 <tr>
                                                                     {isSelecting && (
@@ -1270,12 +1270,12 @@ export function ViewExam() {
                                                                         </th>
                                                                     )}
                                                                     <th style={{ textAlign: 'left', padding: '6px 10px 6px 16px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Student</th>
-                                                                    <th className="pve-col-id" style={{ textAlign: 'left', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ID</th>
-                                                                    <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Set</th>
-                                                                    <th className="pve-col-scanned" style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scanned</th>
-                                                                    <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Score</th>
-                                                                    <th className="pve-col-pct" style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>%</th>
-                                                                    <th style={{ padding: '6px 16px 6px 10px', borderBottom: '1px solid var(--prof-border)' }}></th>
+                                                                    <th className="pve-col-id" style={{ textAlign: 'left', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', width: '100px' }}>ID</th>
+                                                                    <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', width: '50px' }}>Set</th>
+                                                                    <th className="pve-col-scanned" style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', width: '100px' }}>Scanned</th>
+                                                                    <th style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', width: '80px' }}>Score</th>
+                                                                    <th className="pve-col-pct" style={{ textAlign: 'center', padding: '6px 10px', fontWeight: 700, borderBottom: '1px solid var(--prof-border)', fontSize: '0.7rem', color: 'var(--prof-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', width: '60px' }}>%</th>
+                                                                    <th style={{ padding: '6px 16px 6px 10px', borderBottom: '1px solid var(--prof-border)', width: '70px' }}></th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
@@ -1336,7 +1336,7 @@ export function ViewExam() {
                                                                             </tr>
                                                                                 {isExpanded && submission && !isSelecting && (
                                                                                     <tr style={{ borderBottom: '1px solid var(--prof-border,#e2e8f0)' }}>
-                                                                                        <td colSpan={colCount} style={{ padding: '0', background: '#f8fafc', borderTop: '1px solid var(--prof-border,#e2e8f0)' }}>
+                                                                                        <td colSpan={colCount} className="pve-grade-detail-td" style={{ padding: '0', background: '#f8fafc', borderTop: '1px solid var(--prof-border,#e2e8f0)' }}>
                                                                                             {isLoadingKey ? (
                                                                                                 <div style={{ padding: '18px 16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--prof-text-muted)', fontSize: '0.83rem' }}>
                                                                                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
@@ -1392,7 +1392,7 @@ export function ViewExam() {
                                                                                                                     const isW = letter !== '' && correctLetter !== '' && letter !== correctLetter;
                                                                                                                     return (
                                                                                                                         <button
-                                                                                                                            key={qId}
+                                                                                                                            key={`${qId}-${qi}`}
                                                                                                                             className="pve-answer-cell"
                                                                                                                             onClick={() => isEditing && handleToggleAnswerCell(qId)}
                                                                                                                             title={`Q${qi + 1}${correctLetter ? ` · Correct: ${correctLetter}` : ''}${isEditing ? ' · Click to change' : ''}`}
