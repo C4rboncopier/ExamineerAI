@@ -655,6 +655,23 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
         await scanSingleFile(next);
     }
 
+    async function handleSkipZip() {
+        const nextIdx = reviewIndex + 1;
+        if (nextIdx >= reviewQueue.length) {
+            // Last item — close review
+            setReviewQueue([]);
+            setReviewIndex(0);
+            setShowAnswerEditor(false);
+            return;
+        }
+        setReviewIndex(nextIdx);
+        setShowAnswerEditor(false);
+        // Lazy compute next item if not already done
+        if (!reviewQueue[nextIdx]?.computed && !reviewQueue[nextIdx]?.isComputing) {
+            await computeAtIndex(reviewQueue, nextIdx);
+        }
+    }
+
     // ── Edit handlers ─────────────────────────────────────────────────────────
 
     function updateRollNumber(val: string) {
@@ -1211,6 +1228,15 @@ export default function OMRScanner({ examId, attemptNumber, numSets, enrollments
                         {currentPending.source === 'image' && imageQueue.length > 0 && (
                             <button
                                 onClick={handleSkipImage}
+                                disabled={isSaving}
+                                style={{ padding: '9px 18px', borderRadius: '8px', border: '1.5px solid var(--prof-border, #e2e8f0)', background: '#fff', cursor: isSaving ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.88rem', color: 'var(--prof-text-muted, #64748b)', display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: isSaving ? 0.5 : 1 }}
+                            >
+                                Skip →
+                            </button>
+                        )}
+                        {currentPending.source === 'zip' && (
+                            <button
+                                onClick={handleSkipZip}
                                 disabled={isSaving}
                                 style={{ padding: '9px 18px', borderRadius: '8px', border: '1.5px solid var(--prof-border, #e2e8f0)', background: '#fff', cursor: isSaving ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.88rem', color: 'var(--prof-text-muted, #64748b)', display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: isSaving ? 0.5 : 1 }}
                             >
