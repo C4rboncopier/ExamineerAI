@@ -5,6 +5,7 @@ export interface Template {
     title: string;
     code: string;
     created_at: string;
+    created_by: string;
     subject_ids: string[];
     program_ids: string[];
 }
@@ -12,7 +13,7 @@ export interface Template {
 export async function fetchTemplates(): Promise<{ data: Template[]; error: string | null }> {
     const { data, error } = await supabase
         .from('exam_templates')
-        .select('id, title, code, created_at, subject_ids, program_ids')
+        .select('id, title, code, created_at, created_by, subject_ids, program_ids')
         .order('created_at', { ascending: false });
 
     if (error) return { data: [], error: error.message };
@@ -30,7 +31,7 @@ export async function fetchTemplatesPage(params: {
 
     let query = supabase
         .from('exam_templates')
-        .select('id, title, code, created_at, subject_ids, program_ids', { count: 'exact' })
+        .select('id, title, code, created_at, created_by, subject_ids, program_ids', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(from, to);
 
@@ -44,7 +45,7 @@ export async function fetchTemplatesPage(params: {
 export async function fetchTemplateById(id: string): Promise<{ data: Template | null; error: string | null }> {
     const { data, error } = await supabase
         .from('exam_templates')
-        .select('id, title, code, created_at, subject_ids, program_ids')
+        .select('id, title, code, created_at, created_by, subject_ids, program_ids')
         .eq('id', id)
         .single();
 
@@ -64,7 +65,7 @@ export async function createTemplate(
     const { data: template, error: insertError } = await supabase
         .from('exam_templates')
         .insert({ title, code, created_by: user?.id, subject_ids: subjectIds, program_ids: programIds })
-        .select('id, title, code, created_at, subject_ids, program_ids')
+        .select('id, title, code, created_at, created_by, subject_ids, program_ids')
         .single();
 
     if (insertError) {
