@@ -34,17 +34,20 @@ export interface QuestionWithOutcomes extends Question {
 
 // ─── IMAGE HELPERS (private) ─────────────────────────────────
 
-function buildStoragePath(subjectId: string, questionId: string, fileName: string): string {
-  const ext = (fileName.split('.').pop() ?? 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
-  return `${subjectId}/${questionId}/image.${ext}`;
-}
+
 
 async function uploadImage(
   subjectId: string,
   questionId: string,
   file: File
 ): Promise<{ url: string | null; error: string | null }> {
-  const path = buildStoragePath(subjectId, questionId, file.name);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return { url: null, error: 'User not authenticated' };
+  }
+
+  const ext = (file.name.split('.').pop() ?? 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+  const path = `${user.id}/${subjectId}/${questionId}/image.${ext}`;
 
   const { error } = await supabase.storage
     .from('question-images')
